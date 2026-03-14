@@ -39,9 +39,15 @@ const prismaClientSingleton = () => {
 
   // Use Neon adapter as recommended for serverless environments with Prisma 7
   const pool = new Pool({ connectionString });
-  const adapter = new PrismaNeon(pool as any);
+  
+  try {
+    const url = new URL(connectionString);
+    console.log(`✅ [Prisma Init] Using DB host: ${url.host}`);
+  } catch (e) {
+    console.log(`✅ [Prisma Init] Initializing with custom connection string`);
+  }
 
-  console.log('✅ [Prisma Init] Initializing with Neon adapter and custom client');
+  const adapter = new PrismaNeon(pool as any);
 
   return new PrismaClient({
     adapter,

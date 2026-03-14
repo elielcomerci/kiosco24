@@ -48,7 +48,7 @@ export default async function LandingPage() {
           <span style={{ letterSpacing: "-0.03em" }}>Kiosco 24h</span>
         </div>
         <Link href="/login" className="btn btn-primary" style={{ padding: "10px 24px", borderRadius: "100px" }}>
-          Entrar ahora
+          Registrar mi Kiosco
         </Link>
       </header>
 
@@ -79,7 +79,7 @@ export default async function LandingPage() {
 
         <div style={{ display: "flex", gap: "16px", justifyContent: "center", flexWrap: "wrap" }}>
           <Link href="/login" className="btn btn-primary btn-lg" style={{ padding: "16px 40px" }}>
-            Empezar gratis
+            Crear mi cuenta gratis
           </Link>
           <a href="#features" className="btn btn-secondary btn-lg" style={{ padding: "16px 40px" }}>
             Ver bondades

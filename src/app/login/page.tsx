@@ -120,6 +120,20 @@ export default function LoginPage() {
           )}
         </button>
 
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", margin: "10px 0" }}>
+          <div style={{ flex: 1, height: "1px", background: "var(--border)" }}></div>
+          <span style={{ fontSize: "12px", color: "var(--text-3)" }}>O</span>
+          <div style={{ flex: 1, height: "1px", background: "var(--border)" }}></div>
+        </div>
+
+        <button
+          className="btn btn-secondary btn-full"
+          onClick={() => alert("Próximamente: Acceso con PIN de empleado")}
+          style={{ fontSize: "14px" }}
+        >
+          Soy empleado (Entrar con PIN)
+        </button>
+
         <p style={{ fontSize: "12px", color: "var(--text-3)", textAlign: "center" }}>
           Al continuar aceptás los términos de uso.
         </p>

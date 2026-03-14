@@ -61,6 +61,9 @@ export default async function BranchLayout({
           )}
           <h1 style={{ fontSize: "16px", fontWeight: 700 }}>{branch.name}</h1>
         </div>
+        <a href={`/${branchId}/configuracion`} style={{ fontSize: "20px", textDecoration: "none", color: "var(--text)" }} title="Configuración">
+          ⚙️
+        </a>
       </header>
       
       <main className="app-content">

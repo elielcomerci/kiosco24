@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import BackButton from "@/components/ui/BackButton";
 
 interface Employee {
   id: string;
@@ -317,7 +318,9 @@ export default function ConfiguracionPage() {
     <div style={{ padding: "24px 16px", minHeight: "100dvh", paddingBottom: "100px" }}>
       {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
-        <h1 style={{ fontSize: "24px", fontWeight: 800 }}>Configuración</h1>
+        <BackButton />
+        <h1 style={{ fontSize: "20px", fontWeight: 800 }}>Configuración</h1>
+        <div style={{ width: "60px" }} />{/* spacer to center title */}
       </div>
 
       {/* Sucursales Section */}
@@ -377,6 +380,39 @@ export default function ConfiguracionPage() {
             ))}
           </div>
         )}
+      </section>
+
+      {/* Security Section */}
+      <section style={{ marginBottom: "32px" }}>
+        <div style={{ marginBottom: "12px" }}>
+          <h2 style={{ fontSize: "16px", fontWeight: 700, color: "var(--text-2)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+            🔐 Seguridad y PINs
+          </h2>
+        </div>
+        <div
+          style={{
+            background: "var(--surface)",
+            border: "1px solid var(--border)",
+            borderRadius: "var(--radius)",
+            padding: "16px",
+            display: "flex",
+            flexDirection: "column",
+            gap: "10px",
+          }}
+        >
+          <div>
+            <div style={{ fontWeight: 700, marginBottom: "4px" }}>PIN por Empleado</div>
+            <div style={{ fontSize: "13px", color: "var(--text-3)", lineHeight: "1.5" }}>
+              En la sección <strong style={{ color: "var(--text)" }}>Empleados</strong> podés asignarle un PIN (de hasta 6 dígitos) a cada empleado. Al iniciar turno, si el empleado tiene PIN configurado, la app lo va a pedir antes de abrir la caja → <span style={{ fontSize: "14px" }}>🔐</span>
+            </div>
+          </div>
+          <div style={{ borderTop: "1px solid var(--border)", paddingTop: "10px" }}>
+            <div style={{ fontWeight: 700, marginBottom: "4px" }}>PIN del Dueño 🏠</div>
+            <div style={{ fontSize: "13px", color: "var(--text-3)", lineHeight: "1.5" }}>
+              Para proteger operaciones como Gastos y Retiros, creá un empleado con nombre <strong style={{ color: "var(--text)" }}>"Dueño"</strong> en la lista de abajo y ponele un PIN. Ese PIN se va a pedir cuando querés hacer cambios sensibles estando en modo empleado.
+            </div>
+          </div>
+        </div>
       </section>
 
       {/* Empleados Section */}

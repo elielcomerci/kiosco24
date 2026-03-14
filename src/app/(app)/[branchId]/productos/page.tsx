@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import { formatARS, applyPercentage } from "@/lib/utils";
 import BarcodeScanner from "@/components/caja/BarcodeScanner";
+import BackButton from "@/components/ui/BackButton";
 
 interface Product {
   id: string;
@@ -352,6 +353,11 @@ export default function ProductosPage() {
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [percentStr, setPercentStr] = useState("15");
   const [modal, setModal] = useState<"new" | Product | null>(null);
+  // ─── Bulk selection state
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const pctMatch = parseInt(percentStr, 10);
   const percent = isNaN(pctMatch) ? 0 : pctMatch;
@@ -392,18 +398,66 @@ export default function ProductosPage() {
 
   const hiddenCount = products.filter((p) => !p.showInGrid).length;
 
+  // ─── Bulk selection helpers
+  const toggleSelectionMode = () => {
+    setSelectionMode((v) => !v);
+    setSelected(new Set());
+    setConfirmingDelete(false);
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const selectAll = () => {
+    if (selected.size === filtered.length) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(filtered.map((p) => p.id)));
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (!confirmingDelete) {
+      setConfirmingDelete(true);
+      return;
+    }
+    setDeleting(true);
+    // Delete products one by one (could be batched later)
+    await Promise.all(
+      Array.from(selected).map((id) =>
+        fetch(`/api/productos/${id}`, { method: "DELETE" })
+      )
+    );
+    setDeleting(false);
+    setSelectionMode(false);
+    setSelected(new Set());
+    setConfirmingDelete(false);
+    fetchProducts();
+  };
+
   return (
     <div style={{ padding: "24px 16px", minHeight: "100dvh", display: "flex", flexDirection: "column" }}>
-      {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-        <h1 style={{ fontSize: "24px", fontWeight: 800 }}>Productos</h1>
+        {selectionMode ? (
+          <button className="btn btn-sm btn-ghost" onClick={toggleSelectionMode} style={{ fontWeight: 600 }}>Cancelar</button>
+        ) : (
+          <BackButton />
+        )}
+        <h1 style={{ fontSize: "20px", fontWeight: 800 }}>Productos</h1>
         <div style={{ display: "flex", gap: "8px" }}>
-          <button className="btn btn-sm btn-ghost" onClick={() => setShowUpdateModal(true)}>
-            +% Precios
-          </button>
-          <button className="btn btn-sm btn-green" onClick={() => setModal("new")}>
-            + Nuevo
-          </button>
+          {!selectionMode && (
+            <>
+              <button className="btn btn-sm btn-ghost" onClick={() => setShowUpdateModal(true)}>+%</button>
+              <button className="btn btn-sm btn-ghost" style={{ border: "1px solid var(--border)" }} onClick={toggleSelectionMode}>☑</button>
+              <button className="btn btn-sm btn-green" onClick={() => setModal("new")}>+ Nuevo</button>
+            </>
+          )}
         </div>
       </div>
 
@@ -433,47 +487,160 @@ export default function ProductosPage() {
         <div style={{ textAlign: "center", padding: "40px", color: "var(--text-3)" }}>Cargando...</div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "8px", flex: 1, overflowY: "auto" }}>
-          {filtered.map((p) => (
-            <button
-              key={p.id}
-              className="card"
-              style={{
-                padding: "14px 16px",
-                display: "flex",
-                alignItems: "center",
-                gap: "12px",
-                cursor: "pointer",
-                width: "100%",
-                textAlign: "left",
-                border: "none",
-                background: "var(--surface)",
-                opacity: p.showInGrid ? 1 : 0.5,
-              }}
-              onClick={() => setModal(p)}
-            >
-              {p.emoji && <div style={{ fontSize: "24px" }}>{p.emoji}</div>}
-              {!p.emoji && (
-                <div style={{ width: "24px", height: "24px", borderRadius: "6px", background: "var(--surface-2)", flexShrink: 0 }} />
-              )}
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 600 }}>
-                  {p.name}
-                  {!p.showInGrid && <span style={{ fontSize: "10px", color: "var(--text-3)", marginLeft: "6px" }}>oculto</span>}
+          {filtered.map((p) => {
+            const isSelected = selected.has(p.id);
+            return selectionMode ? (
+              // ─── Selection Mode Card
+              <button
+                key={p.id}
+                onClick={() => toggleSelect(p.id)}
+                style={{
+                  padding: "14px 16px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "12px",
+                  cursor: "pointer",
+                  width: "100%",
+                  textAlign: "left",
+                  border: `2px solid ${isSelected ? "var(--primary)" : "var(--border)"}`,
+                  borderRadius: "var(--radius)",
+                  background: isSelected ? "rgba(var(--primary-rgb, 34, 197, 94), 0.08)" : "var(--surface)",
+                  opacity: p.showInGrid ? 1 : 0.6,
+                  transition: "border 0.15s, background 0.15s",
+                }}
+              >
+                {/* Checkbox visual */}
+                <div style={{
+                  width: "22px",
+                  height: "22px",
+                  borderRadius: "50%",
+                  border: `2px solid ${isSelected ? "var(--primary)" : "var(--border)"}`,
+                  background: isSelected ? "var(--primary)" : "transparent",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0,
+                  transition: "all 0.15s",
+                  fontSize: "13px",
+                  color: "white",
+                  fontWeight: 800,
+                }}>
+                  {isSelected ? "✓" : ""}
                 </div>
-                {p.stock !== null && (
-                  <div style={{ fontSize: "12px", color: p.stock > 0 ? "var(--text-3)" : "var(--red)" }}>
-                    Stock: {p.stock}
-                  </div>
+                {p.emoji && <div style={{ fontSize: "22px" }}>{p.emoji}</div>}
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 600 }}>{p.name}</div>
+                  {p.stock !== null && (
+                    <div style={{ fontSize: "12px", color: p.stock > 0 ? "var(--text-3)" : "var(--red)" }}>Stock: {p.stock}</div>
+                  )}
+                </div>
+                <div style={{ fontSize: "16px", fontWeight: 700, color: "var(--text-2)" }}>{formatARS(p.price)}</div>
+              </button>
+            ) : (
+              // ─── Normal Card
+              <button
+                key={p.id}
+                className="card"
+                style={{
+                  padding: "14px 16px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "12px",
+                  cursor: "pointer",
+                  width: "100%",
+                  textAlign: "left",
+                  border: "none",
+                  background: "var(--surface)",
+                  opacity: p.showInGrid ? 1 : 0.5,
+                }}
+                onClick={() => setModal(p)}
+              >
+                {p.emoji && <div style={{ fontSize: "24px" }}>{p.emoji}</div>}
+                {!p.emoji && (
+                  <div style={{ width: "24px", height: "24px", borderRadius: "6px", background: "var(--surface-2)", flexShrink: 0 }} />
                 )}
-              </div>
-              <div style={{ fontSize: "18px", fontWeight: 700 }}>{formatARS(p.price)}</div>
-              <span style={{ color: "var(--text-3)" }}>›</span>
-            </button>
-          ))}
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 600 }}>
+                    {p.name}
+                    {!p.showInGrid && <span style={{ fontSize: "10px", color: "var(--text-3)", marginLeft: "6px" }}>oculto</span>}
+                  </div>
+                  {p.stock !== null && (
+                    <div style={{ fontSize: "12px", color: p.stock > 0 ? "var(--text-3)" : "var(--red)" }}>Stock: {p.stock}</div>
+                  )}
+                </div>
+                <div style={{ fontSize: "18px", fontWeight: 700 }}>{formatARS(p.price)}</div>
+                <span style={{ color: "var(--text-3)" }}>›</span>
+              </button>
+            );
+          })}
           {filtered.length === 0 && (
             <div style={{ textAlign: "center", padding: "40px", color: "var(--text-3)" }}>
               {search ? "Sin resultados" : "Sin productos. ¡Creá el primero!"}
             </div>
+          )}
+        </div>
+      )}
+
+
+      {/* ─── Floating Bulk Action Bar ────────────────────────────────────── */}
+      {selectionMode && (
+        <div
+          style={{
+            position: "fixed",
+            bottom: "72px", // above BottomNav
+            left: "50%",
+            transform: "translateX(-50%)",
+            width: "calc(100% - 32px)",
+            maxWidth: "480px",
+            background: "var(--surface)",
+            border: "1px solid var(--border)",
+            boxShadow: "0 -4px 24px rgba(0,0,0,0.4)",
+            borderRadius: "var(--radius-lg)",
+            padding: "12px 16px",
+            display: "flex",
+            flexDirection: "column",
+            gap: "8px",
+            zIndex: 500,
+          }}
+          className="animate-slide-up"
+        >
+          {/* Counter + Select All */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span style={{ fontWeight: 700, fontSize: "15px" }}>
+              {selected.size === 0
+                ? "Seleccioná productos"
+                : `${selected.size} seleccionado${selected.size > 1 ? "s" : ""}`}
+            </span>
+            <button
+              className="btn btn-sm btn-ghost"
+              onClick={selectAll}
+              style={{ fontSize: "13px" }}
+            >
+              {selected.size === filtered.length ? "Ninguno" : "Todos"}
+            </button>
+          </div>
+
+          {/* Delete button — shown only when at least 1 is selected */}
+          {selected.size > 0 && (
+            <button
+              className="btn"
+              style={{
+                background: confirmingDelete ? "var(--red)" : "rgba(239,68,68,0.12)",
+                color: "var(--red)",
+                border: `1px solid var(--red)`,
+                fontWeight: 700,
+                width: "100%",
+                transition: "background 0.2s",
+              }}
+              onClick={handleBulkDelete}
+              disabled={deleting}
+            >
+              {deleting
+                ? "Eliminando..."
+                : confirmingDelete
+                ? `⚠️ ¿Confirmar eliminar ${selected.size} productos?`
+                : `🗑 Eliminar ${selected.size} seleccionado${selected.size > 1 ? "s" : ""}`}
+            </button>
           )}
         </div>
       )}

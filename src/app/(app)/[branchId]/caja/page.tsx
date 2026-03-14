@@ -68,6 +68,7 @@ export default function CajaPage() {
   const [showOpenShift, setShowOpenShift] = useState(false);
   const [showCloseShift, setShowCloseShift] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
+  const [cajaSearch, setCajaSearch] = useState("");
 
   const isOnline = useOnlineStatus();
   const total = ticket.reduce((sum, item) => sum + item.price * item.quantity, 0);
@@ -406,10 +407,20 @@ export default function CajaPage() {
       </div>
       
       <div style={{ padding: "8px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", background: "var(--surface-2)", borderBottom: "1px solid var(--border)"}}>
-        <span style={{ fontSize: "13px", color: "var(--text-3)", fontWeight: 600, display: "flex", gap: "8px", alignItems: "center" }}>
-          {!isOnline && <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--amber)", display: "inline-block" }} />}
-          {activeShift ? `TURNO: ${activeShift.employee?.name || "Activo"}` : "Sin turno"}
-        </span>
+        {activeShift ? (
+          <span style={{ fontSize: "13px", color: "var(--text-3)", fontWeight: 600, display: "flex", gap: "8px", alignItems: "center" }}>
+            {!isOnline && <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--amber)", display: "inline-block" }} />}
+            TURNO: {activeShift.employee?.name || activeShift.employeeName || "Activo"}
+          </span>
+        ) : (
+          <button
+            className="btn btn-sm btn-green"
+            style={{ fontSize: "13px", fontWeight: 700, padding: "6px 14px" }}
+            onClick={() => setShowOpenShift(true)}
+          >
+            ▶ Abrir Turno
+          </button>
+        )}
         <div style={{ display: "flex", gap: "8px" }}>
            <button className="btn btn-sm btn-ghost" style={{ padding: "4px 8px"}} onClick={() => setShowScanner(true)}>
              📷
@@ -421,12 +432,34 @@ export default function CajaPage() {
       </div>
 
       {/* Products grid */}
-      <div style={{ padding: "12px", flex: 1, overflowY: "auto" }}>
+      <div style={{ padding: "8px 12px 0", display: "flex", gap: "8px" }}>
+        <input
+          className="input"
+          placeholder="🔍 Buscar producto..."
+          value={cajaSearch}
+          onChange={(e) => setCajaSearch(e.target.value)}
+          style={{ fontSize: "14px", height: "36px" }}
+        />
+        {cajaSearch && (
+          <button
+            className="btn btn-sm btn-ghost"
+            onClick={() => setCajaSearch("")}
+            style={{ flexShrink: 0, padding: "0 10px", height: "36px" }}
+          >
+            ✕
+          </button>
+        )}
+      </div>
+
+      {/* Products grid */}
+      <div style={{ padding: "8px 12px", flex: 1, overflowY: "auto" }}>
         {loading ? (
           <div style={{ textAlign: "center", padding: "40px", color: "var(--text-3)" }}>Cargando...</div>
         ) : (
           <div className="product-grid">
-            {products.map((product) => {
+            {products
+              .filter((p) => !cajaSearch || p.name.toLowerCase().includes(cajaSearch.toLowerCase()))
+              .map((product) => {
               const inTicket = ticket.find((i) => i.productId === product.id);
               return (
                 <button

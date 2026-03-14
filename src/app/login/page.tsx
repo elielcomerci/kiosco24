@@ -8,7 +8,7 @@ export default function LoginPage() {
 
   const handleLogin = async () => {
     setLoading(true);
-    await signIn("google", { callbackUrl: "/caja" });
+    await signIn("google", { callbackUrl: "/" });
   };
 
   return (

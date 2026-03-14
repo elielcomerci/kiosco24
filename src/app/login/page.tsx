@@ -159,6 +159,7 @@ export default function LoginPage() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required 
+            autoComplete="email"
           />
           <input 
             type="password" 
@@ -167,6 +168,7 @@ export default function LoginPage() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required 
+            autoComplete={isRegister ? "new-password" : "current-password"}
           />
           <button 
             type="submit" 

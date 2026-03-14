@@ -4,7 +4,13 @@ export default auth((req: any) => {
   const { nextUrl } = req;
   const isLoggedIn = !!req.auth;
 
-  const isPublic = nextUrl.pathname === "/" || nextUrl.pathname === "/onboarding" || nextUrl.pathname.startsWith("/api/auth");
+  const isPublic = 
+    nextUrl.pathname === "/" || 
+    nextUrl.pathname === "/onboarding" || 
+    nextUrl.pathname === "/sw.js" || 
+    nextUrl.pathname === "/manifest.json" ||
+    nextUrl.pathname.startsWith("/api/auth");
+  
   if (isPublic) return;
 
   const isOnOptions = nextUrl.pathname.startsWith("/api") && !nextUrl.pathname.startsWith("/api/auth");

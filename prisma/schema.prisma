@@ -1,0 +1,239 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  accounts      Account[]
+  sessions      Session[]
+  kiosco        Kiosco?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Kiosco {
+  id          String    @id @default(cuid())
+  name        String
+  ownerId     String    @unique
+  owner       User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  branches    Branch[]
+  products    Product[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Branch {
+  id              String            @id @default(cuid())
+  name            String
+  kioscoId        String
+  kiosco          Kiosco            @relation(fields: [kioscoId], references: [id], onDelete: Cascade)
+  employees       Employee[]
+  inventory       InventoryRecord[]
+  sales           Sale[]
+  shifts          Shift[]
+  expenses        Expense[]
+  withdrawals     Withdrawal[]
+  customers       CreditCustomer[]
+  logoUrl         String?
+  primaryColor    String?           @default("#22c55e")
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@index([kioscoId])
+}
+
+model Product {
+  id        String            @id @default(cuid())
+  name      String
+  barcode   String?
+  emoji     String?
+  kioscoId  String
+  kiosco    Kiosco            @relation(fields: [kioscoId], references: [id], onDelete: Cascade)
+  inventory InventoryRecord[]
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  @@index([kioscoId])
+  @@index([barcode])
+}
+
+model InventoryRecord {
+  id          String   @id @default(cuid())
+  price       Float
+  cost        Float?
+  stock       Int?
+  minStock    Int?
+  showInGrid  Boolean  @default(true)
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  branchId    String
+  branch      Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, branchId])
+  @@index([branchId])
+}
+
+model Employee {
+  id       String  @id @default(cuid())
+  name     String
+  pin      String?
+  active   Boolean @default(true)
+  branchId String
+  branch   Branch  @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  shifts   Shift[]
+
+  @@index([branchId])
+}
+
+model Shift {
+  id             String       @id @default(cuid())
+  employeeId     String?
+  employee       Employee?    @relation(fields: [employeeId], references: [id])
+  employeeName   String
+  branchId       String
+  branch         Branch       @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  openingAmount  Float
+  closingAmount  Float?
+  expectedAmount Float?
+  difference     Float?
+  note           String?
+  openedAt       DateTime     @default(now())
+  closedAt       DateTime?
+  sales          Sale[]
+  expenses       Expense[]
+  withdrawals    Withdrawal[]
+
+  @@index([branchId, openedAt])
+}
+
+model Expense {
+  id        String        @id @default(cuid())
+  amount    Float
+  reason    ExpenseReason
+  note      String?
+  shiftId   String?
+  shift     Shift?        @relation(fields: [shiftId], references: [id], onDelete: SetNull)
+  branchId  String
+  branch    Branch        @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  createdAt DateTime      @default(now())
+
+  @@index([branchId, createdAt])
+}
+
+model Withdrawal {
+  id        String   @id @default(cuid())
+  amount    Float
+  note      String?
+  shiftId   String?
+  shift     Shift?   @relation(fields: [shiftId], references: [id], onDelete: SetNull)
+  branchId  String
+  branch    Branch        @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@index([branchId, createdAt])
+}
+
+model Sale {
+  id               String          @id @default(cuid())
+  total            Float
+  paymentMethod    PaymentMethod
+  receivedAmount   Float?
+  shiftId          String?
+  shift            Shift?          @relation(fields: [shiftId], references: [id], onDelete: SetNull)
+  branchId         String
+  branch           Branch          @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  items            SaleItem[]
+  creditCustomerId String?
+  creditCustomer   CreditCustomer? @relation(fields: [creditCustomerId], references: [id], onDelete: SetNull)
+  voided           Boolean         @default(false)
+  voidedAt         DateTime?
+  createdAt        DateTime        @default(now())
+
+  @@index([branchId, createdAt])
+  @@index([shiftId])
+}
+
+model SaleItem {
+  id        String    @id @default(cuid())
+  saleId    String
+  sale      Sale      @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  productId String?
+  name      String
+  price     Float
+  quantity  Int
+  cost      Float?
+}
+
+model CreditCustomer {
+  id        String          @id @default(cuid())
+  name      String
+  phone     String?
+  balance   Float           @default(0)
+  branchId  String
+  branch    Branch          @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  sales     Sale[]
+  payments  CreditPayment[]
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  @@index([branchId])
+}
+
+model CreditPayment {
+  id         String         @id @default(cuid())
+  amount     Float
+  customerId String
+  customer   CreditCustomer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  createdAt  DateTime       @default(now())
+}
+
+enum PaymentMethod {
+  CASH
+  MERCADOPAGO
+  TRANSFER
+  DEBIT
+  CREDIT_CARD
+  CREDIT
+}
+
+enum ExpenseReason {
+  ICE
+  MERCHANDISE
+  DELIVERY
+  OTHER
+}

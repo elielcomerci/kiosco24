@@ -31,5 +31,5 @@ export default auth((req: any) => {
 
 // Opcional: configurar en qué rutas NO se ejecuta el proxy
 export const config = {
-  matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"],
+  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|sw.js|manifest.json).*)"],
 };

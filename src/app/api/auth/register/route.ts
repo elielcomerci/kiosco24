@@ -54,7 +54,8 @@ export async function POST(req: Request) {
     return NextResponse.json(
       { 
         error: "Error al registrar el usuario", 
-        details: process.env.NODE_ENV === "development" ? error.message : undefined 
+        details: error.message,
+        stack: error.stack
       },
       { status: 500 }
     );

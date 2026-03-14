@@ -1,4 +1,4 @@
-import { auth } from "@/lib/auth";
+import { auth, signOut } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import Link from "next/link";
@@ -47,9 +47,23 @@ export default async function LandingPage() {
           <span style={{ fontSize: "32px" }}>🏪</span>
           <span style={{ letterSpacing: "-0.03em" }}>Kiosco 24h</span>
         </div>
-        <Link href="/login" className="btn btn-primary" style={{ padding: "10px 24px", borderRadius: "100px" }}>
-          Registrar mi Kiosco
-        </Link>
+        {session ? (
+          <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+            <span style={{ fontSize: "14px", color: "var(--text-3)" }}>{session.user?.email}</span>
+            <form action={async () => {
+              "use server";
+              await signOut();
+            }}>
+              <button className="btn btn-secondary" style={{ padding: "8px 20px", borderRadius: "100px" }}>
+                Salir
+              </button>
+            </form>
+          </div>
+        ) : (
+          <Link href="/login" className="btn btn-primary" style={{ padding: "10px 24px", borderRadius: "100px" }}>
+            Acceder / Registrarse
+          </Link>
+        )}
       </header>
 
       <main style={{ padding: "80px 5%", textAlign: "center", maxWidth: "1200px", margin: "0 auto" }}>

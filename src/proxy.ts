@@ -4,10 +4,10 @@ export default auth((req: any) => {
   const { nextUrl } = req;
   const isLoggedIn = !!req.auth;
 
-  const isPublic = nextUrl.pathname === "/" || nextUrl.pathname === "/onboarding";
+  const isPublic = nextUrl.pathname === "/" || nextUrl.pathname === "/onboarding" || nextUrl.pathname.startsWith("/api/auth");
   if (isPublic) return;
 
-  const isOnOptions = nextUrl.pathname.startsWith("/api");
+  const isOnOptions = nextUrl.pathname.startsWith("/api") && !nextUrl.pathname.startsWith("/api/auth");
   if (isOnOptions) return; // Permitir que las API routes manejen su propia autenticación
 
   const isOnLogin = nextUrl.pathname.startsWith("/login");

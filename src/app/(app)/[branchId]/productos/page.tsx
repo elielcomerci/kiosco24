@@ -731,9 +731,17 @@ export default function ProductosPage() {
                 {p.emoji && <div style={{ fontSize: "22px" }}>{p.emoji}</div>}
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 600 }}>{p.name}</div>
-                  {p.stock !== null && (
-                    <div style={{ fontSize: "12px", color: p.stock > 0 ? "var(--text-3)" : "var(--red)" }}>Stock: {p.stock}</div>
-                  )}
+                  {(() => {
+                    const totalStock = p.variants && p.variants.length > 0
+                      ? p.variants.reduce((acc, v) => acc + (v.stock || 0), 0)
+                      : p.stock;
+                    
+                    return totalStock !== null && (
+                      <div style={{ fontSize: "12px", color: totalStock > 0 ? "var(--text-3)" : "var(--red)" }}>
+                        Stock: {totalStock}
+                      </div>
+                    );
+                  })()}
                 </div>
                 <div style={{ fontSize: "16px", fontWeight: 700, color: "var(--text-2)" }}>{formatARS(p.price)}</div>
               </button>
@@ -765,9 +773,17 @@ export default function ProductosPage() {
                     {p.name}
                     {!p.showInGrid && <span style={{ fontSize: "10px", color: "var(--text-3)", marginLeft: "6px" }}>oculto</span>}
                   </div>
-                  {p.stock !== null && (
-                    <div style={{ fontSize: "12px", color: p.stock > 0 ? "var(--text-3)" : "var(--red)" }}>Stock: {p.stock}</div>
-                  )}
+                  {(() => {
+                    const totalStock = p.variants && p.variants.length > 0
+                      ? p.variants.reduce((acc, v) => acc + (v.stock || 0), 0)
+                      : p.stock;
+                    
+                    return totalStock !== null && (
+                      <div style={{ fontSize: "12px", color: totalStock > 0 ? "var(--text-3)" : "var(--red)" }}>
+                        Stock: {totalStock}
+                      </div>
+                    );
+                  })()}
                 </div>
                 <div style={{ fontSize: "18px", fontWeight: 700 }}>{formatARS(p.price)}</div>
                 <span style={{ color: "var(--text-3)" }}>›</span>

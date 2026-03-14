@@ -9,6 +9,7 @@ export default function LoginPage() {
   const [isRegister, setIsRegister] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   
   const handleGoogleLogin = async () => {
@@ -161,15 +162,49 @@ export default function LoginPage() {
             required 
             autoComplete="email"
           />
-          <input 
-            type="password" 
-            placeholder="Contraseña" 
-            className="input" 
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required 
-            autoComplete={isRegister ? "new-password" : "current-password"}
-          />
+          <div style={{ position: "relative" }}>
+            <input 
+              type={showPassword ? "text" : "password"} 
+              placeholder="Contraseña" 
+              className="input" 
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required 
+              autoComplete={isRegister ? "new-password" : "current-password"}
+              style={{ paddingRight: "44px" }}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              style={{
+                position: "absolute",
+                right: "12px",
+                top: "50%",
+                transform: "translateY(-50%)",
+                background: "none",
+                border: "none",
+                color: "var(--text-3)",
+                cursor: "pointer",
+                padding: "4px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center"
+              }}
+            >
+              {showPassword ? (
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M9.88 9.88l-3.29-3.29m7.53.61A10 10 0 0 1 21.84 12a11.59 11.59 0 0 1-3.69 4.39M15 15a3 3 0 0 1-3-3l6-6"/>
+                  <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.12 13.12 0 0 1-1.55 2.35m-5.32 1.93A10.43 10.43 0 0 1 12 19c-7 0-10-7-10-7a13.12 13.12 0 0 1 1.55-2.35"/>
+                  <line x1="1" y1="1" x2="23" y2="23"/>
+                </svg>
+              ) : (
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                  <circle cx="12" cy="12" r="3"/>
+                </svg>
+              )}
+            </button>
+          </div>
           <button 
             type="submit" 
             className="btn btn-primary btn-full" 

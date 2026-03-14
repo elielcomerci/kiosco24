@@ -1,57 +1,31 @@
-import { Pool, neonConfig } from '@neondatabase/serverless';
-import { PrismaNeon } from '@prisma/adapter-neon';
-import { PrismaClient, Prisma } from '@prisma/client';
-import ws from 'ws';
+import { Pool } from 'pg';
+import { PrismaPg } from '@prisma/adapter-pg';
+import { PrismaClient } from '.prisma/client';
 
-// Re-exporting enums and types from the standard client path
-export {
-  PaymentMethod,
-  ExpenseReason,
-  Prisma
-} from '@prisma/client';
+// Re-exporting for compatibility - Prisma 7 stores generated types in .prisma/client
+export { PaymentMethod, ExpenseReason, Prisma } from '.prisma/client';
+export type { User, Kiosco, Branch, Product, InventoryRecord, Employee, Shift, Expense, Withdrawal, Sale, SaleItem, CreditCustomer, CreditPayment } from '.prisma/client';
 
-export type {
-  User,
-  Kiosco,
-  Branch,
-  Product,
-  InventoryRecord,
-  Employee,
-  Shift,
-  Expense,
-  Withdrawal,
-  Sale,
-  SaleItem,
-  CreditCustomer,
-  CreditPayment
-} from '@prisma/client';
+const isEdge = typeof (globalThis as any).EdgeRuntime === 'string';
 
-neonConfig.webSocketConstructor = ws;
+// Use standard pg Pool in Node.js (TCP/SSL, no WebSockets needed).
+// This bypasses all @neondatabase/serverless WebSocket issues on Windows.
+// For Edge Runtime (Middleware), pg won't work — but auth.ts only uses JWT there.
 
 const prismaClientSingleton = () => {
-  const connectionString = (process.env.DATABASE_URL || '').trim();
+  const connectionString = (process.env.DATABASE_URL || '').trim().replace(/^["']|["']$/g, '');
   
   if (!connectionString) {
-    console.error('❌ [Prisma Init] DATABASE_URL is missing!');
-    return new PrismaClient();
+    throw new Error('DATABASE_URL is missing.');
   }
 
-  // Use Neon adapter only in production (Vercel/Serverless)
-  if (process.env.NODE_ENV === 'production') {
-    try {
-      console.log('✅ [Prisma Init] Production: Initializing with Neon adapter');
-      const pool = new Pool({ connectionString });
-      const adapter = new PrismaNeon(pool as any);
-      return new PrismaClient({ adapter });
-    } catch (err: any) {
-      console.error('❌ [Prisma Init] Neon adapter failed:', err.message);
-      return new PrismaClient();
-    }
-  }
+  const host = connectionString.match(/@([^/:]+)/)?.[1] || 'unknown';
+  console.log(`📡 [Prisma Init] pg TCP | Runtime: ${isEdge ? 'Edge' : 'Node'} | Host: ${host}`);
 
-  // In local development, the standard Prisma driver is more stable on Windows
-  console.log('✅ [Prisma Init] Local: Initializing with standard driver');
-  return new PrismaClient();
+  const pool = new Pool({ connectionString });
+  const adapter = new PrismaPg(pool as any);
+
+  return new PrismaClient({ adapter });
 };
 
 const globalForPrisma = globalThis as unknown as {

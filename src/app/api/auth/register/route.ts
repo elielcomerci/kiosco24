@@ -4,7 +4,7 @@ import bcrypt from "bcryptjs";
 
 export async function POST(req: Request) {
   try {
-    const { email, password } = await req.json();
+    const { email, name, password, kioscoName } = await req.json();
 
     console.log(`[Register] Attempting to register email: ${email}`);
 

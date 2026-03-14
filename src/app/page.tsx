@@ -8,7 +8,8 @@ import { FeatureCard } from "@/components/FeatureCard";
 export default async function LandingPage() {
   const session = await auth();
 
-  // Si está logueado, redirigir a su sucursal o dashboard
+  // Obtenemos los datos mínimamente necesarios para el botón dinámico si hay sesión
+  let branchId = null;
   if (session?.user?.id) {
     const user = await prisma.user.findUnique({
       where: { id: session.user.id },
@@ -18,17 +19,10 @@ export default async function LandingPage() {
         }
       }
     });
-
-    const branchId = user?.kiosco?.branches[0]?.id;
-    if (branchId) {
-      redirect(`/${branchId}/caja`);
-    } else {
-      // Si no tiene sucursal, es un usuario nuevo (onboarding)
-      redirect("/onboarding");
-    }
+    branchId = user?.kiosco?.branches[0]?.id;
   }
 
-  // Landing Page Premium para usuarios no logueados
+  // Landing Page Premium — Visible para todos
   return (
     <div className="landing-container" style={{ 
       minHeight: "100dvh", 
@@ -41,39 +35,43 @@ export default async function LandingPage() {
         padding: "20px 5%", 
         display: "flex", 
         justifyContent: "space-between", 
-        alignItems: "center" 
+        alignItems: "center",
+        borderBottom: "1px solid rgba(255,255,255,0.05)"
       }}>
-        <div style={{ fontSize: "24px", fontWeight: 800, display: "flex", alignItems: "center", gap: "10px" }}>
-          <span style={{ fontSize: "32px" }}>🏪</span>
+        <div style={{ fontSize: "21px", fontWeight: 800, display: "flex", alignItems: "center", gap: "10px" }}>
+          <span style={{ fontSize: "28px" }}>🏪</span>
           <span style={{ letterSpacing: "-0.03em" }}>Kiosco 24h</span>
         </div>
-        {session ? (
-          <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-            <span style={{ fontSize: "14px", color: "var(--text-3)" }}>{session.user?.email}</span>
-            <form action={async () => {
-              "use server";
-              await signOut();
-            }}>
-              <button className="btn btn-secondary" style={{ padding: "8px 20px", borderRadius: "100px" }}>
-                Salir
-              </button>
-            </form>
-          </div>
-        ) : (
-          <Link href="/login" className="btn btn-primary" style={{ padding: "10px 24px", borderRadius: "100px" }}>
-            Acceder / Registrarse
-          </Link>
-        )}
+        
+        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          {session ? (
+            <>
+              <span style={{ fontSize: "14px", color: "var(--text-3)", display: "none" }}>{session.user?.email}</span>
+              <form action={async () => {
+                "use server";
+                await signOut({ redirectTo: "/" });
+              }}>
+                <button className="btn btn-secondary" style={{ padding: "8px 16px", fontSize: "14px", borderRadius: "100px" }}>
+                  Salir
+                </button>
+              </form>
+            </>
+          ) : (
+            <Link href="/login" className="btn btn-primary" style={{ padding: "8px 20px", fontSize: "14px", borderRadius: "100px" }}>
+              Entrar
+            </Link>
+          )}
+        </div>
       </header>
 
       <main style={{ padding: "80px 5%", textAlign: "center", maxWidth: "1200px", margin: "0 auto" }}>
         <h1 style={{ 
-          fontSize: "clamp(40px, 8vw, 72px)", 
+          fontSize: "clamp(36px, 7vw, 64px)", 
           fontWeight: 900, 
-          lineHeight: 1, 
+          lineHeight: 1.1, 
           letterSpacing: "-0.04em",
           marginBottom: "24px",
-          background: "linear-gradient(to bottom, #ffffff, #888888)",
+          background: "linear-gradient(to bottom, #ffffff, #aaaaaa)",
           WebkitBackgroundClip: "text",
           WebkitTextFillColor: "transparent"
         }}>
@@ -81,10 +79,10 @@ export default async function LandingPage() {
         </h1>
         
         <p style={{ 
-          fontSize: "20px", 
-          color: "var(--text-2)", 
-          maxWidth: "700px", 
-          margin: "0 auto 48px",
+          fontSize: "18px", 
+          color: "rgba(255,255,255,0.6)", 
+          maxWidth: "600px", 
+          margin: "0 auto 40px",
           lineHeight: 1.6
         }}>
           Control de stock, ventas rápidas, fiados y estadísticas en tiempo real. 
@@ -92,9 +90,15 @@ export default async function LandingPage() {
         </p>
 
         <div style={{ display: "flex", gap: "16px", justifyContent: "center", flexWrap: "wrap" }}>
-          <Link href="/login" className="btn btn-primary btn-lg" style={{ padding: "16px 40px" }}>
-            Crear mi cuenta gratis
-          </Link>
+          {session ? (
+            <Link href={branchId ? `/${branchId}/caja` : "/onboarding"} className="btn btn-primary btn-lg" style={{ padding: "16px 40px" }}>
+              Ir a mi Kiosco 🚀
+            </Link>
+          ) : (
+            <Link href="/login" className="btn btn-primary btn-lg" style={{ padding: "16px 40px" }}>
+              Crear mi cuenta gratis
+            </Link>
+          )}
           <a href="#features" className="btn btn-secondary btn-lg" style={{ padding: "16px 40px" }}>
             Ver bondades
           </a>
@@ -105,7 +109,7 @@ export default async function LandingPage() {
           display: "grid", 
           gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", 
           gap: "24px", 
-          marginTop: "120px",
+          marginTop: "100px",
           textAlign: "left"
         }}>
           <FeatureCard 
@@ -141,11 +145,9 @@ export default async function LandingPage() {
         </div>
       </main>
 
-      <footer style={{ padding: "60px 5%", borderTop: "1px solid #333", marginTop: "100px", textAlign: "center", color: "var(--text-3)" }}>
+      <footer style={{ padding: "60px 5%", borderTop: "1px solid rgba(255,255,255,0.05)", marginTop: "80px", textAlign: "center", color: "rgba(255,255,255,0.4)" }}>
         <p>© 2026 Kiosco 24h - Hecho con ❤️ para comerciantes argentinos.</p>
       </footer>
     </div>
   );
 }
-
-

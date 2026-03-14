@@ -11,7 +11,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
-  
+
   const handleGoogleLogin = async () => {
     setLoading(true);
     await signIn("google", { callbackUrl: "/" });
@@ -32,7 +32,7 @@ export default function LoginPage() {
         });
 
         const data = await res.json();
-        
+
         if (!res.ok) {
           setError(data.error || "Error al registrarse");
           setLoading(false);
@@ -140,11 +140,11 @@ export default function LoginPage() {
         </div>
 
         {error && (
-          <div style={{ 
-            color: "#ef4444", 
-            fontSize: "13px", 
-            background: "rgba(239, 68, 68, 0.1)", 
-            padding: "10px", 
+          <div style={{
+            color: "#ef4444",
+            fontSize: "13px",
+            background: "rgba(239, 68, 68, 0.1)",
+            padding: "10px",
             borderRadius: "8px",
             textAlign: "center"
           }}>
@@ -153,23 +153,23 @@ export default function LoginPage() {
         )}
 
         <form onSubmit={handleCredentialsSubmit} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-          <input 
-            type="email" 
-            placeholder="Email" 
-            className="input" 
+          <input
+            type="email"
+            placeholder="Email"
+            className="input"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            required 
+            required
             autoComplete="email"
           />
           <div style={{ position: "relative" }}>
-            <input 
-              type={showPassword ? "text" : "password"} 
-              placeholder="Contraseña" 
-              className="input" 
+            <input
+              type={showPassword ? "text" : "password"}
+              placeholder="Contraseña"
+              className="input"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              required 
+              required
               autoComplete={isRegister ? "new-password" : "current-password"}
               style={{ paddingRight: "44px" }}
             />
@@ -193,21 +193,21 @@ export default function LoginPage() {
             >
               {showPassword ? (
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M9.88 9.88l-3.29-3.29m7.53.61A10 10 0 0 1 21.84 12a11.59 11.59 0 0 1-3.69 4.39M15 15a3 3 0 0 1-3-3l6-6"/>
-                  <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.12 13.12 0 0 1-1.55 2.35m-5.32 1.93A10.43 10.43 0 0 1 12 19c-7 0-10-7-10-7a13.12 13.12 0 0 1 1.55-2.35"/>
-                  <line x1="1" y1="1" x2="23" y2="23"/>
+                  <path d="M9.88 9.88l-3.29-3.29m7.53.61A10 10 0 0 1 21.84 12a11.59 11.59 0 0 1-3.69 4.39M15 15a3 3 0 0 1-3-3l6-6" />
+                  <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.12 13.12 0 0 1-1.55 2.35m-5.32 1.93A10.43 10.43 0 0 1 12 19c-7 0-10-7-10-7a13.12 13.12 0 0 1 1.55-2.35" />
+                  <line x1="1" y1="1" x2="23" y2="23" />
                 </svg>
               ) : (
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                  <circle cx="12" cy="12" r="3"/>
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                  <circle cx="12" cy="12" r="3" />
                 </svg>
               )}
             </button>
           </div>
-          <button 
-            type="submit" 
-            className="btn btn-primary btn-full" 
+          <button
+            type="submit"
+            className="btn btn-primary btn-full"
             disabled={loading}
           >
             {loading ? "Cargando..." : (isRegister ? "Registrarse" : "Ingresar")}
@@ -247,8 +247,8 @@ export default function LoginPage() {
           Google
         </button>
 
-        <button 
-          className="btn-ghost" 
+        <button
+          className="btn-ghost"
           onClick={() => setIsRegister(!isRegister)}
           style={{ fontSize: "14px", color: "var(--text-3)" }}
         >
@@ -257,7 +257,7 @@ export default function LoginPage() {
       </div>
 
       <p style={{ fontSize: "13px", color: "var(--text-3)" }}>
-        $2.990/mes después de la prueba
+        $9.900/mes después de la prueba
       </p>
     </div>
   );

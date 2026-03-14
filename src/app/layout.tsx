@@ -26,8 +26,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="es" suppressHydrationWarning> {/* Changed style to suppressHydrationWarning and added className */}
-      <body className={openSans.className}>
+    <html lang="es" suppressHydrationWarning={true}><body className={openSans.className}>
         {children}
         <Script
           id="sw-register"

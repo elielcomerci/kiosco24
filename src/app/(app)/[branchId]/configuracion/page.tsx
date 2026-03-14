@@ -9,6 +9,13 @@ interface Employee {
   active: boolean;
 }
 
+interface Branch {
+  id: string;
+  name: string;
+  logoUrl: string | null;
+  primaryColor: string | null;
+}
+
 // ─── Employee Form Modal ───────────────────────────────────────────────────────
 function EmployeeModal({
   employee,
@@ -55,9 +62,26 @@ function EmployeeModal({
   };
 
   return (
-    <div className="modal-overlay animate-fade-in" onClick={onClose}>
-      <div className="modal animate-slide-up" onClick={(e) => e.stopPropagation()}>
-        <h2 style={{ fontSize: "20px", fontWeight: 700, marginBottom: "16px" }}>
+    <div 
+      className="modal-overlay animate-fade-in" 
+      onClick={onClose}
+      style={{ zIndex: 9999, alignItems: "flex-end", padding: "16px", paddingBottom: "max(16px, env(safe-area-inset-bottom))" }}
+    >
+      <div 
+        className="modal animate-slide-up" 
+        onClick={(e) => e.stopPropagation()}
+        style={{ 
+          maxHeight: "85dvh",
+          overflowY: "auto", 
+          padding: "20px",
+          width: "100%",
+          maxWidth: "500px",
+          display: "flex",
+          flexDirection: "column",
+          gap: "8px"
+        }}
+      >
+        <h2 style={{ fontSize: "20px", fontWeight: 700, marginBottom: "8px" }}>
           {isNew ? "Nuevo empleado" : "Editar empleado"}
         </h2>
 
@@ -114,6 +138,7 @@ function EmployeeModal({
                   cursor: "pointer",
                   transition: "background 0.2s",
                   position: "relative",
+                  flexShrink: 0
                 }}
                 onClick={() => setActive((a) => !a)}
               >
@@ -162,33 +187,197 @@ function EmployeeModal({
   );
 }
 
+// ─── Branch Form Modal ─────────────────────────────────────────────────────────
+function BranchModal({
+  onClose,
+  onSave,
+}: {
+  onClose: () => void;
+  onSave: () => void;
+}) {
+  const [name, setName] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const handleSave = async () => {
+    if (!name.trim()) return;
+    setLoading(true);
+    
+    // Create new branch
+    await fetch("/api/branches", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+    
+    setLoading(false);
+    onSave();
+  };
+
+  return (
+    <div 
+      className="modal-overlay animate-fade-in" 
+      onClick={onClose}
+      style={{ zIndex: 9999, alignItems: "flex-end", padding: "16px", paddingBottom: "max(16px, env(safe-area-inset-bottom))" }}
+    >
+      <div 
+        className="modal animate-slide-up" 
+        onClick={(e) => e.stopPropagation()}
+        style={{ 
+          maxHeight: "85dvh",
+          overflowY: "auto", 
+          padding: "20px",
+          width: "100%",
+          maxWidth: "500px",
+          display: "flex",
+          flexDirection: "column",
+          gap: "8px"
+        }}
+      >
+        <h2 style={{ fontSize: "20px", fontWeight: 700, marginBottom: "8px" }}>
+          Nueva Sucursal
+        </h2>
+        <p style={{ fontSize: "13px", color: "var(--text-3)", marginBottom: "12px", lineHeight: "1.4" }}>
+          Tu catálogo actual se va a copiar a la nueva sucursal con el <strong style={{color: "var(--text)"}}>stock y precio en 0</strong> para que puedas configurarlo localmente.
+        </p>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+          <div>
+            <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              Nombre de la sucursal
+            </label>
+            <input
+              className="input"
+              placeholder="Ej: Kiosco Centro"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              autoFocus
+            />
+          </div>
+        </div>
+
+        <div style={{ display: "flex", gap: "8px", marginTop: "20px" }}>
+          <button className="btn btn-ghost" style={{ flex: 1 }} onClick={onClose} disabled={loading}>
+            Cancelar
+          </button>
+          <button
+            className="btn btn-green"
+            style={{ flex: 2 }}
+            onClick={handleSave}
+            disabled={loading || !name.trim()}
+          >
+            {loading ? "Creando..." : "Crear e inicializar 🚀"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Config Page ─────────────────────────────────────────────────────────
 export default function ConfiguracionPage() {
   const [employees, setEmployees] = useState<Employee[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [modal, setModal] = useState<"new" | Employee | null>(null);
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [loadingEmployees, setLoadingEmployees] = useState(true);
+  const [loadingBranches, setLoadingBranches] = useState(true);
+  const [employeeModal, setEmployeeModal] = useState<"new" | Employee | null>(null);
+  const [branchModal, setBranchModal] = useState(false);
 
   const fetchEmployees = async () => {
-    setLoading(true);
+    setLoadingEmployees(true);
     const res = await fetch("/api/empleados");
-    const data = await res.json();
-    setEmployees(data);
-    setLoading(false);
+    if(res.ok) {
+      const data = await res.json();
+      setEmployees(data);
+    }
+    setLoadingEmployees(false);
+  };
+
+  const fetchBranches = async () => {
+    setLoadingBranches(true);
+    const res = await fetch("/api/branches");
+    if(res.ok) {
+      const data = await res.json();
+      setBranches(data.branches || []);
+    }
+    setLoadingBranches(false);
   };
 
   useEffect(() => {
     fetchEmployees();
+    fetchBranches();
   }, []);
 
-  const handleModalClose = () => setModal(null);
-  const handleModalSave = () => { setModal(null); fetchEmployees(); };
+  const handleEmployeeModalClose = () => setEmployeeModal(null);
+  const handleEmployeeModalSave = () => { setEmployeeModal(null); fetchEmployees(); };
+
+  const handleBranchModalClose = () => setBranchModal(false);
+  const handleBranchModalSave = () => { setBranchModal(false); fetchBranches(); };
 
   return (
-    <div style={{ padding: "24px 16px", minHeight: "100dvh" }}>
+    <div style={{ padding: "24px 16px", minHeight: "100dvh", paddingBottom: "100px" }}>
       {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
         <h1 style={{ fontSize: "24px", fontWeight: 800 }}>Configuración</h1>
       </div>
+
+      {/* Sucursales Section */}
+      <section style={{ marginBottom: "32px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+          <h2 style={{ fontSize: "16px", fontWeight: 700, color: "var(--text-2)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+            🏪 Mis Sucursales
+          </h2>
+          <button className="btn btn-sm btn-ghost" style={{ border: "1px solid var(--border)", background: "var(--surface)" }} onClick={() => setBranchModal(true)}>
+            + Nueva
+          </button>
+        </div>
+
+        {loadingBranches ? (
+          <div style={{ textAlign: "center", padding: "16px", color: "var(--text-3)" }}>Cargando...</div>
+        ) : (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "8px" }}>
+            {branches.map((branch) => (
+              <a
+                key={branch.id}
+                href={`/${branch.id}/caja`}
+                className="card"
+                style={{
+                  padding: "16px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "12px",
+                  cursor: "pointer",
+                  width: "100%",
+                  textDecoration: "none",
+                  color: "inherit",
+                  background: "var(--surface)",
+                }}
+              >
+                <div
+                  style={{
+                    width: "40px",
+                    height: "40px",
+                    borderRadius: "8px",
+                    background: branch.primaryColor || "var(--primary)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: "20px",
+                    flexShrink: 0,
+                  }}
+                >
+                  🏪
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 700, fontSize: "16px" }}>{branch.name}</div>
+                  <div style={{ fontSize: "13px", color: "var(--text-3)" }}>
+                    Ir a la caja ›
+                  </div>
+                </div>
+              </a>
+            ))}
+          </div>
+        )}
+      </section>
 
       {/* Empleados Section */}
       <section>
@@ -196,12 +385,12 @@ export default function ConfiguracionPage() {
           <h2 style={{ fontSize: "16px", fontWeight: 700, color: "var(--text-2)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
             👤 Empleados
           </h2>
-          <button className="btn btn-sm btn-green" onClick={() => setModal("new")}>
+          <button className="btn btn-sm btn-green" onClick={() => setEmployeeModal("new")}>
             + Nuevo
           </button>
         </div>
 
-        {loading ? (
+        {loadingEmployees ? (
           <div style={{ textAlign: "center", padding: "32px", color: "var(--text-3)" }}>Cargando...</div>
         ) : employees.length === 0 ? (
           <div
@@ -236,20 +425,20 @@ export default function ConfiguracionPage() {
                   border: "none",
                   background: "var(--surface)",
                 }}
-                onClick={() => setModal(emp)}
+                onClick={() => setEmployeeModal(emp)}
               >
                 <div
                   style={{
                     width: "40px",
                     height: "40px",
                     borderRadius: "50%",
-                    background: "var(--primary)",
+                    background: "var(--text-3)",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
                     fontSize: "16px",
                     fontWeight: 800,
-                    color: "white",
+                    color: "black",
                     flexShrink: 0,
                   }}
                 >
@@ -272,12 +461,19 @@ export default function ConfiguracionPage() {
         )}
       </section>
 
-      {/* Modal */}
-      {modal && (
+      {/* Modals */}
+      {employeeModal && (
         <EmployeeModal
-          employee={modal === "new" ? null : modal}
-          onClose={handleModalClose}
-          onSave={handleModalSave}
+          employee={employeeModal === "new" ? null : employeeModal}
+          onClose={handleEmployeeModalClose}
+          onSave={handleEmployeeModalSave}
+        />
+      )}
+
+      {branchModal && (
+        <BranchModal
+          onClose={handleBranchModalClose}
+          onSave={handleBranchModalSave}
         />
       )}
     </div>

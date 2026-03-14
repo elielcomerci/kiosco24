@@ -95,15 +95,30 @@ function ProductModal({
   };
 
   return (
-    <div className="modal-overlay animate-fade-in" onClick={onClose}>
-      <div
-        className="modal animate-slide-up"
-        onClick={(e) => e.stopPropagation()}
-        style={{ maxHeight: "92dvh", overflowY: "auto" }}
+    <div 
+        className="modal-overlay animate-fade-in" 
+        onClick={onClose}
+        style={{ zIndex: 9999, alignItems: "flex-end", padding: "16px", paddingBottom: "max(16px, env(safe-area-inset-bottom))" }} // Alineado abajo para tel.
       >
-        <h2 style={{ fontSize: "20px", fontWeight: 700, marginBottom: "16px" }}>
-          {isNew ? "Nuevo producto" : "Editar producto"}
-        </h2>
+        <div 
+          className="modal animate-slide-up" 
+          onClick={(e) => e.stopPropagation()}
+          style={{ 
+            maxHeight: "85dvh", // usa dvh y menor % para dejar espacio al teclado virtual
+            overflowY: "auto", 
+            padding: "20px",
+            width: "100%",
+            maxWidth: "500px",
+            display: "flex",
+            flexDirection: "column",
+            gap: "8px"
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+            <h2 style={{ fontSize: "20px", fontWeight: 700 }}>
+              {isNew ? "Nuevo producto" : "Editar producto"}
+            </h2>
+          </div>
 
         {/* Emoji Picker */}
         <div style={{ display: "flex", gap: "10px", alignItems: "center", marginBottom: "12px" }}>

@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { notFound, redirect } from "next/navigation";
 import BottomNav from "@/components/ui/BottomNav";
+import BranchSelector from "@/components/ui/BranchSelector";
 
 export default async function BranchLayout({
   children,
@@ -17,21 +18,28 @@ export default async function BranchLayout({
 
   const { branchId } = await params;
 
-  // Cargar datos de la sucursal para personalización
-  const branch = await prisma.branch.findUnique({
+  // Cargar datos de la sucursal actual y todas las hermanas del Kiosco
+  const currentBranchContext = await prisma.branch.findUnique({
     where: { id: branchId },
     select: {
-      name: true,
-      logoUrl: true,
-      primaryColor: true,
+      kiosco: {
+        select: {
+          branches: {
+            select: { id: true, name: true, logoUrl: true, primaryColor: true },
+            orderBy: { createdAt: "asc" },
+          }
+        }
+      }
     },
   });
 
-  if (!branch) {
+  if (!currentBranchContext) {
     notFound();
   }
 
-  const primaryColor = branch.primaryColor || "#22c55e";
+  const branches = currentBranchContext.kiosco.branches;
+  const branch = branches.find((b) => b.id === branchId);
+  const primaryColor = branch?.primaryColor || "#22c55e";
 
   return (
     <div 
@@ -49,18 +57,7 @@ export default async function BranchLayout({
         alignItems: "center",
         justifyContent: "space-between"
       }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          {branch.logoUrl ? (
-            <img 
-              src={branch.logoUrl} 
-              alt={branch.name} 
-              style={{ height: "32px", width: "auto" }} 
-            />
-          ) : (
-            <span style={{ fontSize: "20px" }}>🏪</span>
-          )}
-          <h1 style={{ fontSize: "16px", fontWeight: 700 }}>{branch.name}</h1>
-        </div>
+        <BranchSelector branches={branches} currentBranchId={branchId} />
         <a href={`/${branchId}/configuracion`} style={{ fontSize: "20px", textDecoration: "none", color: "var(--text)" }} title="Configuración">
           ⚙️
         </a>

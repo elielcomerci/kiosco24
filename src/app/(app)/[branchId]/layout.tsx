@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { notFound, redirect } from "next/navigation";
 import BottomNav from "@/components/ui/BottomNav";
 import BranchSelector from "@/components/ui/BranchSelector";
+import { hexToRgb } from "@/lib/utils";
 
 export default async function BranchLayout({
   children,

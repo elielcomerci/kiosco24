@@ -141,7 +141,7 @@ export default function ResumenPage() {
       {data.fiados.length > 0 && (
         <>
           <div className="separator" />
-          <div>
+          <div style={{ marginBottom: "24px" }}>
             <h3 style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "12px" }}>
               Fiados de hoy
             </h3>
@@ -155,6 +155,78 @@ export default function ResumenPage() {
             </div>
           </div>
         </>
+      )}
+
+      {/* Separator Ventas Detalladas */}
+      <div className="separator" />
+
+      {/* Ventas detalladas */}
+      <VentasDetail />
+    </div>
+  );
+}
+
+// Subcomponente para aislar la carga del detalle
+function VentasDetail() {
+  const [ventas, setVentas] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+
+  const loadVentas = async () => {
+    if (expanded) {
+      setExpanded(false);
+      return;
+    }
+    setLoading(true);
+    const res = await fetch("/api/resumen/ventas");
+    const data = await res.json();
+    setVentas(data);
+    setLoading(false);
+    setExpanded(true);
+  };
+
+  return (
+    <div>
+      <button 
+        className="btn btn-ghost" 
+        style={{ width: "100%", justifyContent: "space-between", padding: "16px 12px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)" }}
+        onClick={loadVentas}
+      >
+        <span style={{ fontWeight: 600, color: "var(--text-2)" }}>📋 Ver detalle de ventas</span>
+        <span>{expanded ? "▴" : "▾"}</span>
+      </button>
+
+      {loading && <div style={{ textAlign: "center", padding: "20px", color: "var(--text-3)" }}>Cargando ventas...</div>}
+
+      {expanded && !loading && (
+        <div style={{ marginTop: "12px", display: "flex", flexDirection: "column", gap: "8px" }}>
+          {ventas.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "20px", color: "var(--text-3)" }}>No hay ventas hoy.</div>
+          ) : (
+            ventas.map((v: any) => (
+              <div key={v.id} className="card" style={{ padding: "12px", opacity: v.voided ? 0.6 : 1 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px", fontSize: "12px", color: "var(--text-3)" }}>
+                  <span>{new Date(v.createdAt).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })} • {v.employeeName}</span>
+                  <span style={{ fontWeight: 600, color: v.voided ? "var(--red)" : "var(--text)" }}>
+                    {v.voided ? "ANULADA" : v.paymentMethod === "CASH" ? "Efectivo" : v.paymentMethod === "CREDIT" ? "Fiado" : v.paymentMethod}
+                  </span>
+                </div>
+                
+                {v.items.map((i: any, idx: number) => (
+                  <div key={idx} style={{ display: "flex", justifyContent: "space-between", fontSize: "14px", padding: "4px 0" }}>
+                    <span>{i.quantity}x {i.name}</span>
+                    <span>{formatARS(i.total)}</span>
+                  </div>
+                ))}
+
+                <div style={{ borderTop: "1px dashed var(--border)", marginTop: "8px", paddingTop: "8px", display: "flex", justifyContent: "space-between", fontWeight: 700 }}>
+                  <span>Total</span>
+                  <span>{formatARS(v.total)}</span>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
       )}
     </div>
   );

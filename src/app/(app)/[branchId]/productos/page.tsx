@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import { formatARS, applyPercentage } from "@/lib/utils";
+import BarcodeScanner from "@/components/caja/BarcodeScanner";
 
 interface Product {
   id: string;
@@ -39,6 +40,7 @@ function ProductModal({
   const [loading, setLoading] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
   const barcodeRef = useRef<HTMLInputElement>(null);
 
   const toNum = (v: string) => {
@@ -219,13 +221,24 @@ function ProductModal({
         {/* Barcode */}
         <div style={{ marginBottom: "12px" }}>
           <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase" }}>Código de barras</label>
-          <input
-            ref={barcodeRef}
-            className="input"
-            placeholder="Escaneá o escribí el código"
-            value={barcode}
-            onChange={(e) => setBarcode(e.target.value)}
-          />
+          <div style={{ display: "flex", gap: "8px" }}>
+            <input
+              ref={barcodeRef}
+              className="input"
+              placeholder="Escaneá o escribí el código"
+              value={barcode}
+              onChange={(e) => setBarcode(e.target.value)}
+              style={{ flex: 1 }}
+            />
+            <button
+              className="btn btn-ghost"
+              style={{ padding: "0 16px", flexShrink: 0, fontSize: "20px" }}
+              onClick={() => setShowScanner(true)}
+              title="Escanear con cámara"
+            >
+              📷
+            </button>
+          </div>
         </div>
 
         {/* showInGrid toggle */}
@@ -301,6 +314,16 @@ function ProductModal({
           </button>
         </div>
       </div>
+      
+      {showScanner && (
+        <BarcodeScanner
+          onScan={(result) => {
+            setBarcode(result);
+            setShowScanner(false);
+          }}
+          onClose={() => setShowScanner(false)}
+        />
+      )}
     </div>
   );
 }

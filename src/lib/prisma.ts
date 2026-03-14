@@ -13,10 +13,15 @@ const isEdge = typeof (globalThis as any).EdgeRuntime === 'string';
 // For Edge Runtime (Middleware), pg won't work — but auth.ts only uses JWT there.
 
 const prismaClientSingleton = () => {
-  const connectionString = (process.env.DATABASE_URL || '').trim().replace(/^["']|["']$/g, '');
+  let connectionString = (process.env.DATABASE_URL || '').trim().replace(/^["']|["']$/g, '');
   
   if (!connectionString) {
     throw new Error('DATABASE_URL is missing.');
+  }
+
+  // Silence standard 'pg' warning about SSL modes
+  if (connectionString.includes('sslmode=require')) {
+    connectionString = connectionString.replace('sslmode=require', 'sslmode=require&uselibpqcompat=true');
   }
 
   const host = connectionString.match(/@([^/:]+)/)?.[1] || 'unknown';

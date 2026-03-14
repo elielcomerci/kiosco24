@@ -9,7 +9,9 @@ export default auth((req: any) => {
 
   const isOnLogin = nextUrl.pathname.startsWith("/login");
   if (isOnLogin) {
+    if (isLoggedIn) {
       return Response.redirect(new URL("/", nextUrl));
+    }
     return;
   }
 

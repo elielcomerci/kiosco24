@@ -130,7 +130,7 @@ export default function CajaPage() {
   };
 
   const handleOpenShift = async (amount: number, employeeName: string) => {
-    const res = await fetch("/api/turnos/abrir", {
+    const res = await fetch("/api/turnos", {
       method: "POST",
       headers: { 
         "Content-Type": "application/json",

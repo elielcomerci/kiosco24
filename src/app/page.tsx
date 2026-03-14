@@ -24,7 +24,7 @@ export default async function LandingPage() {
       redirect(`/${branchId}/caja`);
     } else {
       // Si no tiene sucursal, es un usuario nuevo (onboarding)
-      redirect("/login");
+      redirect("/onboarding");
     }
   }
 

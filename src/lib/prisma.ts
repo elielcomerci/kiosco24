@@ -29,32 +29,33 @@ export type {
 neonConfig.webSocketConstructor = ws;
 
 const prismaClientSingleton = () => {
-  const connectionString = (process.env.DATABASE_URL || '').trim();
-
+  let connectionString = (process.env.DATABASE_URL || '').trim();
+  
+  // Si por alguna razón está vacía pero tenemos NEXTAUTH_URL, 
+  // sospechamos de un problema de carga de .env y varemos de dónde sacar la URL.
   if (!connectionString) {
-    console.error('❌ [Prisma Init] DATABASE_URL is missing! Current process.env keys:', Object.keys(process.env).filter(k => k.includes('DATABASE') || k.includes('URL')));
-    // Fallback simple
+    console.error('❌ [Prisma Init] DATABASE_URL IS EMPTY! Environment might be reloading.');
     return new PrismaClient({ log: ['error'] });
   }
 
-  // Use Neon adapter as recommended for serverless environments with Prisma 7
-  console.log(`✅ [Prisma Init] Attempting connection. URL length: ${connectionString.length}`);
-  
-  const pool = new Pool({ connectionString });
+  console.log(`✅ [Prisma Init] Preparing Neon Pool. URL length: ${connectionString.length}`);
   
   try {
     const url = new URL(connectionString);
-    console.log(`✅ [Prisma Init] Using DB host: ${url.host}`);
-  } catch (e) {
-    console.warn(`⚠️ [Prisma Init] Failed to parse URL: ${connectionString.substring(0, 5)}...`);
+    console.log(`✅ [Prisma Init] DB Host: ${url.host}`);
+    
+    const pool = new Pool({ connectionString });
+    const adapter = new PrismaNeon(pool as any);
+
+    return new PrismaClient({
+      adapter,
+      datasourceUrl: connectionString,
+      log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
+    });
+  } catch (err: any) {
+    console.error('❌ [Prisma Init] CRITICAL FAILURE during initialization:', err.message);
+    return new PrismaClient({ log: ['error'] });
   }
-
-  const adapter = new PrismaNeon(pool as any);
-
-  return new PrismaClient({
-    adapter,
-    log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
-  });
 };
 
 const globalForPrisma = globalThis as unknown as {

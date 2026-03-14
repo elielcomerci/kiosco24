@@ -40,24 +40,36 @@ export default async function BranchLayout({
   const branches = currentBranchContext.kiosco.branches;
   const branch = branches.find((b) => b.id === branchId);
   const primaryColor = branch?.primaryColor || "#22c55e";
+  const primaryRgb = hexToRgb(primaryColor);
 
   return (
     <div 
       className="branch-context"
       style={{ 
         "--primary": primaryColor,
-        "--primary-dim": `${primaryColor}CC` // 80% opacidad para el hover aproximado
+        "--primary-rgb": primaryRgb,
+        "--primary-dim": `${primaryColor}CC`
       } as React.CSSProperties}
     >
       <header className="no-print" style={{ 
-        padding: "12px 16px", 
+        padding: "8px 16px", 
         background: "var(--surface)", 
         borderBottom: "1px solid var(--border)",
         display: "flex",
         alignItems: "center",
-        justifyContent: "space-between"
+        justifyContent: "space-between",
+        minHeight: "56px"
       }}>
-        <BranchSelector branches={branches} currentBranchId={branchId} />
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          {branch?.logoUrl && (
+            <img 
+              src={branch.logoUrl} 
+              alt="Logo" 
+              style={{ width: "32px", height: "32px", borderRadius: "6px", objectFit: "cover" }} 
+            />
+          )}
+          <BranchSelector branches={branches} currentBranchId={branchId} />
+        </div>
         <a href={`/${branchId}/configuracion`} style={{ fontSize: "20px", textDecoration: "none", color: "var(--text)" }} title="Configuración">
           ⚙️
         </a>

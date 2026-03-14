@@ -29,8 +29,25 @@ export async function POST(
 
   // Restore stock in the specific branch
   for (const item of sale.items) {
-    if (item.productId) {
-      const inventory = await prisma.inventoryRecord.findUnique({
+    if ((item as any).variantId) {
+      // Restaurar stock de variante
+      const vInv = await (prisma as any).variantInventory.findUnique({
+        where: {
+          variantId_branchId: {
+            variantId: (item as any).variantId,
+            branchId: sale.branchId,
+          },
+        },
+      });
+      if (vInv?.stock !== null && vInv?.stock !== undefined) {
+        await (prisma as any).variantInventory.update({
+          where: { id: vInv.id },
+          data: { stock: vInv.stock + item.quantity },
+        });
+      }
+    } else if (item.productId) {
+      // Restaurar stock de producto base
+      const inventory = await (prisma as any).inventoryRecord.findUnique({
         where: {
           productId_branchId: {
             productId: item.productId,
@@ -40,7 +57,7 @@ export async function POST(
       });
 
       if (inventory?.stock !== null && inventory?.stock !== undefined) {
-        await prisma.inventoryRecord.update({
+        await (prisma as any).inventoryRecord.update({
           where: { id: inventory.id },
           data: { stock: inventory.stock + item.quantity },
         });

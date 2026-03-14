@@ -50,25 +50,38 @@ export async function POST(req: Request) {
       items: {
         create: items.map((item: any) => ({
           productId: item.productId ?? null,
+          variantId: (item as any).variantId ?? null,
           name: item.name,
           price: item.price,
           quantity: item.quantity,
           cost: item.cost ?? null,
         })),
       },
-    },
+    } as any,
     include: { items: true },
   });
 
   // Update stock from the local branch inventory
   for (const item of items) {
-    if (item.productId) {
-      const inventory = await prisma.inventoryRecord.findUnique({
+    if ((item as any).variantId) {
+      // Descontar de variante
+      const vInv = await (prisma as any).variantInventory.findUnique({
+        where: { variantId_branchId: { variantId: (item as any).variantId, branchId } }
+      });
+      if (vInv?.stock !== null && vInv?.stock !== undefined) {
+        await (prisma as any).variantInventory.update({
+          where: { id: vInv.id },
+          data: { stock: Math.max(0, vInv.stock - item.quantity) }
+        });
+      }
+    } else if (item.productId) {
+      // Descontar de producto base
+      const inventory = await (prisma as any).inventoryRecord.findUnique({
         where: { productId_branchId: { productId: item.productId, branchId } }
       });
       
       if (inventory?.stock !== null && inventory?.stock !== undefined) {
-        await prisma.inventoryRecord.update({
+        await (prisma as any).inventoryRecord.update({
           where: { id: inventory.id },
           data: { stock: Math.max(0, inventory.stock - item.quantity) },
         });

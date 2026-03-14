@@ -169,7 +169,7 @@ body {
   font-size: 12px;
   font-weight: 600;
 }
-.badge-green { background: rgba(34,197,94,0.15); color: var(--green); }
+.badge-green { background: rgba(var(--primary-rgb), 0.15); color: var(--primary); }
 .badge-red   { background: rgba(239,68,68,0.15);  color: var(--red);   }
 .badge-amber { background: rgba(245,158,11,0.15); color: var(--amber); }
 
@@ -383,7 +383,7 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 .bottom-nav-item:hover { color: var(--text-2); }
-.bottom-nav-item.active { color: var(--green); }
+.bottom-nav-item.active { color: var(--primary); }
 
 .bottom-nav-label {
   font-size: 11px;

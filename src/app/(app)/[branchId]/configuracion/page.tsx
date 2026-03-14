@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useParams } from "next/navigation";
 import BackButton from "@/components/ui/BackButton";
 
 interface Employee {
@@ -8,6 +9,12 @@ interface Employee {
   name: string;
   pin: string | null;
   active: boolean;
+}
+
+interface Category {
+  id: string;
+  name: string;
+  color: string | null;
 }
 
 interface Branch {
@@ -134,7 +141,7 @@ function EmployeeModal({
                   width: "44px",
                   height: "24px",
                   borderRadius: "99px",
-                  background: active ? "var(--green)" : "var(--border)",
+                  background: active ? "var(--primary)" : "var(--border)",
                   border: "none",
                   cursor: "pointer",
                   transition: "background 0.2s",
@@ -274,14 +281,169 @@ function BranchModal({
   );
 }
 
+// ─── Category Form Modal ────────────────────────────────────────────────────────
+function CategoryModal({
+  category,
+  onClose,
+  onSave,
+}: {
+  category: "new" | Category;
+  onClose: () => void;
+  onSave: () => void;
+}) {
+  const isNew = category === "new";
+  const [name, setName] = useState(isNew ? "" : category.name);
+  const [color, setColor] = useState(isNew ? "#3b82f6" : category.color || "#3b82f6");
+  const [loading, setLoading] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+
+  const handleSave = async () => {
+    if (!name.trim()) return;
+    setLoading(true);
+
+    const payload = { name, color };
+
+    if (isNew) {
+      await fetch("/api/categorias", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    } else {
+      await fetch(`/api/categorias/${category.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    }
+
+    setLoading(false);
+    onSave();
+  };
+
+  const handleDelete = async () => {
+    if (!confirming) {
+      setConfirming(true);
+      return;
+    }
+    setLoading(true);
+    await fetch(`/api/categorias/${(category as Category).id}`, {
+      method: "DELETE",
+    });
+    setLoading(false);
+    onSave();
+  };
+
+  return (
+    <div 
+      className="modal-overlay animate-fade-in" 
+      onClick={onClose}
+      style={{ zIndex: 9999, alignItems: "flex-end", padding: "16px", paddingBottom: "max(16px, env(safe-area-inset-bottom))" }}
+    >
+      <div 
+        className="modal animate-slide-up" 
+        onClick={(e) => e.stopPropagation()}
+        style={{ 
+          maxHeight: "85dvh",
+          overflowY: "auto", 
+          padding: "20px",
+          width: "100%",
+          maxWidth: "500px",
+          display: "flex",
+          flexDirection: "column",
+          gap: "16px"
+        }}
+      >
+        <h2 style={{ fontSize: "20px", fontWeight: 700 }}>
+          {isNew ? "Nueva Categoría" : "Editar Categoría"}
+        </h2>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+          <div>
+            <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              Nombre
+            </label>
+            <input
+              className="input"
+              placeholder="Ej: Bebidas"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              autoFocus
+            />
+          </div>
+
+          <div>
+            <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: "6px" }}>
+              Color
+            </label>
+            <input
+              type="color"
+              value={color}
+              onChange={(e) => setColor(e.target.value)}
+              style={{
+                width: "100%",
+                height: "44px",
+                padding: "2px",
+                border: "1px solid var(--border)",
+                borderRadius: "var(--radius)",
+                background: "var(--surface)",
+                cursor: "pointer"
+              }}
+            />
+          </div>
+        </div>
+
+        <div style={{ display: "flex", gap: "8px", marginTop: "20px" }}>
+          {!isNew && (
+            <button
+              className="btn btn-ghost"
+              style={{ color: "var(--red)", borderColor: "var(--red)" }}
+              onClick={handleDelete}
+              disabled={loading}
+            >
+              {confirming ? "¿Seguro?" : "🗑"}
+            </button>
+          )}
+          <button className="btn btn-ghost" style={{ flex: 1 }} onClick={onClose} disabled={loading}>
+            Cancelar
+          </button>
+          <button
+            className="btn btn-green"
+            style={{ flex: 2 }}
+            onClick={handleSave}
+            disabled={loading || !name.trim()}
+          >
+            {loading ? "..." : "Guardar"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Config Page ─────────────────────────────────────────────────────────
 export default function ConfiguracionPage() {
+  const { branchId } = useParams() as { branchId: string };
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [currentBranch, setCurrentBranch] = useState<Branch | null>(null);
+
   const [loadingEmployees, setLoadingEmployees] = useState(true);
   const [loadingBranches, setLoadingBranches] = useState(true);
+  const [loadingCategories, setLoadingCategories] = useState(true);
+  const [loadingCurrentBranch, setLoadingCurrentBranch] = useState(true);
+
   const [employeeModal, setEmployeeModal] = useState<"new" | Employee | null>(null);
   const [branchModal, setBranchModal] = useState(false);
+  const [categoryModal, setCategoryModal] = useState<"new" | Category | null>(null);
+
+  // States for Branch Personalization
+  const [editBranchName, setEditBranchName] = useState("");
+  const [editLogoUrl, setEditLogoUrl] = useState("");
+  const [editPrimaryColor, setEditPrimaryColor] = useState("");
+  const [savingBranch, setSavingBranch] = useState(false);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
 
   const fetchEmployees = async () => {
     setLoadingEmployees(true);
@@ -303,16 +465,62 @@ export default function ConfiguracionPage() {
     setLoadingBranches(false);
   };
 
+  const fetchCategories = async () => {
+    setLoadingCategories(true);
+    const res = await fetch("/api/categorias");
+    if(res.ok) {
+      const data = await res.json();
+      setCategories(Array.isArray(data) ? data : []);
+    }
+    setLoadingCategories(false);
+  };
+
+  const fetchCurrentBranch = async () => {
+    setLoadingCurrentBranch(true);
+    const res = await fetch(`/api/branches`); // Reuse GET all or specific if needed
+    if (res.ok) {
+      const data = await res.json();
+      const b = (data.branches as Branch[]).find(v => v.id === branchId);
+      if (b) {
+        setCurrentBranch(b);
+        setEditBranchName(b.name);
+        setEditLogoUrl(b.logoUrl || "");
+        setEditPrimaryColor(b.primaryColor || "#22c55e");
+      }
+    }
+    setLoadingCurrentBranch(false);
+  };
+
   useEffect(() => {
     fetchEmployees();
     fetchBranches();
-  }, []);
+    fetchCategories();
+    fetchCurrentBranch();
+  }, [branchId]);
+
+  const handleSaveBranchSettings = async () => {
+    setSavingBranch(true);
+    await fetch(`/api/branches/${branchId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: editBranchName,
+        logoUrl: editLogoUrl || null,
+        primaryColor: editPrimaryColor
+      }),
+    });
+    setSavingBranch(false);
+    window.location.reload(); // Refresh to apply changes globally
+  };
 
   const handleEmployeeModalClose = () => setEmployeeModal(null);
   const handleEmployeeModalSave = () => { setEmployeeModal(null); fetchEmployees(); };
 
   const handleBranchModalClose = () => setBranchModal(false);
-  const handleBranchModalSave = () => { setBranchModal(false); fetchBranches(); };
+  const handleBranchModalSave = () => { setBranchModal(false); window.location.reload(); };
+
+  const handleCategoryModalClose = () => setCategoryModal(null);
+  const handleCategoryModalSave = () => { setCategoryModal(null); fetchCategories(); };
 
   return (
     <div style={{ padding: "24px 16px", minHeight: "100dvh", paddingBottom: "100px" }}>
@@ -322,6 +530,90 @@ export default function ConfiguracionPage() {
         <h1 style={{ fontSize: "20px", fontWeight: 800 }}>Configuración</h1>
         <div style={{ width: "60px" }} />{/* spacer to center title */}
       </div>
+
+      {/* Identidad Visual Section */}
+      <section style={{ marginBottom: "32px" }}>
+        <div style={{ marginBottom: "12px" }}>
+          <h2 style={{ fontSize: "16px", fontWeight: 700, color: "var(--text-2)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+            🎨 Identidad Visual
+          </h2>
+        </div>
+        
+        <div style={{ 
+          background: "var(--surface)", 
+          border: "1px solid var(--border)", 
+          borderBottom: "2px solid var(--primary)",
+          borderRadius: "var(--radius)", 
+          padding: "20px", 
+          display: "flex", 
+          flexDirection: "column", 
+          gap: "16px" 
+        }}>
+          {/* Logo & Name */}
+          <div style={{ display: "flex", gap: "16px", alignItems: "center" }}>
+            <div style={{ position: "relative", width: "80px", height: "80px", borderRadius: "12px", border: "2px dashed var(--border)", overflow: "hidden", background: "var(--surface-2)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              {editLogoUrl ? (
+                <img src={editLogoUrl} alt="Logo" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              ) : uploadingLogo ? (
+                <span className="animate-pulse">...</span>
+              ) : (
+                <span style={{ fontSize: "24px", opacity: 0.5 }}>📸</span>
+              )}
+              <input
+                type="file"
+                accept="image/*"
+                style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer" }}
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  setUploadingLogo(true);
+                  const formData = new FormData();
+                  formData.append("file", file);
+                  try {
+                    const res = await fetch("/api/upload", { method: "POST", body: formData });
+                    const data = await res.json();
+                    if (data.secure_url) setEditLogoUrl(data.secure_url);
+                  } catch (err) { console.error(err); }
+                  setUploadingLogo(false);
+                }}
+              />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, display: "block", marginBottom: "4px" }}>NOMBRE DEL NEGOCIO</label>
+              <input
+                className="input"
+                value={editBranchName}
+                onChange={(e) => setEditBranchName(e.target.value)}
+                placeholder="Nombre de la sucursal"
+              />
+            </div>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "16px", alignItems: "center" }}>
+            <div style={{ flex: 1 }}>
+              <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, display: "block", marginBottom: "4px" }}>COLOR PRINCIPAL</label>
+              <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                <input
+                  type="color"
+                  value={editPrimaryColor}
+                  onChange={(e) => setEditPrimaryColor(e.target.value)}
+                  style={{ width: "40px", height: "40px", padding: "2px", border: "1px solid var(--border)", borderRadius: "8px", cursor: "pointer", background: "var(--surface-2)" }}
+                />
+                <code style={{ fontSize: "14px", fontWeight: 600 }}>{editPrimaryColor.toUpperCase()}</code>
+              </div>
+            </div>
+
+            <button 
+              className="btn btn-green" 
+              style={{ alignSelf: "flex-end", height: "40px", padding: "0 20px" }}
+              onClick={handleSaveBranchSettings}
+              disabled={savingBranch || !editBranchName.trim()}
+            >
+              {savingBranch ? "..." : "Guardar Cambios"}
+            </button>
+          </div>
+        </div>
+      </section>
 
       {/* Sucursales Section */}
       <section style={{ marginBottom: "32px" }}>
@@ -378,6 +670,52 @@ export default function ConfiguracionPage() {
                 </div>
               </a>
             ))}
+          </div>
+        )}
+      </section>
+
+      {/* Categorías Section */}
+      <section style={{ marginBottom: "32px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+          <h2 style={{ fontSize: "16px", fontWeight: 700, color: "var(--text-2)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+            🏷️ Categorías
+          </h2>
+          <button className="btn btn-sm btn-ghost" style={{ border: "1px solid var(--border)", background: "var(--surface)" }} onClick={() => setCategoryModal("new")}>
+            + Nueva
+          </button>
+        </div>
+
+        {loadingCategories ? (
+          <div style={{ textAlign: "center", padding: "16px", color: "var(--text-3)" }}>Cargando...</div>
+        ) : (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+            {categories.map((cat) => (
+              <button
+                key={cat.id}
+                onClick={() => setCategoryModal(cat)}
+                style={{
+                  background: "var(--surface)",
+                  border: `1px solid ${cat.color || "var(--border)"}`,
+                  color: "var(--text)",
+                  padding: "6px 14px",
+                  borderRadius: "20px",
+                  fontSize: "14px",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px"
+                }}
+              >
+                <div style={{ width: 10, height: 10, borderRadius: "50%", background: cat.color || "gray" }} />
+                {cat.name}
+              </button>
+            ))}
+            {categories.length === 0 && (
+              <div style={{ width: "100%", textAlign: "center", padding: "16px", color: "var(--text-3)", background: "var(--surface)", borderRadius: "var(--radius)", border: "1px dashed var(--border)" }}>
+                No hay categorías. Creá una para organizar el catálogo de tu kiosco.
+              </div>
+            )}
           </div>
         )}
       </section>
@@ -510,6 +848,14 @@ export default function ConfiguracionPage() {
         <BranchModal
           onClose={handleBranchModalClose}
           onSave={handleBranchModalSave}
+        />
+      )}
+
+      {categoryModal && (
+        <CategoryModal
+          category={categoryModal}
+          onClose={handleCategoryModalClose}
+          onSave={handleCategoryModalSave}
         />
       )}
     </div>

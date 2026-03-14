@@ -17,8 +17,20 @@ export async function GET(
 
   const inventory = await prisma.inventoryRecord.findUnique({
     where: { productId_branchId: { productId: id, branchId: branchId! } },
-    include: { product: true },
-  });
+    include: { 
+      product: {
+        include: {
+          variants: {
+            include: {
+              inventory: {
+                where: { branchId: branchId! }
+              }
+            }
+          }
+        }
+      } 
+    } as any,
+  }) as any;
 
   if (!inventory)
     return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -33,6 +45,13 @@ export async function GET(
     stock: inventory.stock,
     minStock: inventory.minStock,
     showInGrid: inventory.showInGrid,
+    variants: inventory.product.variants.map((v: any) => ({
+      id: v.id,
+      name: v.name,
+      barcode: v.barcode,
+      stock: v.inventory[0]?.stock ?? 0,
+      minStock: v.inventory[0]?.minStock ?? 0,
+    })),
   });
 }
 
@@ -49,7 +68,7 @@ export async function PATCH(
   const { id } = await params;
 
   const body = await req.json();
-  const { name, emoji, barcode, price, cost, stock, minStock, showInGrid } = body;
+  const { name, emoji, barcode, image, categoryId, price, cost, stock, minStock, showInGrid, variants } = body;
 
   // Verify product belongs to this kiosco
   const product = await prisma.product.findFirst({
@@ -65,8 +84,52 @@ export async function PATCH(
       ...(name !== undefined && { name: name.trim() }),
       ...(emoji !== undefined && { emoji }),
       ...(barcode !== undefined && { barcode: barcode?.trim() || null }),
+      ...(image !== undefined && { image }),
+      ...(categoryId !== undefined && { categoryId }),
+      ...(variants !== undefined && {
+        variants: {
+          deleteMany: { id: { notIn: variants.filter((v: any) => v.id).map((v: any) => v.id) } },
+          create: variants.filter((v: any) => !v.id).map((v: any) => ({
+            name: v.name,
+            barcode: v.barcode || null,
+          })),
+          update: variants.filter((v: any) => v.id).map((v: any) => ({
+            where: { id: v.id },
+            data: { name: v.name, barcode: v.barcode || null },
+          })),
+        }
+      } as any),
     },
   });
+
+  // Update VariantInventory
+  if (variants !== undefined) {
+    const updatedProduct = await (prisma.product.findUnique({
+      where: { id },
+      include: { variants: true } as any,
+    }) as any);
+    if (updatedProduct) {
+      for (const v of variants) {
+        // Encontrar la variante por ID o por Nombre (si recién fue creada)
+        const actualVar = updatedProduct.variants.find((pv: any) => v.id ? pv.id === v.id : pv.name === v.name);
+        if (actualVar) {
+          await (prisma as any).variantInventory.upsert({
+            where: { variantId_branchId: { variantId: actualVar.id, branchId: branchId! } },
+            create: {
+              variantId: actualVar.id,
+              branchId: branchId!,
+              stock: v.stock ?? 0,
+              minStock: v.minStock ?? 0,
+            },
+            update: {
+              ...(v.stock !== undefined && { stock: v.stock }),
+              ...(v.minStock !== undefined && { minStock: v.minStock }),
+            },
+          });
+        }
+      }
+    }
+  }
 
   // Update branch-specific inventory
   await prisma.inventoryRecord.upsert({

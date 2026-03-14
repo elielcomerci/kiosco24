@@ -19,6 +19,7 @@
     "@zxing/browser": "^0.1.5",
     "bcryptjs": "^3.0.3",
     "class-variance-authority": "^0.7.1",
+    "cloudinary": "^2.9.0",
     "clsx": "^2.1.1",
     "html5-qrcode": "^2.3.8",
     "idb": "^8.0.3",

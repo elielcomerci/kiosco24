@@ -16,21 +16,40 @@ import { useOnlineStatus } from "@/lib/offline/sync";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
+interface Variant {
+  id: string;
+  name: string;
+  barcode?: string | null;
+  stock: number;
+  minStock: number;
+}
+
 interface Product {
   id: string;
   name: string;
   price: number;
   barcode?: string | null;
   emoji?: string | null;
+  categoryId?: string | null;
   stock?: number | null;
+  minStock?: number | null;
+  variants?: Variant[];
+}
+
+interface Category {
+  id: string;
+  name: string;
+  color: string | null;
 }
 
 interface TicketItem {
   productId?: string;
+  variantId?: string;
   name: string;
   price: number;
   quantity: number;
   cost?: number;
+  maxStock?: number; // Para validación
 }
 
 interface Sale {
@@ -69,6 +88,9 @@ export default function CajaPage() {
   const [showCloseShift, setShowCloseShift] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [cajaSearch, setCajaSearch] = useState("");
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const [variantSelector, setVariantSelector] = useState<{ product: Product } | null>(null);
 
   const isOnline = useOnlineStatus();
   const total = ticket.reduce((sum, item) => sum + item.price * item.quantity, 0);
@@ -169,6 +191,12 @@ export default function CajaPage() {
       });
       const data = await res.json();
       setProducts(data);
+
+      const catRes = await fetch(`/api/categorias`);
+      if (catRes.ok) {
+        const catData = await catRes.json();
+        setCategories(Array.isArray(catData) ? catData : []);
+      }
     } finally {
       setLoading(false);
     }
@@ -185,26 +213,51 @@ export default function CajaPage() {
   };
 
   // ─── Product tap ─────────────────────────────────────────────────────────
-  const handleProductTap = useCallback((product: Product) => {
+  const handleProductTap = useCallback((product: Product, variant?: Variant) => {
+    // Si el producto tiene variantes y NO se pasó una variante específica, abrir selector
+    if (product.variants && product.variants.length > 0 && !variant) {
+      setVariantSelector({ product });
+      return;
+    }
+
+    const targetId = variant ? variant.id : product.id;
+    const targetName = variant ? `${product.name} - ${variant.name}` : product.name;
+    const targetStock = variant ? variant.stock : (product.stock ?? 999999);
+
     setTicket((prev) => {
-      const existing = prev.find((i) => i.productId === product.id);
+      const existing = prev.find((i) => (variant ? i.variantId === variant.id : i.productId === product.id));
+      
       if (existing) {
+        if (existing.quantity >= targetStock) {
+          alert(`No hay más stock de ${targetName}`);
+          return prev;
+        }
         return prev.map((i) =>
-          i.productId === product.id
+          (variant ? i.variantId === variant.id : i.productId === product.id)
             ? { ...i, quantity: i.quantity + 1 }
             : i
         );
       }
+
+      if (targetStock <= 0) {
+        alert(`${targetName} no tiene stock disponible`);
+        return prev;
+      }
+
       return [
         ...prev,
         {
           productId: product.id,
-          name: product.name,
+          variantId: variant?.id,
+          name: targetName,
           price: product.price,
           quantity: 1,
+          maxStock: targetStock
         },
       ];
     });
+
+    if (variant) setVariantSelector(null);
   }, []);
 
   // Long press = -1
@@ -303,22 +356,42 @@ export default function CajaPage() {
 
   // ─── Barcode handling ─────────────────────────────────────────────────────
   const handleBarcodeScan = (result: string) => {
-    // Only close scanner if we find it
+    // 1. Buscar en productos base
     const product = products.find(p => p.barcode === result);
     if (product) {
       handleProductTap(product);
       setShowScanner(false);
-    } else {
-      // Not found, maybe show toast
-      alert(`Código ${result} no encontrado.`);
+      return;
     }
+
+    // 2. Buscar en variantes de todos los productos
+    for (const p of products) {
+      if (p.variants) {
+        const variant = p.variants.find(v => v.barcode === result);
+        if (variant) {
+          handleProductTap(p, variant);
+          setShowScanner(false);
+          return;
+        }
+      }
+    }
+
+    // Not found
+    alert(`Código ${result} no encontrado.`);
   };
 
   // ─── Ticket item controls ─────────────────────────────────────────────────
   const changeQty = (index: number, delta: number) => {
     setTicket((prev) => {
       const newTicket = [...prev];
-      newTicket[index] = { ...newTicket[index], quantity: newTicket[index].quantity + delta };
+      const item = newTicket[index];
+      
+      if (delta > 0 && item.maxStock !== undefined && item.quantity >= item.maxStock) {
+        alert("Stock máximo alcanzado");
+        return prev;
+      }
+
+      newTicket[index] = { ...item, quantity: item.quantity + delta };
       if (newTicket[index].quantity <= 0) newTicket.splice(index, 1);
       return newTicket;
     });
@@ -451,14 +524,83 @@ export default function CajaPage() {
         )}
       </div>
 
+      {/* Category Filter Pills (Scrollable Horizontal) */}
+      {categories.length > 0 && (
+        <div style={{
+          display: "flex",
+          gap: "8px",
+          padding: "10px 12px 0",
+          overflowX: "auto",
+          whiteSpace: "nowrap",
+          scrollbarWidth: "none",
+          WebkitOverflowScrolling: "touch",
+        }}>
+          <button
+            onClick={() => setActiveCategory(null)}
+            style={{
+              padding: "6px 14px",
+              borderRadius: "20px",
+              border: `1px solid ${activeCategory === null ? "var(--primary)" : "var(--border)"}`,
+              background: activeCategory === null ? "var(--primary)" : "var(--surface)",
+              color: activeCategory === null ? "white" : "var(--text-2)",
+              fontWeight: 600,
+              fontSize: "13px",
+              cursor: "pointer",
+              transition: "all 0.2s"
+            }}
+          >
+            Todas
+          </button>
+          {categories.map((c) => (
+            <button
+              key={c.id}
+              onClick={() => setActiveCategory(c.id)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+                padding: "6px 14px",
+                borderRadius: "20px",
+                border: `1px solid ${activeCategory === c.id ? c.color || "var(--primary)" : "var(--border)"}`,
+                background: activeCategory === c.id ? c.color || "var(--primary)" : "var(--surface)",
+                color: activeCategory === c.id ? "white" : "var(--text-2)",
+                fontWeight: 600,
+                fontSize: "13px",
+                cursor: "pointer",
+                transition: "all 0.2s"
+              }}
+            >
+              {activeCategory !== c.id && <div style={{ width: 8, height: 8, borderRadius: "50%", background: c.color || "var(--text-3)" }} />}
+              {c.name}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Products grid */}
-      <div style={{ padding: "8px 12px", flex: 1, overflowY: "auto" }}>
+      <div style={{ padding: "10px 12px", flex: 1, overflowY: "auto" }}>
         {loading ? (
           <div style={{ textAlign: "center", padding: "40px", color: "var(--text-3)" }}>Cargando...</div>
         ) : (
           <div className="product-grid">
             {products
-              .filter((p) => !cajaSearch || p.name.toLowerCase().includes(cajaSearch.toLowerCase()))
+              .filter((p) => {
+                const matchSearch = p.name.toLowerCase().includes(cajaSearch.toLowerCase()) || 
+                                   p.barcode?.includes(cajaSearch) ||
+                                   (p.variants?.some(v => v.name.toLowerCase().includes(cajaSearch.toLowerCase()) || v.barcode?.includes(cajaSearch)));
+                const matchCategory = activeCategory === null || p.categoryId === activeCategory;
+                
+                // Filtrar stock 0: Si no tiene variantes, chequear p.stock. 
+                // Si tiene, chequear si AL MENOS una variante tiene stock > 0.
+                let hasStock = true;
+                if (p.variants && p.variants.length > 0) {
+                  hasStock = p.variants.some(v => v.stock > 0);
+                } else {
+                  hasStock = (p.stock ?? 0) > 0;
+                }
+
+                return matchSearch && matchCategory && hasStock;
+              })
               .map((product) => {
               const inTicket = ticket.find((i) => i.productId === product.id);
               return (
@@ -470,10 +612,12 @@ export default function CajaPage() {
                   onMouseUp={handleLongPressEnd}
                   onTouchStart={() => handleLongPressStart(product)}
                   onTouchEnd={handleLongPressEnd}
-                  style={inTicket ? { borderColor: "var(--primary)", background: "rgba(var(--primary-rgb, 34, 197, 94), 0.08)" } : undefined}
+                  style={inTicket ? { borderColor: "var(--primary)", background: "rgba(var(--primary-rgb, 34, 197, 94), 0.08)", fontSize: "13px" } : { fontSize: "13px" }}
                 >
-                  {product.emoji && (
-                    <span className="product-btn-emoji">{product.emoji}</span>
+                  {product.variants && product.variants.length > 0 && (
+                    <div style={{ position: "absolute", top: 4, left: 4, fontSize: "10px", background: "var(--surface-3)", padding: "2px 4px", borderRadius: "4px", border: "1px solid var(--border)" }}>
+                      VAR
+                    </div>
                   )}
                   <span className="product-btn-name">{product.name}</span>
                   <span className="product-btn-price">{formatARS(product.price)}</span>
@@ -711,6 +855,35 @@ export default function CajaPage() {
           onScan={handleBarcodeScan}
           onClose={() => setShowScanner(false)}
         />
+      )}
+
+      {/* Variant Selector Modal */}
+      {variantSelector && (
+        <div className="modal-overlay animate-fade-in" onClick={() => setVariantSelector(null)} style={{ zIndex: 10000 }}>
+          <div className="modal animate-slide-up" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "400px", width: "95%", maxHeight: "80vh", overflowY: "auto" }}>
+            <h2 style={{ fontSize: "18px", fontWeight: 700, marginBottom: "16px" }}>Seleccionar {variantSelector.product.name}</h2>
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              {variantSelector.product.variants?.map((v) => (
+                <button
+                  key={v.id}
+                  className="btn btn-ghost"
+                  style={{ justifyContent: "space-between", padding: "16px", borderRadius: "12px", background: "var(--surface-2)", border: "1px solid var(--border)" }}
+                  onClick={() => handleProductTap(variantSelector.product, v)}
+                  disabled={v.stock <= 0}
+                >
+                  <div style={{ textAlign: "left" }}>
+                    <div style={{ fontWeight: 600 }}>{v.name}</div>
+                    <div style={{ fontSize: "12px", color: "var(--text-3)" }}>Stock: {v.stock}</div>
+                  </div>
+                  <div style={{ fontWeight: 700, color: "var(--primary)" }}>{formatARS(variantSelector.product.price)}</div>
+                </button>
+              ))}
+            </div>
+            <button className="btn btn-ghost" style={{ width: "100%", marginTop: "16px" }} onClick={() => setVariantSelector(null)}>
+              Cancelar
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

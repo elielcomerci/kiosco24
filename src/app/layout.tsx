@@ -26,9 +26,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="es" suppressHydrationWarning={true}><body className={openSans.className}>
-        {children}
-        <Script
+    <html lang="es" suppressHydrationWarning={true}><body className={openSans.className}>{children}<Script
           id="sw-register"
           strategy="afterInteractive"
           dangerouslySetInnerHTML={{
@@ -47,8 +45,6 @@ export default function RootLayout({
               }
             `,
           }}
-        />
-      </body>
-    </html>
+        /></body></html>
   );
 }

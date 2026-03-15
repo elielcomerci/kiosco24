@@ -11,6 +11,7 @@ import CreditCustomerModal from "@/components/caja/CreditCustomerModal";
 import OpenShiftModal from "@/components/turnos/OpenShiftModal";
 import CloseShiftModal from "@/components/turnos/CloseShiftModal";
 import BarcodeScanner from "@/components/caja/BarcodeScanner";
+import QuickRestockModal from "@/components/caja/QuickRestockModal";
 import { savePendingSale } from "@/lib/offline/db";
 import { useOnlineStatus } from "@/lib/offline/sync";
 
@@ -33,6 +34,8 @@ interface Product {
   categoryId?: string | null;
   stock?: number | null;
   minStock?: number | null;
+  showInGrid?: boolean;
+  categoryShowInGrid?: boolean;
   variants?: Variant[];
 }
 
@@ -87,10 +90,12 @@ export default function CajaPage() {
   const [showOpenShift, setShowOpenShift] = useState(false);
   const [showCloseShift, setShowCloseShift] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
+  const [showRestockModal, setShowRestockModal] = useState(false);
   const [cajaSearch, setCajaSearch] = useState("");
   const [categories, setCategories] = useState<Category[]>([]);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [variantSelector, setVariantSelector] = useState<{ product: Product } | null>(null);
+  const [isTicketExpanded, setIsTicketExpanded] = useState(false);
 
   const isOnline = useOnlineStatus();
   const total = ticket.reduce((sum, item) => sum + item.price * item.quantity, 0);
@@ -461,7 +466,19 @@ export default function CajaPage() {
 
   // ─── Main caja screen ─────────────────────────────────────────────────────
   return (
-    <div style={{ display: "flex", flexDirection: "column", minHeight: "100dvh" }}>
+    <div style={{ 
+      display: "flex", 
+      flexDirection: "column", 
+      height: "100svh", 
+      maxHeight: "100dvh",
+      overflow: "hidden",
+      position: "fixed", // Prevents body scroll issues
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0
+    }}>
+
       {/* Status Bar */}
       <div className="status-bar">
         <div className="status-bar-item">
@@ -479,7 +496,7 @@ export default function CajaPage() {
         </div>
       </div>
       
-      <div style={{ padding: "8px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", background: "var(--surface-2)", borderBottom: "1px solid var(--border)"}}>
+      <div style={{ padding: "8px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", background: "var(--surface-2)", borderBottom: "1px solid var(--border)", flexShrink: 0 }}>
         {activeShift ? (
           <span style={{ fontSize: "13px", color: "var(--text-3)", fontWeight: 600, display: "flex", gap: "8px", alignItems: "center" }}>
             {!isOnline && <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--amber)", display: "inline-block" }} />}
@@ -498,11 +515,20 @@ export default function CajaPage() {
            <button className="btn btn-sm btn-ghost" style={{ padding: "4px 8px"}} onClick={() => setShowScanner(true)}>
              📷
            </button>
+           <button 
+             className="btn btn-sm btn-ghost" 
+             style={{ padding: "4px 8px", fontSize: "12px", color: "var(--text)" }} 
+             onClick={() => setShowRestockModal(true)}
+             disabled={!activeShift}
+           >
+             📦 Recepción
+           </button>
            <button className="btn btn-sm btn-ghost" style={{ padding: "4px 8px", fontSize: "12px", color: "var(--red)" }} onClick={() => setShowCloseShift(true)} disabled={!activeShift}>
              Cerrar Caja
            </button>
         </div>
       </div>
+
 
       {/* Products grid */}
       <div style={{ padding: "8px 12px 0", display: "flex", gap: "8px" }}>
@@ -589,6 +615,7 @@ export default function CajaPage() {
                                    p.barcode?.includes(cajaSearch) ||
                                    (p.variants?.some(v => v.name.toLowerCase().includes(cajaSearch.toLowerCase()) || v.barcode?.includes(cajaSearch)));
                 const matchCategory = activeCategory === null || p.categoryId === activeCategory;
+                const isVisible = p.showInGrid !== false && p.categoryShowInGrid !== false;
                 
                 // Filtrar stock 0: Si no tiene variantes, chequear p.stock. 
                 // Si tiene, chequear si AL MENOS una variante tiene stock > 0.
@@ -599,7 +626,7 @@ export default function CajaPage() {
                   hasStock = (p.stock ?? 0) > 0;
                 }
 
-                return matchSearch && matchCategory && hasStock;
+                return matchSearch && matchCategory && hasStock && isVisible;
               })
               .map((product) => {
               const inTicket = ticket.find((i) => i.productId === product.id);
@@ -614,11 +641,7 @@ export default function CajaPage() {
                   onTouchEnd={handleLongPressEnd}
                   style={inTicket ? { borderColor: "var(--primary)", background: "rgba(var(--primary-rgb, 34, 197, 94), 0.08)", fontSize: "13px" } : { fontSize: "13px" }}
                 >
-                  {product.variants && product.variants.length > 0 && (
-                    <div style={{ position: "absolute", top: 4, left: 4, fontSize: "10px", background: "var(--surface-3)", padding: "2px 4px", borderRadius: "4px", border: "1px solid var(--border)" }}>
-                      VAR
-                    </div>
-                  )}
+
                   <span className="product-btn-name">{product.name}</span>
                   <span className="product-btn-price">{formatARS(product.price)}</span>
                   {inTicket && (
@@ -645,169 +668,181 @@ export default function CajaPage() {
                 </button>
               );
             })}
-
-            {/* Special buttons */}
-            <button
-              className="product-btn product-btn-special product-btn-otro"
-              onClick={() => setShowOtro(true)}
-            >
-              <span className="product-btn-emoji">➕</span>
-              <span className="product-btn-name">OTRO</span>
-            </button>
-            <button
-              className="product-btn product-btn-special product-btn-gasto"
-              onClick={() => setShowGasto(true)}
-            >
-              <span className="product-btn-emoji">💸</span>
-              <span className="product-btn-name">GASTO</span>
-            </button>
-            <button
-              className="product-btn product-btn-special product-btn-retiro"
-              onClick={() => setShowRetiro(true)}
-            >
-              <span className="product-btn-emoji">💰</span>
-              <span className="product-btn-name">RETIRO</span>
-            </button>
           </div>
         )}
       </div>
 
-      {/* Separador */}
-      <div className="separator" />
 
-      {/* REPETIR */}
-      {lastSale && ticket.length === 0 && (
-        <>
-          <button
-            onClick={handleRepetir}
-            style={{
-              width: "100%",
-              padding: "14px",
-              background: "var(--surface-2)",
-              border: "none",
-              color: "var(--text-2)",
-              fontSize: "14px",
-              fontWeight: 600,
+      {/* Bottom Block (Fixed) */}
+      <div style={{ background: "var(--surface)", borderTop: "1px solid var(--border)", flexShrink: 0 }} className="no-print">
+        
+        {/* Ticket Header / Summary */}
+        {ticket.length > 0 ? (
+          <div 
+            onClick={() => setIsTicketExpanded(!isTicketExpanded)}
+            style={{ 
+              padding: "12px 16px", 
+              display: "flex", 
+              justifyContent: "space-between", 
+              alignItems: "center", 
               cursor: "pointer",
-              textAlign: "left",
-              paddingLeft: "16px",
+              background: "var(--surface-2)" 
             }}
           >
-            ↩ Repetir última venta — {lastSale.items.map((i) => i.name).join(", ")}
-          </button>
-          <div className="separator" />
-        </>
-      )}
-
-      {/* Ticket */}
-      {ticket.length > 0 && (
-        <div style={{ padding: "0 16px", maxHeight: "200px", overflowY: "auto" }}>
-          {ticket.map((item, idx) => (
-            <div key={idx} className="ticket-item">
-              <div style={{ flex: 1 }}>
-                <span style={{ fontWeight: 600, fontSize: "14px" }}>{item.name}</span>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <button
-                  onClick={() => changeQty(idx, -1)}
-                  style={{ width: "28px", height: "28px", background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: "6px", cursor: "pointer", color: "var(--text-2)", fontSize: "16px" }}
-                >
-                  −
-                </button>
-                <span style={{ minWidth: "20px", textAlign: "center", fontWeight: 600 }}>{item.quantity}</span>
-                <button
-                  onClick={() => changeQty(idx, 1)}
-                  style={{ width: "28px", height: "28px", background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: "6px", cursor: "pointer", color: "var(--text-2)", fontSize: "16px" }}
-                >
-                  +
-                </button>
-                <span style={{ minWidth: "70px", textAlign: "right", fontWeight: 600 }}>
-                  {formatARS(item.price * item.quantity)}
-                </span>
-              </div>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <span style={{ fontSize: "16px", fontWeight: 700 }}>TOTAL</span>
+              <span style={{ fontSize: "13px", color: "var(--text-3)" }}>({ticket.length} {ticket.length === 1 ? 'ítem' : 'ítems'})</span>
+              <span style={{ fontSize: "10px", color: "var(--text-3)" }}>{isTicketExpanded ? '▲' : '▼'}</span>
             </div>
-          ))}
-          <div className="ticket-total">
-            <span>TOTAL</span>
-            <span style={{ color: "var(--primary)" }}>{formatARS(total)}</span>
+            <span style={{ fontSize: "20px", fontWeight: 800, color: "var(--primary)" }}>{formatARS(total)}</span>
           </div>
+        ) : (
+          <div style={{ padding: "14px 16px", textAlign: "center", color: "var(--text-3)", fontSize: "14px", background: "var(--surface-2)" }}>
+            Tocá un producto para empezar
+          </div>
+        )}
+
+        {/* Collapsible Ticket Detail */}
+        {ticket.length > 0 && isTicketExpanded && (
+          <div style={{ padding: "0 16px", maxHeight: "40vh", overflowY: "auto", borderTop: "1px solid var(--border)" }}>
+            {ticket.map((item, idx) => (
+              <div key={idx} className="ticket-item">
+                <div style={{ flex: 1 }}>
+                  <span style={{ fontWeight: 600, fontSize: "14px" }}>{item.name}</span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); changeQty(idx, -1); }}
+                    style={{ width: "28px", height: "28px", background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: "6px", cursor: "pointer", color: "var(--text-2)", fontSize: "16px" }}
+                  >
+                    −
+                  </button>
+                  <span style={{ minWidth: "20px", textAlign: "center", fontWeight: 600 }}>{item.quantity}</span>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); changeQty(idx, 1); }}
+                    style={{ width: "28px", height: "28px", background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: "6px", cursor: "pointer", color: "var(--text-2)", fontSize: "16px" }}
+                  >
+                    +
+                  </button>
+                  <span style={{ minWidth: "70px", textAlign: "right", fontWeight: 600 }}>
+                    {formatARS(item.price * item.quantity)}
+                  </span>
+                </div>
+              </div>
+            ))}
+            {lastSale && ticket.length > 0 && (
+              <div style={{ marginTop: "8px", marginBottom: "8px" }}>
+                <button
+                  onClick={handleRepetir}
+                  style={{ width: "100%", padding: "10px", background: "var(--surface-3)", border: "1px dashed var(--border)", borderRadius: "var(--radius)", color: "var(--text-2)", fontSize: "13px", fontWeight: 600 }}
+                >
+                  ↩ Repetir última venta
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Separator / Border */}
+        <div style={{ height: "1px", background: "var(--border)", width: "100%" }} />
+
+        {/* Secondary Actions: OTRO, GASTO, RETIRO */}
+        <div style={{ 
+          display: "grid", 
+          gridTemplateColumns: "repeat(3, 1fr)", 
+          gap: "8px", 
+          padding: "8px 12px",
+          background: "var(--surface)"
+        }}>
+          <button
+            className="btn btn-sm btn-ghost"
+            style={{ fontSize: "12px", color: "var(--text-2)", border: "1px solid var(--border)" }}
+            onClick={() => setShowOtro(true)}
+          >
+            ➕ OTRO
+          </button>
+          <button
+            className="btn btn-sm btn-ghost"
+            style={{ fontSize: "12px", color: "var(--text-2)", border: "1px solid var(--border)" }}
+            onClick={() => setShowGasto(true)}
+          >
+            💸 GASTO
+          </button>
+          <button
+            className="btn btn-sm btn-ghost"
+            style={{ fontSize: "12px", color: "var(--text-2)", border: "1px solid var(--border)" }}
+            onClick={() => setShowRetiro(true)}
+          >
+            💰 RETIRO
+          </button>
         </div>
-      )}
 
-      {/* Total bar when empty */}
-      {ticket.length === 0 && (
-        <div style={{ padding: "14px 16px", textAlign: "center", color: "var(--text-3)", fontSize: "14px" }}>
-          Tocá un producto para empezar
+        {/* Payment Methods Grid */}
+        <div style={{ 
+          padding: "8px 12px 12px", 
+          display: "grid", 
+          gridTemplateColumns: "repeat(3, 1fr)", 
+          gap: "8px",
+          background: "var(--surface)",
+          paddingBottom: "max(12px, env(safe-area-inset-bottom))"
+        }}>
+          <button
+            className="btn btn-ghost"
+            style={{ flexDirection: "column", gap: "2px", borderStyle: "solid", height: "54px" }}
+            onClick={handleCashButton}
+            disabled={total === 0}
+          >
+            <span style={{ fontSize: "18px" }}>💵</span>
+            <span style={{ fontSize: "10px", fontWeight: 700 }}>EFECTIVO</span>
+          </button>
+          <button
+            className="btn btn-ghost"
+            style={{ flexDirection: "column", gap: "2px", height: "54px" }}
+            onClick={() => handlePay("MERCADOPAGO")}
+            disabled={total === 0}
+          >
+            <span style={{ fontSize: "18px" }}>📱</span>
+            <span style={{ fontSize: "10px", fontWeight: 700 }}>MP</span>
+          </button>
+          <button
+            className="btn btn-ghost"
+            style={{ flexDirection: "column", gap: "2px", height: "54px" }}
+            onClick={() => handlePay("TRANSFER")}
+            disabled={total === 0}
+          >
+            <span style={{ fontSize: "18px" }}>🏦</span>
+            <span style={{ fontSize: "10px", fontWeight: 700 }}>TRANSF.</span>
+          </button>
+          <button
+            className="btn btn-ghost"
+            style={{ flexDirection: "column", gap: "2px", height: "54px" }}
+            onClick={() => handlePay("DEBIT")}
+            disabled={total === 0}
+          >
+            <span style={{ fontSize: "18px" }}>💳</span>
+            <span style={{ fontSize: "10px", fontWeight: 700 }}>DÉBITO</span>
+          </button>
+          <button
+            className="btn btn-ghost"
+            style={{ flexDirection: "column", gap: "2px", height: "54px" }}
+            onClick={() => handlePay("CREDIT_CARD")}
+            disabled={total === 0}
+          >
+            <span style={{ fontSize: "18px" }}>🏧</span>
+            <span style={{ fontSize: "10px", fontWeight: 700 }}>TARJETA</span>
+          </button>
+          <button
+            className="btn btn-ghost"
+            style={{ flexDirection: "column", gap: "2px", borderColor: "var(--amber)", color: "var(--amber)", height: "54px" }}
+            onClick={() => setShowCredit(true)}
+            disabled={total === 0}
+          >
+            <span style={{ fontSize: "18px" }}>📋</span>
+            <span style={{ fontSize: "10px", fontWeight: 700 }}>FIADO</span>
+          </button>
         </div>
-      )}
-
-      <div className="separator" />
-
-      {/* Payment buttons */}
-      <div style={{ 
-        padding: "12px", 
-        display: "grid", 
-        gridTemplateColumns: "repeat(3, 1fr)", 
-        gap: "8px",
-        background: "var(--surface)",
-        borderTop: "1px solid var(--border)",
-        paddingBottom: "max(12px, env(safe-area-inset-bottom))"
-      }} className="no-print">
-        <button
-          className="btn btn-ghost"
-          style={{ flexDirection: "column", gap: "2px", borderStyle: "solid" }}
-          onClick={handleCashButton}
-          disabled={total === 0}
-        >
-          <span style={{ fontSize: "18px" }}>💵</span>
-          <span style={{ fontSize: "11px" }}>EFECTIVO</span>
-        </button>
-        <button
-          className="btn btn-ghost"
-          style={{ flexDirection: "column", gap: "2px" }}
-          onClick={() => handlePay("MERCADOPAGO")}
-          disabled={total === 0}
-        >
-          <span style={{ fontSize: "18px" }}>📱</span>
-          <span style={{ fontSize: "11px" }}>MP</span>
-        </button>
-        <button
-          className="btn btn-ghost"
-          style={{ flexDirection: "column", gap: "2px" }}
-          onClick={() => handlePay("TRANSFER")}
-          disabled={total === 0}
-        >
-          <span style={{ fontSize: "18px" }}>🏦</span>
-          <span style={{ fontSize: "11px" }}>TRANSF.</span>
-        </button>
-        <button
-          className="btn btn-ghost"
-          style={{ flexDirection: "column", gap: "2px" }}
-          onClick={() => handlePay("DEBIT")}
-          disabled={total === 0}
-        >
-          <span style={{ fontSize: "18px" }}>💳</span>
-          <span style={{ fontSize: "11px" }}>DÉBITO</span>
-        </button>
-        <button
-          className="btn btn-ghost"
-          style={{ flexDirection: "column", gap: "2px" }}
-          onClick={() => handlePay("CREDIT_CARD")}
-          disabled={total === 0}
-        >
-          <span style={{ fontSize: "18px" }}>🏧</span>
-          <span style={{ fontSize: "11px" }}>TARJETA</span>
-        </button>
-        <button
-          className="btn btn-ghost"
-          style={{ flexDirection: "column", gap: "2px", borderColor: "var(--amber)", color: "var(--amber)" }}
-          onClick={() => setShowCredit(true)}
-          disabled={total === 0}
-        >
-          <span style={{ fontSize: "18px" }}>📋</span>
-          <span style={{ fontSize: "11px" }}>FIADO</span>
-        </button>
       </div>
+
 
 
       {/* Modals */}
@@ -884,6 +919,17 @@ export default function CajaPage() {
             </button>
           </div>
         </div>
+      )}
+      {showRestockModal && (
+        <QuickRestockModal
+          products={products}
+          employeeId={activeShift?.employee?.id || activeShift?.employeeId}
+          onClose={() => setShowRestockModal(false)}
+          onSuccess={() => {
+            setShowRestockModal(false);
+            fetchProducts(); // Refresh stock immediately
+          }}
+        />
       )}
     </div>
   );

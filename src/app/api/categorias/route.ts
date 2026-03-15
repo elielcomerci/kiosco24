@@ -51,6 +51,7 @@ export async function POST(req: Request) {
     data: {
       name: data.name,
       color: data.color || null,
+      showInGrid: data.showInGrid !== undefined ? data.showInGrid : true,
       kioscoId: kiosco.id,
     },
   });

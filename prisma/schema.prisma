@@ -86,25 +86,27 @@ model Branch {
   variantInventories VariantInventory[]
 
   // MercadoPago OAuth — tokens de la cuenta MP de esta sucursal
-  mpUserId         String?   // ID numérico de la cuenta MP del dueño
-  mpAccessToken    String?   @db.Text
-  mpRefreshToken   String?   @db.Text
+  mpUserId         String? // ID numérico de la cuenta MP del dueño
+  mpAccessToken    String?        @db.Text
+  mpRefreshToken   String?        @db.Text
   mpTokenExpiresAt DateTime? // access_token dura 180 días
-  mpStoreId        String?   // ID de sucursal creada en MP
-  mpPosId          String?   // external_id del punto de venta en MP
+  mpStoreId        String? // ID de sucursal creada en MP
+  mpPosId          String? // external_id del punto de venta en MP
+  restockEvents    RestockEvent[]
 
   @@index([kioscoId])
 }
 
 model Category {
-  id        String    @id @default(cuid())
-  name      String
-  color     String?
-  kioscoId  String
-  kiosco    Kiosco    @relation(fields: [kioscoId], references: [id], onDelete: Cascade)
-  products  Product[]
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  id         String    @id @default(cuid())
+  name       String
+  color      String?
+  showInGrid Boolean   @default(true)
+  kioscoId   String
+  kiosco     Kiosco    @relation(fields: [kioscoId], references: [id], onDelete: Cascade)
+  products   Product[]
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
   @@index([kioscoId])
 }
@@ -121,6 +123,7 @@ model Product {
   kiosco     Kiosco            @relation(fields: [kioscoId], references: [id], onDelete: Cascade)
   inventory  InventoryRecord[]
   variants   Variant[]
+  restocks   RestockItem[]
   createdAt  DateTime          @default(now())
   updatedAt  DateTime          @updatedAt
 
@@ -155,6 +158,7 @@ model Variant {
   updatedAt DateTime @updatedAt
 
   inventory VariantInventory[]
+  restocks  RestockItem[]
 
   @@index([productId])
   @@index([barcode])
@@ -176,13 +180,14 @@ model VariantInventory {
 }
 
 model Employee {
-  id       String  @id @default(cuid())
-  name     String
-  pin      String?
-  active   Boolean @default(true)
-  branchId String
-  branch   Branch  @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  shifts   Shift[]
+  id            String         @id @default(cuid())
+  name          String
+  pin           String?
+  active        Boolean        @default(true)
+  branchId      String
+  branch        Branch         @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  shifts        Shift[]
+  restockEvents RestockEvent[]
 
   @@index([branchId])
 }
@@ -290,6 +295,37 @@ model CreditPayment {
   createdAt  DateTime       @default(now())
 }
 
+// ── Auditoría de Stock (Ingresos de mercadería) ──────────────────────────────
+
+model RestockEvent {
+  id         String        @id @default(cuid())
+  note       String?       @db.Text
+  employeeId String?
+  employee   Employee?     @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  branchId   String
+  branch     Branch        @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  items      RestockItem[]
+  createdAt  DateTime      @default(now())
+
+  @@index([branchId])
+  @@index([employeeId])
+}
+
+model RestockItem {
+  id             String       @id @default(cuid())
+  restockEventId String
+  restockEvent   RestockEvent @relation(fields: [restockEventId], references: [id], onDelete: Cascade)
+  productId      String
+  product        Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variantId      String?
+  variant        Variant?     @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  quantity       Int // Cantidad sumada
+
+  @@index([restockEventId])
+  @@index([productId])
+  @@index([variantId])
+}
+
 enum PaymentMethod {
   CASH
   MERCADOPAGO
@@ -312,7 +348,7 @@ model Subscription {
   id              String             @id @default(cuid())
   kioscoId        String             @unique
   kiosco          Kiosco             @relation(fields: [kioscoId], references: [id], onDelete: Cascade)
-  mpPreapprovalId String?            // ID en MP para consultar estado real
+  mpPreapprovalId String? // ID en MP para consultar estado real
   status          SubscriptionStatus @default(PENDING)
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt

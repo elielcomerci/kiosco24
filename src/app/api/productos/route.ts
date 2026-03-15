@@ -17,6 +17,7 @@ export async function GET(req: Request) {
     include: {
       product: {
         include: {
+          category: { select: { showInGrid: true } },
           variants: {
             include: {
               inventory: {
@@ -42,6 +43,7 @@ export async function GET(req: Request) {
     stock: inv.stock,
     minStock: inv.minStock,
     showInGrid: inv.showInGrid,
+    categoryShowInGrid: inv.product.category?.showInGrid ?? true,
     variants: inv.product.variants.map((v: any) => ({
       id: v.id,
       name: v.name,

@@ -1,0 +1,7 @@
+Loaded Prisma config from prisma.config.ts.
+
+Prisma schema loaded from prisma\schema.prisma.
+
+Prisma schema warning:
+- Preview feature "driverAdapters" is deprecated. The functionality can be used without specifying it as a preview feature.
+The schema at prisma\schema.prisma is valid 🚀

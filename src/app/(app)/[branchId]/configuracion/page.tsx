@@ -15,6 +15,7 @@ interface Category {
   id: string;
   name: string;
   color: string | null;
+  showInGrid?: boolean;
 }
 
 interface Branch {
@@ -297,6 +298,7 @@ function CategoryModal({
   const isNew = category === "new";
   const [name, setName] = useState(isNew ? "" : category.name);
   const [color, setColor] = useState(isNew ? "#3b82f6" : category.color || "#3b82f6");
+  const [showInGrid, setShowInGrid] = useState(isNew ? true : category.showInGrid !== false);
   const [loading, setLoading] = useState(false);
   const [confirming, setConfirming] = useState(false);
 
@@ -304,7 +306,7 @@ function CategoryModal({
     if (!name.trim()) return;
     setLoading(true);
 
-    const payload = { name, color };
+    const payload = { name, color, showInGrid };
 
     if (isNew) {
       await fetch("/api/categorias", {
@@ -393,6 +395,21 @@ function CategoryModal({
                 cursor: "pointer"
               }}
             />
+          </div>
+
+          <div>
+            <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", marginTop: "4px" }}>
+              <input 
+                type="checkbox" 
+                checked={showInGrid}
+                onChange={(e) => setShowInGrid(e.target.checked)}
+                style={{ cursor: "pointer", width: "16px", height: "16px" }}
+              />
+              <div>
+                <span style={{ fontSize: "14px", fontWeight: 600, color: "var(--text)" }}>Mostrar en la caja</span>
+                <p style={{ margin: 0, fontSize: "12px", color: "var(--text-3)", lineHeight: "1.2" }}>Desactivá esto para ocultar la categoría de los botones principales.</p>
+              </div>
+            </label>
           </div>
         </div>
 

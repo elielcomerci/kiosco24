@@ -469,7 +469,7 @@ export default function CajaPage() {
     <div style={{ 
       display: "flex", 
       flexDirection: "column", 
-      height: "100%", // Inherit height from .app-content
+      flex: 1, // Inherit height from .app-content flex container
       overflow: "hidden"
     }}>
 
@@ -671,7 +671,7 @@ export default function CajaPage() {
       </div> {/* End of Main Content Area (Scrollable) */}
 
       {/* Bottom Block (Fixed) */}
-      <div style={{ background: "var(--surface)", borderTop: "1px solid var(--border)", flexShrink: 0, paddingBottom: "70px" }} className="no-print">
+      <div style={{ background: "var(--surface)", borderTop: "1px solid var(--border)", flexShrink: 0 }} className="no-print">
         
         {/* Ticket Header / Summary */}
         {ticket.length > 0 ? (

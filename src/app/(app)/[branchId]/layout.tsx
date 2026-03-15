@@ -19,28 +19,29 @@ export default async function BranchLayout({
 
   const { branchId } = await params;
 
-  // Cargar datos de la sucursal actual y todas las hermanas del Kiosco
-  const currentBranchContext = await prisma.branch.findUnique({
+  // Cargar datos de la sucursal actual
+  const currentBranch = await prisma.branch.findUnique({
     where: { id: branchId },
-    select: {
-      kiosco: {
-        select: {
-          branches: {
-            select: { id: true, name: true, logoUrl: true, primaryColor: true },
-            orderBy: { createdAt: "asc" },
-          }
-        }
-      }
+    select: { 
+      id: true, name: true, logoUrl: true, 
+      primaryColor: true, bgColor: true,
+      kioscoId: true 
     },
   });
 
-  if (!currentBranchContext) {
+  if (!currentBranch) {
     notFound();
   }
 
-  const branches = currentBranchContext.kiosco.branches;
-  const branch = branches.find((b) => b.id === branchId);
-  const primaryColor = branch?.primaryColor || "#22c55e";
+  // Cargar todas las sucursales del mismo Kiosco (para el selector)
+  const branches = await prisma.branch.findMany({
+    where: { kioscoId: currentBranch.kioscoId },
+    select: { id: true, name: true, logoUrl: true, primaryColor: true, bgColor: true },
+    orderBy: { createdAt: "asc" },
+  });
+
+  const primaryColor = currentBranch.primaryColor || "#22c55e";
+  const bgColor = currentBranch.bgColor || "#0f172a";
   const primaryRgb = hexToRgb(primaryColor);
 
   return (
@@ -49,7 +50,8 @@ export default async function BranchLayout({
       style={{ 
         "--primary": primaryColor,
         "--primary-rgb": primaryRgb,
-        "--primary-dim": `${primaryColor}CC`
+        "--primary-dim": `${primaryColor}CC`,
+        "--bg": bgColor,
       } as React.CSSProperties}
     >
       <header className="no-print" style={{ 
@@ -62,9 +64,9 @@ export default async function BranchLayout({
         minHeight: "56px"
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          {branch?.logoUrl && (
+          {currentBranch?.logoUrl && (
             <img 
-              src={branch.logoUrl} 
+              src={currentBranch.logoUrl} 
               alt="Logo" 
               style={{ width: "32px", height: "32px", borderRadius: "6px", objectFit: "cover" }} 
             />

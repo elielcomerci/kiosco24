@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import BackButton from "@/components/ui/BackButton";
+import ThemeEditor from "@/components/ui/ThemeEditor";
 
 interface Employee {
   id: string;
@@ -23,6 +24,7 @@ interface Branch {
   name: string;
   logoUrl: string | null;
   primaryColor: string | null;
+  bgColor: string | null;
   mpUserId: string | null;
   mpStoreId: string | null;
   mpPosId: string | null;
@@ -458,12 +460,12 @@ export default function ConfiguracionPage() {
   const [branchModal, setBranchModal] = useState(false);
   const [categoryModal, setCategoryModal] = useState<"new" | Category | null>(null);
 
-  // States for Branch Personalization
   const [editBranchName, setEditBranchName] = useState("");
   const [editLogoUrl, setEditLogoUrl] = useState("");
-  const [editPrimaryColor, setEditPrimaryColor] = useState("");
-  const [savingBranch, setSavingBranch] = useState(false);
+  const [editPrimaryColor, setEditPrimaryColor] = useState("#22c55e");
+  const [editBgColor, setEditBgColor] = useState("#0f172a");
   const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [savingBranch, setSavingBranch] = useState(false);
 
   // MercadoPago
   const [mpSetupLoading, setMpSetupLoading] = useState(false);
@@ -524,6 +526,7 @@ export default function ConfiguracionPage() {
         setEditBranchName(b.name);
         setEditLogoUrl(b.logoUrl || "");
         setEditPrimaryColor(b.primaryColor || "#22c55e");
+        setEditBgColor(b.bgColor || "#0f172a");
       }
     }
     setLoadingCurrentBranch(false);
@@ -544,11 +547,12 @@ export default function ConfiguracionPage() {
       body: JSON.stringify({
         name: editBranchName,
         logoUrl: editLogoUrl || null,
-        primaryColor: editPrimaryColor
+        primaryColor: editPrimaryColor,
+        bgColor: editBgColor,
       }),
     });
     setSavingBranch(false);
-    window.location.reload(); // Refresh to apply changes globally
+    window.location.reload();
   };
 
   const handleEmployeeModalClose = () => setEmployeeModal(null);
@@ -621,7 +625,7 @@ export default function ConfiguracionPage() {
           gap: "16px" 
         }}>
           {/* Logo & Name */}
-          <div style={{ display: "flex", gap: "16px", alignItems: "center" }}>
+          <div style={{ display: "flex", gap: "16px", alignItems: "center", marginBottom: "8px" }}>
             <div style={{ position: "relative", width: "80px", height: "80px", borderRadius: "12px", border: "2px dashed var(--border)", overflow: "hidden", background: "var(--surface-2)", display: "flex", alignItems: "center", justifyContent: "center" }}>
               {editLogoUrl ? (
                 <img src={editLogoUrl} alt="Logo" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
@@ -660,29 +664,32 @@ export default function ConfiguracionPage() {
             </div>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "16px", alignItems: "center" }}>
-            <div style={{ flex: 1 }}>
-              <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, display: "block", marginBottom: "4px" }}>COLOR PRINCIPAL</label>
-              <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                <input
-                  type="color"
-                  value={editPrimaryColor}
-                  onChange={(e) => setEditPrimaryColor(e.target.value)}
-                  style={{ width: "40px", height: "40px", padding: "2px", border: "1px solid var(--border)", borderRadius: "8px", cursor: "pointer", background: "var(--surface-2)" }}
-                />
-                <code style={{ fontSize: "14px", fontWeight: 600 }}>{editPrimaryColor.toUpperCase()}</code>
-              </div>
-            </div>
+          {/* Save name + logo button */}
+          <button 
+            className="btn btn-ghost btn-sm" 
+            style={{ alignSelf: "flex-start" }}
+            onClick={handleSaveBranchSettings}
+            disabled={savingBranch || !editBranchName.trim()}
+          >
+            {savingBranch ? "Guardando..." : "Guardar nombre"}
+          </button>
+        </div>
+      </section>
 
-            <button 
-              className="btn btn-green" 
-              style={{ alignSelf: "flex-end", height: "40px", padding: "0 20px" }}
-              onClick={handleSaveBranchSettings}
-              disabled={savingBranch || !editBranchName.trim()}
-            >
-              {savingBranch ? "..." : "Guardar Cambios"}
-            </button>
-          </div>
+      {/* Theme Editor Section */}
+      <section style={{ marginBottom: "32px" }}>
+        <div style={{ marginBottom: "12px" }}>
+          <h2 style={{ fontSize: "16px", fontWeight: 700, color: "var(--text-2)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+            🎨 Tema
+          </h2>
+        </div>
+        <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: "20px" }}>
+          <ThemeEditor
+            branchId={branchId}
+            initialBg={editBgColor}
+            initialAccent={editPrimaryColor}
+            onSaved={() => window.location.reload()}
+          />
         </div>
       </section>
 

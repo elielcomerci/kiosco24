@@ -14,7 +14,7 @@ export async function PATCH(
 
   try {
     const { id } = await params;
-    const { logoUrl, primaryColor, name } = await req.json();
+    const { logoUrl, primaryColor, bgColor, name } = await req.json();
 
     // Verificar que la sucursal pertenezca al Kiosco del usuario
     const branch = await prisma.branch.findFirst({
@@ -36,6 +36,7 @@ export async function PATCH(
         ...(name !== undefined && { name }),
         ...(logoUrl !== undefined && { logoUrl }),
         ...(primaryColor !== undefined && { primaryColor }),
+        ...(bgColor !== undefined && { bgColor }),
       },
     });
 

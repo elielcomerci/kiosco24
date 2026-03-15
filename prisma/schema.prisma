@@ -80,6 +80,7 @@ model Branch {
   customers          CreditCustomer[]
   logoUrl            String?
   primaryColor       String?            @default("#22c55e")
+  bgColor            String?            @default("#0f172a")
   ownerPin           String?
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt

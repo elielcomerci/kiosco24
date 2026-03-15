@@ -70,7 +70,11 @@ function EmployeeModal({
   const handleDelete = async () => {
     if (!confirming) { setConfirming(true); return; }
     setLoading(true);
-    await fetch(`/api/empleados/${employee!.id}`, { method: "DELETE" });
+    const res = await fetch(`/api/empleados/${employee!.id}`, { method: "DELETE" });
+    if (!res.ok) {
+      const data = await res.json();
+      alert(data.error || "No se pudo eliminar.");
+    }
     setLoading(false);
     onSave();
   };
@@ -455,6 +459,9 @@ export default function ConfiguracionPage() {
   const [loadingBranches, setLoadingBranches] = useState(true);
   const [loadingCategories, setLoadingCategories] = useState(true);
   const [loadingCurrentBranch, setLoadingCurrentBranch] = useState(true);
+  const [loadingSubscription, setLoadingSubscription] = useState(true);
+
+  const [subscription, setSubscription] = useState<{status: string, managementUrl: string | null} | null>(null);
 
   const [employeeModal, setEmployeeModal] = useState<"new" | Employee | null>(null);
   const [branchModal, setBranchModal] = useState(false);
@@ -532,11 +539,24 @@ export default function ConfiguracionPage() {
     setLoadingCurrentBranch(false);
   };
 
+  const fetchSubscription = async () => {
+    setLoadingSubscription(true);
+    try {
+      const res = await fetch("/api/subscription/status");
+      if (res.ok) {
+        const data = await res.json();
+        setSubscription(data);
+      }
+    } catch(e) {}
+    setLoadingSubscription(false);
+  };
+
   useEffect(() => {
     fetchEmployees();
     fetchBranches();
     fetchCategories();
     fetchCurrentBranch();
+    fetchSubscription();
   }, [branchId]);
 
   const handleSaveBranchSettings = async () => {
@@ -954,6 +974,56 @@ export default function ConfiguracionPage() {
         </div>
       </section>
 
+      {/* Subscription Section */}
+      <section style={{ marginBottom: "32px" }}>
+        <div style={{ marginBottom: "12px" }}>
+          <h2 style={{ fontSize: "16px", fontWeight: 700, color: "var(--text-2)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+            💎 Mi Suscripción
+          </h2>
+        </div>
+        {loadingSubscription ? (
+          <div style={{ textAlign: "center", padding: "16px", color: "var(--text-3)" }}>Cargando estado...</div>
+        ) : (
+          <div className="card" style={{ padding: "16px", display: "flex", flexDirection: "column", gap: "12px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: "15px" }}>Suscripción Mensual a Kiosco24</div>
+                <div style={{ fontSize: "13px", color: "var(--text-3)", marginTop: "2px" }}>
+                  Estado: {' '}
+                  {subscription?.status === "ACTIVE" && <span style={{ color: "var(--green)", fontWeight: 600 }}>Activa ✔️</span>}
+                  {subscription?.status === "PENDING" && <span style={{ color: "var(--amber)", fontWeight: 600 }}>Pendiente / Procesando ⏳</span>}
+                  {subscription?.status === "CANCELLED" && <span style={{ color: "var(--red)", fontWeight: 600 }}>Cancelada ❌</span>}
+                  {!subscription && <span style={{ color: "var(--text-3)" }}>No configurada</span>}
+                </div>
+              </div>
+              <div style={{ fontSize: "20px", fontWeight: 800 }}>$9.900<span style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 500 }}>/mes</span></div>
+            </div>
+            
+            {subscription?.managementUrl && (
+              <div style={{ borderTop: "1px solid var(--border)", paddingTop: "12px", marginTop: "4px" }}>
+                <a 
+                  href={subscription.managementUrl} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="btn btn-sm btn-ghost" 
+                  style={{ width: "100%", textDecoration: "none" }}
+                >
+                  💳 Gestionar en MercadoPago
+                </a>
+              </div>
+            )}
+            
+            {!subscription && (
+              <div style={{ borderTop: "1px solid var(--border)", paddingTop: "12px", marginTop: "4px" }}>
+                <a href="/onboarding" className="btn btn-sm btn-green" style={{ width: "100%", textDecoration: "none" }}>
+                  Suscribirse ahora
+                </a>
+              </div>
+            )}
+          </div>
+        )}
+      </section>
+
       {/* Empleados Section */}
       <section>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
@@ -1020,13 +1090,16 @@ export default function ConfiguracionPage() {
                   {emp.name.charAt(0).toUpperCase()}
                 </div>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 600 }}>{emp.name}</div>
+                  <div style={{ fontWeight: 600, display: "flex", alignItems: "center", gap: "8px" }}>
+                    {emp.name}
+                    {!emp.active && (
+                      <span style={{ background: "rgba(239, 68, 68, 0.15)", color: "var(--red)", fontSize: "10px", padding: "2px 6px", borderRadius: "4px", fontWeight: 700 }}>
+                        SUSPENDIDO
+                      </span>
+                    )}
+                  </div>
                   <div style={{ fontSize: "12px", color: "var(--text-3)" }}>
                     {emp.pin ? "PIN configurado" : "Sin PIN"}
-                    {" · "}
-                    <span style={{ color: emp.active ? "var(--green)" : "var(--text-3)" }}>
-                      {emp.active ? "Activo" : "Inactivo"}
-                    </span>
                   </div>
                 </div>
                 <span style={{ color: "var(--text-3)", fontSize: "18px" }}>›</span>

@@ -350,6 +350,7 @@ model Subscription {
   kioscoId        String             @unique
   kiosco          Kiosco             @relation(fields: [kioscoId], references: [id], onDelete: Cascade)
   mpPreapprovalId String? // ID en MP para consultar estado real
+  managementUrl   String? // Enlace de MercadoPago para gestionar la suscripción (init_point o permalink)
   status          SubscriptionStatus @default(PENDING)
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt

@@ -46,7 +46,7 @@ export default async function BranchLayout({
 
   return (
     <div 
-      className="branch-context"
+      className="app-layout branch-context"
       style={{ 
         "--primary": primaryColor,
         "--primary-rgb": primaryRgb,
@@ -55,6 +55,7 @@ export default async function BranchLayout({
       } as React.CSSProperties}
     >
       <header className="no-print" style={{ 
+        flexShrink: 0,
         padding: "8px 16px", 
         background: "var(--surface)", 
         borderBottom: "1px solid var(--border)",

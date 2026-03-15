@@ -30,6 +30,25 @@ export async function PATCH(
     },
   });
 
+  // Si se está suspendiendo al empleado, cerrar automáticamente su turno actual si lo hubiese
+  if (active === false) {
+    const openShift = await prisma.shift.findFirst({
+      where: { employeeId: id, closedAt: null }
+    });
+
+    if (openShift) {
+      await prisma.shift.update({
+        where: { id: openShift.id },
+        data: {
+          closedAt: new Date(),
+          note: openShift.note 
+            ? `${openShift.note}\n(Cerrado automáticamente — empleado suspendido)`
+            : 'Cerrado automáticamente — empleado suspendido'
+        }
+      });
+    }
+  }
+
   return NextResponse.json(updated);
 }
 
@@ -48,6 +67,16 @@ export async function DELETE(
   const employee = await prisma.employee.findUnique({ where: { id } });
   if (!employee || employee.branchId !== branchId)
     return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  const shiftCount = await prisma.shift.count({ where: { employeeId: id } });
+  const restockCount = await prisma.restockEvent.count({ where: { employeeId: id } });
+
+  if (shiftCount > 0 || restockCount > 0) {
+    return NextResponse.json(
+      { error: "No se puede eliminar un empleado con historial de turnos o ingresos. Considerá 'Suspenderlo' desactivando su cuenta." }, 
+      { status: 409 }
+    );
+  }
 
   await prisma.employee.delete({ where: { id } });
 

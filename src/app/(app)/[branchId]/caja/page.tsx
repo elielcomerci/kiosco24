@@ -469,14 +469,8 @@ export default function CajaPage() {
     <div style={{ 
       display: "flex", 
       flexDirection: "column", 
-      height: "100svh", 
-      maxHeight: "100dvh",
-      overflow: "hidden",
-      position: "fixed", // Prevents body scroll issues
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0
+      height: "100%", // Inherit height from .app-content
+      overflow: "hidden"
     }}>
 
       {/* Status Bar */}
@@ -512,7 +506,7 @@ export default function CajaPage() {
           </button>
         )}
         <div style={{ display: "flex", gap: "8px" }}>
-           <button className="btn btn-sm btn-ghost" style={{ padding: "4px 8px"}} onClick={() => setShowScanner(true)}>
+           <button className="btn btn-sm btn-ghost" style={{ padding: "4px 10px", fontSize: "16px" }} onClick={() => setShowScanner(true)}>
              📷
            </button>
            <button 
@@ -530,8 +524,11 @@ export default function CajaPage() {
       </div>
 
 
-      {/* Products grid */}
-      <div style={{ padding: "8px 12px 0", display: "flex", gap: "8px" }}>
+      {/* Main Content Area (Scrollable) */}
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", overflowY: "auto" }}>
+        
+        {/* Search bar */}
+        <div style={{ padding: "12px 16px 0", display: "flex", gap: "8px", flexShrink: 0 }}>
         <input
           className="input"
           placeholder="🔍 Buscar producto..."
@@ -555,7 +552,7 @@ export default function CajaPage() {
         <div style={{
           display: "flex",
           gap: "8px",
-          padding: "10px 12px 0",
+          padding: "12px 16px 0",
           overflowX: "auto",
           whiteSpace: "nowrap",
           scrollbarWidth: "none",
@@ -604,7 +601,7 @@ export default function CajaPage() {
       )}
 
       {/* Products grid */}
-      <div style={{ padding: "10px 12px", flex: 1, overflowY: "auto" }}>
+      <div style={{ padding: "12px 16px", flex: 1 }}>
         {loading ? (
           <div style={{ textAlign: "center", padding: "40px", color: "var(--text-3)" }}>Cargando...</div>
         ) : (
@@ -670,11 +667,11 @@ export default function CajaPage() {
             })}
           </div>
         )}
-      </div>
-
+      </div> 
+      </div> {/* End of Main Content Area (Scrollable) */}
 
       {/* Bottom Block (Fixed) */}
-      <div style={{ background: "var(--surface)", borderTop: "1px solid var(--border)", flexShrink: 0 }} className="no-print">
+      <div style={{ background: "var(--surface)", borderTop: "1px solid var(--border)", flexShrink: 0, paddingBottom: "70px" }} className="no-print">
         
         {/* Ticket Header / Summary */}
         {ticket.length > 0 ? (
@@ -783,8 +780,7 @@ export default function CajaPage() {
           display: "grid", 
           gridTemplateColumns: "repeat(3, 1fr)", 
           gap: "8px",
-          background: "var(--surface)",
-          paddingBottom: "max(12px, env(safe-area-inset-bottom))"
+          background: "var(--surface)"
         }}>
           <button
             className="btn btn-ghost"
@@ -842,8 +838,6 @@ export default function CajaPage() {
           </button>
         </div>
       </div>
-
-
 
       {/* Modals */}
       {showGasto && (

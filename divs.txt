@@ -1,0 +1,462 @@
+468:1:    <div style={{ 
+469:1:      display: "flex", 
+470:1:      flexDirection: "column", 
+471:1:      height: "100%", // Inherit height 
+472:1:      overflow: "hidden"
+473:1:    }}>
+474:1:
+475:1:      {/* Status Bar */}
+476:2:      <div className="status-bar">
+477:3:        <div className="status-bar-item"
+478:3:          <span className="status-bar-la
+479:3:          <span className="status-bar-va
+480:3:            {formatARS(cajaStats.enCaja)
+481:3:          </span>
+482:2:        </div>
+483:3:        <div className="separator" style
+484:4:        <div className="status-bar-item"
+485:4:          <span className="status-bar-la
+486:4:          <span className="status-bar-va
+487:4:            {formatARS(cajaStats.gananci
+488:4:          </span>
+489:3:        </div>
+490:2:      </div>
+491:2:      
+492:3:      <div style={{ padding: "8px 16px",
+493:3:        {activeShift ? (
+494:3:          <span style={{ fontSize: "13px
+495:3:            {!isOnline && <span style={{
+496:3:            TURNO: {activeShift.employee
+497:3:          </span>
+498:3:        ) : (
+499:3:          <button
+500:3:            className="btn btn-sm btn-gr
+501:3:            style={{ fontSize: "13px", f
+502:3:            onClick={() => setShowOpenSh
+503:3:          >
+504:3:            ▶ Abrir Turno
+505:3:          </button>
+506:3:        )}
+507:4:        <div style={{ display: "flex", g
+508:4:           <button className="btn btn-sm
+509:4:             📷
+510:4:           </button>
+511:4:           <button 
+512:4:             className="btn btn-sm btn-g
+513:4:             style={{ padding: "4px 8px"
+514:4:             onClick={() => setShowResto
+515:4:             disabled={!activeShift}
+516:4:           >
+517:4:             📦 Recepción
+518:4:           </button>
+519:4:           <button className="btn btn-sm
+520:4:             Cerrar Caja
+521:4:           </button>
+522:3:        </div>
+523:2:      </div>
+524:2:
+525:2:
+526:2:      {/* Main Content Area (Scrollable)
+527:3:      <div style={{ flex: 1, display: "f
+528:3:        
+529:3:        {/* Search bar */}
+530:4:        <div style={{ padding: "12px 16p
+531:4:        <input
+532:4:          className="input"
+533:4:          placeholder="🔍 Buscar product
+534:4:          value={cajaSearch}
+535:4:          onChange={(e) => setCajaSearch
+536:4:          style={{ fontSize: "14px", hei
+537:4:        />
+538:4:        {cajaSearch && (
+539:4:          <button
+540:4:            className="btn btn-sm btn-gh
+541:4:            onClick={() => setCajaSearch
+542:4:            style={{ flexShrink: 0, padd
+543:4:          >
+544:4:            ✕
+545:4:          </button>
+546:4:        )}
+547:3:      </div>
+548:3:
+549:3:      {/* Category Filter Pills (Scrolla
+550:3:      {categories.length > 0 && (
+551:4:        <div style={{
+552:4:          display: "flex",
+553:4:          gap: "8px",
+554:4:          padding: "12px 16px 0",
+555:4:          overflowX: "auto",
+556:4:          whiteSpace: "nowrap",
+557:4:          scrollbarWidth: "none",
+558:4:          WebkitOverflowScrolling: "touc
+559:4:        }}>
+560:4:          <button
+561:4:            onClick={() => setActiveCate
+562:4:            style={{
+563:4:              padding: "6px 14px",
+564:4:              borderRadius: "20px",
+565:4:              border: `1px solid ${activ
+566:4:              background: activeCategory
+567:4:              color: activeCategory === 
+568:4:              fontWeight: 600,
+569:4:              fontSize: "13px",
+570:4:              cursor: "pointer",
+571:4:              transition: "all 0.2s"
+572:4:            }}
+573:4:          >
+574:4:            Todas
+575:4:          </button>
+576:4:          {categories.map((c) => (
+577:4:            <button
+578:4:              key={c.id}
+579:4:              onClick={() => setActiveCa
+580:4:              style={{
+581:4:                display: "flex",
+582:4:                alignItems: "center",
+583:4:                gap: "6px",
+584:4:                padding: "6px 14px",
+585:4:                borderRadius: "20px",
+586:4:                border: `1px solid ${act
+587:4:                background: activeCatego
+588:4:                color: activeCategory ==
+589:4:                fontWeight: 600,
+590:4:                fontSize: "13px",
+591:4:                cursor: "pointer",
+592:4:                transition: "all 0.2s"
+593:4:              }}
+594:4:            >
+595:5:              {activeCategory !== c.id &
+596:5:              {c.name}
+597:5:            </button>
+598:5:          ))}
+599:4:        </div>
+600:4:      )}
+601:4:
+602:4:      {/* Products grid */}
+603:5:      <div style={{ padding: "12px 16px"
+604:5:        {loading ? (
+605:5:          <div style={{ textAlign: "cent
+606:5:        ) : (
+607:6:          <div className="product-grid">
+608:6:            {products
+609:6:              .filter((p) => {
+610:6:                const matchSearch = p.na
+611:6:                                   p.bar
+612:6:                                   (p.va
+613:6:                const matchCategory = ac
+614:6:                const isVisible = p.show
+615:6:                
+616:6:                // Filtrar stock 0: Si n
+617:6:                // Si tiene, chequear si
+618:6:                let hasStock = true;
+619:6:                if (p.variants && p.vari
+620:6:                  hasStock = p.variants.
+621:6:                } else {
+622:6:                  hasStock = (p.stock ??
+623:6:                }
+624:6:
+625:6:                return matchSearch && ma
+626:6:              })
+627:6:              .map((product) => {
+628:6:              const inTicket = ticket.fi
+629:6:              return (
+630:6:                <button
+631:6:                  key={product.id}
+632:6:                  className="product-btn
+633:6:                  onClick={() => handleP
+634:6:                  onMouseDown={() => han
+635:6:                  onMouseUp={handleLongP
+636:6:                  onTouchStart={() => ha
+637:6:                  onTouchEnd={handleLong
+638:6:                  style={inTicket ? { bo
+639:6:                >
+640:6:
+641:6:                  <span className="produ
+642:6:                  <span className="produ
+643:6:                  {inTicket && (
+644:6:                    <span
+645:6:                      style={{
+646:6:                        position: "absol
+647:6:                        top: "6px",
+648:6:                        right: "6px",
+649:6:                        background: "var
+650:6:                        color: "#000",
+651:6:                        borderRadius: "9
+652:6:                        width: "20px",
+653:6:                        height: "20px",
+654:6:                        fontSize: "11px"
+655:6:                        fontWeight: 700,
+656:6:                        display: "flex",
+657:6:                        alignItems: "cen
+658:6:                        justifyContent: 
+659:6:                      }}
+660:6:                    >
+661:6:                      {inTicket.quantity
+662:6:                    </span>
+663:6:                  )}
+664:6:                </button>
+665:6:              );
+666:6:            })}
+667:5:          </div>
+668:5:        )}
+669:4:      </div> {/* End of Main Content Are
+670:4:
+671:4:      {/* Bottom Block (Fixed) */}
+672:5:      <div style={{ background: "var(--s
+673:5:        
+674:5:        {/* Ticket Header / Summary */}
+675:5:        {ticket.length > 0 ? (
+676:6:          <div 
+677:6:            onClick={() => setIsTicketEx
+678:6:            style={{ 
+679:6:              padding: "12px 16px", 
+680:6:              display: "flex", 
+681:6:              justifyContent: "space-bet
+682:6:              alignItems: "center", 
+683:6:              cursor: "pointer",
+684:6:              background: "var(--surface
+685:6:            }}
+686:6:          >
+687:7:            <div style={{ display: "flex
+688:7:              <span style={{ fontSize: "
+689:7:              <span style={{ fontSize: "
+690:7:              <span style={{ fontSize: "
+691:6:            </div>
+692:6:            <span style={{ fontSize: "20
+693:5:          </div>
+694:5:        ) : (
+695:6:          <div style={{ padding: "14px 1
+696:6:            Tocá un producto para empeza
+697:5:          </div>
+698:5:        )}
+699:5:
+700:5:        {/* Collapsible Ticket Detail */
+701:5:        {ticket.length > 0 && isTicketEx
+702:6:          <div style={{ padding: "0 16px
+703:6:            {ticket.map((item, idx) => (
+704:7:              <div key={idx} className="
+705:8:                <div style={{ flex: 1 }}
+706:8:                  <span style={{ fontWei
+707:7:                </div>
+708:8:                <div style={{ display: "
+709:8:                  <button
+710:8:                    onClick={(e) => { e.
+711:8:                    style={{ width: "28p
+712:8:                  >
+713:8:                    −
+714:8:                  </button>
+715:8:                  <span style={{ minWidt
+716:8:                  <button
+717:8:                    onClick={(e) => { e.
+718:8:                    style={{ width: "28p
+719:8:                  >
+720:8:                    +
+721:8:                  </button>
+722:8:                  <span style={{ minWidt
+723:8:                    {formatARS(item.pric
+724:8:                  </span>
+725:7:                </div>
+726:6:              </div>
+727:6:            ))}
+728:6:            {lastSale && ticket.length >
+729:7:              <div style={{ marginTop: "
+730:7:                <button
+731:7:                  onClick={handleRepetir
+732:7:                  style={{ width: "100%"
+733:7:                >
+734:7:                  ↩ Repetir última venta
+735:7:                </button>
+736:6:              </div>
+737:6:            )}
+738:5:          </div>
+739:5:        )}
+740:5:
+741:5:        {/* Separator / Border */}
+742:6:        <div style={{ height: "1px", bac
+743:6:
+744:6:        {/* Secondary Actions: OTRO, GAS
+745:7:        <div style={{ 
+746:7:          display: "grid", 
+747:7:          gridTemplateColumns: "repeat(3
+748:7:          gap: "8px", 
+749:7:          padding: "8px 12px",
+750:7:          background: "var(--surface)"
+751:7:        }}>
+752:7:          <button
+753:7:            className="btn btn-sm btn-gh
+754:7:            style={{ fontSize: "12px", c
+755:7:            onClick={() => setShowOtro(t
+756:7:          >
+757:7:            ➕ OTRO
+758:7:          </button>
+759:7:          <button
+760:7:            className="btn btn-sm btn-gh
+761:7:            style={{ fontSize: "12px", c
+762:7:            onClick={() => setShowGasto(
+763:7:          >
+764:7:            💸 GASTO
+765:7:          </button>
+766:7:          <button
+767:7:            className="btn btn-sm btn-gh
+768:7:            style={{ fontSize: "12px", c
+769:7:            onClick={() => setShowRetiro
+770:7:          >
+771:7:            💰 RETIRO
+772:7:          </button>
+773:6:        </div>
+774:6:
+775:6:        {/* Payment Methods Grid */}
+776:7:        <div style={{ 
+777:7:          padding: "8px 12px 12px", 
+778:7:          display: "grid", 
+779:7:          gridTemplateColumns: "repeat(3
+780:7:          gap: "8px",
+781:7:          background: "var(--surface)"
+782:7:        }}>
+783:7:          <button
+784:7:            className="btn btn-ghost"
+785:7:            style={{ flexDirection: "col
+786:7:            onClick={handleCashButton}
+787:7:            disabled={total === 0}
+788:7:          >
+789:7:            <span style={{ fontSize: "18
+790:7:            <span style={{ fontSize: "10
+791:7:          </button>
+792:7:          <button
+793:7:            className="btn btn-ghost"
+794:7:            style={{ flexDirection: "col
+795:7:            onClick={() => handlePay("ME
+796:7:            disabled={total === 0}
+797:7:          >
+798:7:            <span style={{ fontSize: "18
+799:7:            <span style={{ fontSize: "10
+800:7:          </button>
+801:7:          <button
+802:7:            className="btn btn-ghost"
+803:7:            style={{ flexDirection: "col
+804:7:            onClick={() => handlePay("TR
+805:7:            disabled={total === 0}
+806:7:          >
+807:7:            <span style={{ fontSize: "18
+808:7:            <span style={{ fontSize: "10
+809:7:          </button>
+810:7:          <button
+811:7:            className="btn btn-ghost"
+812:7:            style={{ flexDirection: "col
+813:7:            onClick={() => handlePay("DE
+814:7:            disabled={total === 0}
+815:7:          >
+816:7:            <span style={{ fontSize: "18
+817:7:            <span style={{ fontSize: "10
+818:7:          </button>
+819:7:          <button
+820:7:            className="btn btn-ghost"
+821:7:            style={{ flexDirection: "col
+822:7:            onClick={() => handlePay("CR
+823:7:            disabled={total === 0}
+824:7:          >
+825:7:            <span style={{ fontSize: "18
+826:7:            <span style={{ fontSize: "10
+827:7:          </button>
+828:7:          <button
+829:7:            className="btn btn-ghost"
+830:7:            style={{ flexDirection: "col
+831:7:            onClick={() => setShowCredit
+832:7:            disabled={total === 0}
+833:7:          >
+834:7:            <span style={{ fontSize: "18
+835:7:            <span style={{ fontSize: "10
+836:7:          </button>
+837:6:        </div>
+838:5:      </div>
+839:5:
+840:5:      {/* Modals */}
+841:5:      {showGasto && (
+842:5:        <GastoModal
+843:5:          onClose={() => setShowGasto(fa
+844:5:          onSuccess={() => { setShowGast
+845:5:        />
+846:5:      )}
+847:5:      {showOtro && (
+848:5:        <OtroModal
+849:5:          onClose={() => setShowOtro(fal
+850:5:          onAdd={(item) => {
+851:5:            setTicket((prev) => [...prev
+852:5:            setShowOtro(false);
+853:5:          }}
+854:5:        />
+855:5:      )}
+856:5:      {showRetiro && (
+857:5:        <RetiroModal
+858:5:          onClose={() => setShowRetiro(f
+859:5:          onSuccess={() => { setShowReti
+860:5:        />
+861:5:      )}
+862:5:      {showCredit && (
+863:5:        <CreditCustomerModal
+864:5:          onClose={() => setShowCredit(f
+865:5:          onSelect={(customer) => {
+866:5:            setShowCredit(false);
+867:5:            handlePay("CREDIT", customer
+868:5:          }}
+869:5:        />
+870:5:      )}
+871:5:      {showOpenShift && (
+872:5:        <OpenShiftModal onConfirm={handl
+873:5:      )}
+874:5:      {showCloseShift && (
+875:5:        <CloseShiftModal 
+876:5:          onConfirm={handleCloseShift} 
+877:5:          onCancel={() => setShowCloseSh
+878:5:        />
+879:5:      )}
+880:5:      {showScanner && (
+881:5:        <BarcodeScanner 
+882:5:          onScan={handleBarcodeScan}
+883:5:          onClose={() => setShowScanner(
+884:5:        />
+885:5:      )}
+886:5:
+887:5:      {/* Variant Selector Modal */}
+888:5:      {variantSelector && (
+889:6:        <div className="modal-overlay an
+890:7:          <div className="modal animate-
+891:7:            <h2 style={{ fontSize: "18px
+892:8:            <div style={{ display: "flex
+893:8:              {variantSelector.product.v
+894:8:                <button
+895:8:                  key={v.id}
+896:8:                  className="btn btn-gho
+897:8:                  style={{ justifyConten
+898:8:                  onClick={() => handleP
+899:8:                  disabled={v.stock <= 0
+900:8:                >
+901:9:                  <div style={{ textAlig
+902:9:                    <div style={{ fontWe
+903:9:                    <div style={{ fontSi
+904:8:                  </div>
+905:8:                  <div style={{ fontWeig
+906:8:                </button>
+907:8:              ))}
+908:7:            </div>
+909:7:            <button className="btn btn-g
+910:7:              Cancelar
+911:7:            </button>
+912:6:          </div>
+913:5:        </div>
+914:5:      )}
+915:5:      {showRestockModal && (
+916:5:        <QuickRestockModal
+917:5:          products={products}
+918:5:          employeeId={activeShift?.emplo
+919:5:          onClose={() => setShowRestockM
+920:5:          onSuccess={() => {
+921:5:            setShowRestockModal(false);
+922:5:            fetchProducts(); // Refresh 
+923:5:          }}
+924:5:        />
+925:5:      )}
+926:4:    </div>
+927:4:  );
+928:4:}
+929:4:

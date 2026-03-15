@@ -11,9 +11,15 @@ export async function GET(req: Request) {
   const { branchId } = await getBranchContext(req, session.user.id);
   if (!branchId) return NextResponse.json([], { status: 200 });
 
+  const { searchParams } = new URL(req.url);
+  const activeOnly = searchParams.get("activeOnly") === "true";
+
   const employees = await prisma.employee.findMany({
-    where: { branchId },
-    orderBy: { name: "asc" },
+    where: { 
+      branchId,
+      ...(activeOnly ? { active: true } : {})
+    },
+    orderBy: [{ active: "desc" }, { name: "asc" }],
   });
 
   return NextResponse.json(employees);

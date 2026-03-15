@@ -72,10 +72,12 @@ export async function POST(req: NextRequest) {
     create: {
       kioscoId: kiosco.id,
       mpPreapprovalId: preapprovalId,
+      managementUrl: preapproval.permalink,
       status: "PENDING",
     },
     update: {
       mpPreapprovalId: preapprovalId,
+      managementUrl: preapproval.permalink,
       status: "PENDING",
     },
   });

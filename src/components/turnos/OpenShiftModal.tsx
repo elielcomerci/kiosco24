@@ -27,7 +27,7 @@ export default function OpenShiftModal({ onConfirm }: OpenShiftModalProps) {
   const [pinLoading, setPinLoading] = useState(false);
 
   useEffect(() => {
-    fetch("/api/empleados")
+    fetch("/api/empleados?activeOnly=true")
       .then((r) => r.json())
       .then((data) => {
         // Only active employees, add hasPin flag

@@ -54,15 +54,16 @@ model Session {
 }
 
 model Kiosco {
-  id         String     @id @default(cuid())
-  name       String
-  ownerId    String     @unique
-  owner      User       @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  branches   Branch[]
-  products   Product[]
-  categories Category[]
-  createdAt  DateTime   @default(now())
-  updatedAt  DateTime   @updatedAt
+  id           String        @id @default(cuid())
+  name         String
+  ownerId      String        @unique
+  owner        User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  branches     Branch[]
+  products     Product[]
+  categories   Category[]
+  subscription Subscription?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
 }
 
 model Branch {
@@ -83,6 +84,14 @@ model Branch {
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
   variantInventories VariantInventory[]
+
+  // MercadoPago OAuth — tokens de la cuenta MP de esta sucursal
+  mpUserId         String?   // ID numérico de la cuenta MP del dueño
+  mpAccessToken    String?   @db.Text
+  mpRefreshToken   String?   @db.Text
+  mpTokenExpiresAt DateTime? // access_token dura 180 días
+  mpStoreId        String?   // ID de sucursal creada en MP
+  mpPosId          String?   // external_id del punto de venta en MP
 
   @@index([kioscoId])
 }
@@ -295,4 +304,23 @@ enum ExpenseReason {
   MERCHANDISE
   DELIVERY
   OTHER
+}
+
+// ── Suscripción mensual ───────────────────────────────────────────────────────
+// Vive en Kiosco: una suscripción cubre todas las sucursales del dueño
+model Subscription {
+  id              String             @id @default(cuid())
+  kioscoId        String             @unique
+  kiosco          Kiosco             @relation(fields: [kioscoId], references: [id], onDelete: Cascade)
+  mpPreapprovalId String?            // ID en MP para consultar estado real
+  status          SubscriptionStatus @default(PENDING)
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+}
+
+enum SubscriptionStatus {
+  PENDING
+  ACTIVE
+  PAUSED
+  CANCELLED
 }

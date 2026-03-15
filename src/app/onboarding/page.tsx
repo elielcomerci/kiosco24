@@ -6,13 +6,16 @@ import { useRouter } from "next/navigation";
 export default function OnboardingPage() {
   const [kioscoName, setKioscoName] = useState("");
   const [loading, setLoading] = useState(false);
+  const [loadingText, setLoadingText] = useState("Creando kiosco...");
   const router = useRouter();
 
   const handleSetup = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setLoadingText("Creando tu kiosco...");
     
     try {
+      // 1. Crear el kiosco y sucursal base
       const res = await fetch("/api/onboarding", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -20,15 +23,27 @@ export default function OnboardingPage() {
       });
       
       const data = await res.json();
-      if (data.branchId) {
-        router.push(`/${data.branchId}/caja`);
-      } else {
+      if (!data.branchId) {
         alert("Error al crear el kiosco. Intentalo de nuevo.");
+        setLoading(false);
+        return;
+      }
+
+      // 2. Crear suscripción en MercadoPago
+      setLoadingText("Generando link de pago seguro...");
+      const subRes = await fetch("/api/subscription/create", { method: "POST" });
+      const subData = await subRes.json();
+
+      if (subData.init_point) {
+        // Redirigir a MercadoPago para suscribirse
+        window.location.href = subData.init_point;
+      } else {
+        alert("Tu kiosco fue creado, pero hubo un error generando la suscripción.");
+        router.push(`/${data.branchId}/caja`);
       }
     } catch (err) {
       console.error(err);
       alert("Error de conexión.");
-    } finally {
       setLoading(false);
     }
   };
@@ -71,8 +86,12 @@ export default function OnboardingPage() {
             className="btn btn-primary btn-lg btn-full" 
             disabled={loading || !kioscoName.trim()}
           >
-            {loading ? "Configurando..." : "Comenzar mi negocio"}
+            {loading ? loadingText : "Suscribirme por $9.900/mes"}
           </button>
+          
+          <p style={{ textAlign: "center", fontSize: "12px", color: "var(--text-3)", marginTop: "-10px" }}>
+            Serás redirigido a MercadoPago para completar la suscripción de forma segura.
+          </p>
         </form>
       </div>
     </div>

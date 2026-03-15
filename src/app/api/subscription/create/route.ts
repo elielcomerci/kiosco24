@@ -1,0 +1,85 @@
+import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { NextRequest, NextResponse } from "next/server";
+
+export async function POST(req: NextRequest) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  }
+
+  // 1. Obtener el kiosco del usuario
+  const kiosco = await prisma.kiosco.findUnique({
+    where: { ownerId: session.user.id },
+    include: { subscription: true },
+  });
+
+  if (!kiosco) {
+    return NextResponse.json({ error: "Kiosco no encontrado" }, { status: 404 });
+  }
+
+  // 2. Si ya tiene una suscripción activa, no permitir crear otra
+  if (kiosco.subscription?.status === "ACTIVE") {
+    return NextResponse.json(
+      { error: "Ya tenés una suscripción activa." },
+      { status: 400 }
+    );
+  }
+
+  // 3. Crear el Preapproval en MercadoPago
+  // Usamos el Access Token de la plataforma (las credenciales en .env.local)
+  const mpHeaders = {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${process.env.MP_ACCESS_TOKEN}`,
+  };
+
+  const payload = {
+    reason: "Suscripción Mensual - Kiosco24",
+    auto_recurring: {
+      frequency: 1,
+      frequency_type: "months",
+      transaction_amount: 9900,
+      currency_id: "ARS",
+    },
+    // MP requiere el payer_email
+    payer_email: session.user.email,
+    back_url: `${process.env.NEXTAUTH_URL}/onboarding?success=subscription_created`,
+    status: "pending",
+  };
+
+  const mpRes = await fetch("https://api.mercadopago.com/preapproval", {
+    method: "POST",
+    headers: mpHeaders,
+    body: JSON.stringify(payload),
+  });
+
+  if (!mpRes.ok) {
+    const errorText = await mpRes.text();
+    console.error("[MP Preapproval] Error creando suscripción:", errorText);
+    return NextResponse.json(
+      { error: "No se pudo generar la suscripción en MercadoPago." },
+      { status: 502 }
+    );
+  }
+
+  const preapproval = await mpRes.json();
+  const preapprovalId = String(preapproval.id);
+  const initPoint = preapproval.init_point;
+
+  // 4. Guardar en Base de Datos
+  await prisma.subscription.upsert({
+    where: { kioscoId: kiosco.id },
+    create: {
+      kioscoId: kiosco.id,
+      mpPreapprovalId: preapprovalId,
+      status: "PENDING",
+    },
+    update: {
+      mpPreapprovalId: preapprovalId,
+      status: "PENDING",
+    },
+  });
+
+  // 5. Retornar la URL de pago para redirigir al usuario
+  return NextResponse.json({ init_point: initPoint });
+}

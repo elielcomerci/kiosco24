@@ -22,6 +22,9 @@ interface Branch {
   name: string;
   logoUrl: string | null;
   primaryColor: string | null;
+  mpUserId: string | null;
+  mpStoreId: string | null;
+  mpPosId: string | null;
 }
 
 // ─── Employee Form Modal ───────────────────────────────────────────────────────
@@ -445,6 +448,24 @@ export default function ConfiguracionPage() {
   const [savingBranch, setSavingBranch] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
 
+  // MercadoPago
+  const [mpSetupLoading, setMpSetupLoading] = useState(false);
+  const [mpSetupError, setMpSetupError] = useState<string | null>(null);
+
+  // Auto-trigger setup-pos cuando MP acaba de conectarse (viene con ?mp=connected)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("mp") === "connected") {
+      // Limpiar el query param sin recargar
+      url.searchParams.delete("mp");
+      window.history.replaceState({}, "", url.toString());
+      // Disparar setup-pos automáticamente
+      handleMpSetupPos();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentBranch]);
+
   const fetchEmployees = async () => {
     setLoadingEmployees(true);
     const res = await fetch("/api/empleados");
@@ -521,6 +542,39 @@ export default function ConfiguracionPage() {
 
   const handleCategoryModalClose = () => setCategoryModal(null);
   const handleCategoryModalSave = () => { setCategoryModal(null); fetchCategories(); };
+
+  const handleMpSetupPos = async () => {
+    setMpSetupLoading(true);
+    setMpSetupError(null);
+    const res = await fetch("/api/mp/setup-pos", {
+      method: "POST",
+      headers: { "x-branch-id": branchId },
+    });
+    if (res.ok) {
+      fetchCurrentBranch(); // Recargar para mostrar estado actualizado
+    } else {
+      const data = await res.json();
+      setMpSetupError(data.error ?? "Error configurando punto de venta.");
+    }
+    setMpSetupLoading(false);
+  };
+
+  const handleMpDisconnect = async () => {
+    await fetch(`/api/branches/${branchId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        mpUserId: null,
+        mpAccessToken: null,
+        mpRefreshToken: null,
+        mpTokenExpiresAt: null,
+        mpStoreId: null,
+        mpPosId: null,
+      }),
+    });
+    fetchCurrentBranch();
+  };
+
 
   return (
     <div style={{ padding: "24px 16px", minHeight: "100dvh", paddingBottom: "100px" }}>
@@ -612,6 +666,129 @@ export default function ConfiguracionPage() {
               {savingBranch ? "..." : "Guardar Cambios"}
             </button>
           </div>
+        </div>
+      </section>
+
+      {/* MercadoPago Section */}
+      <section style={{ marginBottom: "32px" }}>
+        <div style={{ marginBottom: "12px" }}>
+          <h2 style={{ fontSize: "16px", fontWeight: 700, color: "var(--text-2)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+            💳 MercadoPago
+          </h2>
+        </div>
+
+        <div
+          style={{
+            background: "var(--surface)",
+            border: "1px solid var(--border)",
+            borderRadius: "var(--radius)",
+            padding: "20px",
+            display: "flex",
+            flexDirection: "column",
+            gap: "14px",
+          }}
+        >
+          {loadingCurrentBranch ? (
+            <div style={{ color: "var(--text-3)", fontSize: "14px" }}>Cargando...</div>
+          ) : !currentBranch?.mpUserId ? (
+            // ── Estado 1: Sin conectar ───────────────────────────────────────
+            <>
+              <div>
+                <p style={{ fontWeight: 600, marginBottom: 4 }}>Conectar cuenta de MercadoPago</p>
+                <p style={{ fontSize: "13px", color: "var(--text-3)", lineHeight: 1.5 }}>
+                  Autorizá esta sucursal para cobrar con QR de MercadoPago. El dinero va directo
+                  a tu cuenta — nosotros nunca lo tocamos.
+                </p>
+              </div>
+              <a href="/api/mp/auth" style={{ textDecoration: "none" }}>
+                <button
+                  className="btn btn-green"
+                  style={{ width: "100%", gap: 8 }}
+                >
+                  <span style={{ fontSize: 18 }}>📱</span>
+                  Conectar mi cuenta de MercadoPago
+                </button>
+              </a>
+            </>
+          ) : !currentBranch?.mpPosId ? (
+            // ── Estado 2: Tokens OK, POS pendiente ─────────────────────────────
+            <>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ fontSize: 20 }}>✅</span>
+                <div>
+                  <p style={{ fontWeight: 600 }}>Cuenta conectada</p>
+                  <p style={{ fontSize: "12px", color: "var(--text-3)" }}>ID: {currentBranch.mpUserId}</p>
+                </div>
+              </div>
+              <div
+                style={{
+                  background: "rgba(245,158,11,0.08)",
+                  border: "1px solid rgba(245,158,11,0.3)",
+                  borderRadius: "var(--radius-sm, 6px)",
+                  padding: "12px 14px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 8,
+                }}
+              >
+                <p style={{ fontSize: "13px", color: "var(--amber)", fontWeight: 600 }}>
+                  ⚠️ Falta configurar el punto de venta en MercadoPago
+                </p>
+                {mpSetupError && (
+                  <p style={{ fontSize: "12px", color: "var(--red)" }}>{mpSetupError}</p>
+                )}
+                <button
+                  className="btn btn-ghost"
+                  style={{ fontSize: "13px", borderColor: "var(--amber)", color: "var(--amber)" }}
+                  onClick={handleMpSetupPos}
+                  disabled={mpSetupLoading}
+                >
+                  {mpSetupLoading ? "Configurando..." : "🔄 Configurar ahora"}
+                </button>
+              </div>
+              <button
+                className="btn btn-ghost"
+                style={{ fontSize: "12px", color: "var(--text-3)" }}
+                onClick={handleMpDisconnect}
+              >
+                Desconectar cuenta
+              </button>
+            </>
+          ) : (
+            // ── Estado 3: Todo listo ──────────────────────────────────────────
+            <>
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <div
+                  style={{
+                    width: 44,
+                    height: 44,
+                    borderRadius: "50%",
+                    background: "rgba(34,197,94,0.1)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: 22,
+                    flexShrink: 0,
+                  }}
+                >
+                  ✅
+                </div>
+                <div>
+                  <p style={{ fontWeight: 700 }}>Listo para cobrar con QR</p>
+                  <p style={{ fontSize: "12px", color: "var(--text-3)", marginTop: 2 }}>
+                    Cuenta #{currentBranch.mpUserId} · Caja configurada
+                  </p>
+                </div>
+              </div>
+              <button
+                className="btn btn-ghost"
+                style={{ fontSize: "12px", color: "var(--text-3)", alignSelf: "flex-start" }}
+                onClick={handleMpDisconnect}
+              >
+                Desconectar cuenta
+              </button>
+            </>
+          )}
         </div>
       </section>
 

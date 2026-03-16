@@ -22,7 +22,6 @@ export async function GET(req: NextRequest) {
   const authUrl = new URL("https://auth.mercadopago.com.ar/authorization");
   authUrl.searchParams.set("client_id", process.env.MP_CLIENT_ID!);
   authUrl.searchParams.set("response_type", "code");
-  authUrl.searchParams.set("platform_id", "mp");
   authUrl.searchParams.set(
     "redirect_uri",
     `${process.env.NEXTAUTH_URL}/api/mp/callback`

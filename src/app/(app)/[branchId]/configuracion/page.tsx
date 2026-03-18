@@ -709,6 +709,8 @@ export default function ConfiguracionPage() {
             initialBg={editBgColor}
             initialAccent={editPrimaryColor}
             onSaved={() => window.location.reload()}
+            onChangeBg={setEditBgColor}
+            onChangeAccent={setEditPrimaryColor}
           />
         </div>
       </section>

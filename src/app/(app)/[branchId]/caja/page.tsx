@@ -143,7 +143,7 @@ export default function CajaPage() {
       await fetchStats();
 
       // 3. Check Active Shift
-      const shiftRes = await fetch(`/api/turnos/activo`, {
+      const shiftRes = await fetch(`/api/turnos`, {
         headers: { "x-branch-id": branchId }
       });
       const shiftData = await shiftRes.json();

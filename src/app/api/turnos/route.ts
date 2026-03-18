@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 
 import { getBranchId } from "@/lib/branch";
 
-// GET /api/turnos/activo
+// GET /api/turnos — returns the active (open) shift for the branch, if any
 export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json(null);

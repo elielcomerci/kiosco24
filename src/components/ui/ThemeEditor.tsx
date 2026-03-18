@@ -34,9 +34,11 @@ interface ThemeEditorProps {
   initialBg: string;
   initialAccent: string;
   onSaved: () => void;
+  onChangeBg?: (bg: string) => void;
+  onChangeAccent?: (accent: string) => void;
 }
 
-export default function ThemeEditor({ branchId, initialBg, initialAccent, onSaved }: ThemeEditorProps) {
+export default function ThemeEditor({ branchId, initialBg, initialAccent, onSaved, onChangeBg, onChangeAccent }: ThemeEditorProps) {
   const [bg, setBg] = useState(initialBg || "#0f172a");
   const [accent, setAccent] = useState(initialAccent || "#22c55e");
   const [saving, setSaving] = useState(false);
@@ -50,18 +52,22 @@ export default function ThemeEditor({ branchId, initialBg, initialAccent, onSave
   const handleBgChange = useCallback((val: string) => {
     setBg(val);
     applyThemeToDOM(val, accent);
-  }, [accent]);
+    onChangeBg?.(val);
+  }, [accent, onChangeBg]);
 
   const handleAccentChange = useCallback((val: string) => {
     setAccent(val);
     applyThemeToDOM(bg, val);
-  }, [bg]);
+    onChangeAccent?.(val);
+  }, [bg, onChangeAccent]);
 
   const handlePreset = useCallback((preset: typeof PRESETS[0]) => {
     setBg(preset.bg);
     setAccent(preset.accent);
     applyThemeToDOM(preset.bg, preset.accent);
-  }, []);
+    onChangeBg?.(preset.bg);
+    onChangeAccent?.(preset.accent);
+  }, [onChangeBg, onChangeAccent]);
 
   const handleSave = async () => {
     setSaving(true);

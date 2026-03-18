@@ -134,6 +134,12 @@ export default function CajaPage() {
   const [isTicketExpanded, setIsTicketExpanded] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const handleBarcodeScanRef = useRef<(code: string) => void>(() => {});
+  const keyboardScanBufferRef = useRef("");
+  const keyboardScanStartedAtRef = useRef(0);
+  const keyboardScanLastKeyAtRef = useRef(0);
+  const pendingManualSearchRef = useRef("");
+  const manualSearchTimerRef = useRef<number | null>(null);
 
   const isOnline = useOnlineStatus();
   const total = ticket.reduce((sum, item) => sum + item.price * item.quantity, 0);
@@ -180,26 +186,105 @@ export default function CajaPage() {
   // ─── Keyboard Shortcuts ───────────────────────────────────────────────────
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
-      // Ignore if any overlay modal is open
-      if (showGasto || showOtro || showRetiro || showCredit || showOpenShift || showCloseShift || showScanner || showRestockModal || variantSelector || showCashNumpad || confirmedSale) {
+      const overlayOpen =
+        showGasto ||
+        showOtro ||
+        showRetiro ||
+        showCredit ||
+        showOpenShift ||
+        showCloseShift ||
+        showScanner ||
+        showRestockModal ||
+        variantSelector ||
+        showCashNumpad ||
+        confirmedSale;
+
+      if (overlayOpen) {
+        clearPendingManualSearch();
+        resetKeyboardScannerState();
         return;
       }
-      
+
+      if (e.ctrlKey || e.metaKey || e.altKey) {
+        return;
+      }
+
       const activeEl = document.activeElement;
       const isInputFocused = activeEl?.tagName === "INPUT" || activeEl?.tagName === "TEXTAREA" || activeEl?.tagName === "SELECT";
-      
-      // Auto-focus search on alphanumeric typing
-      if (!isInputFocused && e.key.length === 1 && /[a-zA-Z0-9]/.test(e.key)) {
-        if (searchInputRef.current) {
-          e.preventDefault(); // Prevent default browser search/scroll
-          searchInputRef.current.focus();
-          setCajaSearch((prev) => prev + e.key);
+
+      const now = performance.now();
+      const printableKey = e.key.length === 1 && /[0-9A-Za-z./\\-]/.test(e.key);
+
+      if (printableKey) {
+        const gap = now - keyboardScanLastKeyAtRef.current;
+        const startNewSequence = !keyboardScanBufferRef.current || gap > 80;
+
+        if (startNewSequence) {
+          keyboardScanBufferRef.current = e.key;
+          keyboardScanStartedAtRef.current = now;
+        } else {
+          keyboardScanBufferRef.current += e.key;
         }
+
+        keyboardScanLastKeyAtRef.current = now;
+
+        if (!isInputFocused) {
+          pendingManualSearchRef.current += e.key;
+          if (manualSearchTimerRef.current) {
+            window.clearTimeout(manualSearchTimerRef.current);
+          }
+
+          manualSearchTimerRef.current = window.setTimeout(() => {
+            const pending = pendingManualSearchRef.current;
+            if (!pending) return;
+
+            searchInputRef.current?.focus();
+            setCajaSearch((prev) => prev + pending);
+            clearPendingManualSearch();
+            resetKeyboardScannerState();
+          }, 85);
+
+          e.preventDefault();
+        }
+
+        return;
+      }
+
+      if (e.key === "Enter" || e.key === "Tab") {
+        const buffer = keyboardScanBufferRef.current;
+        const duration = keyboardScanStartedAtRef.current ? now - keyboardScanStartedAtRef.current : Infinity;
+        const averageGap = buffer.length > 1 ? duration / (buffer.length - 1) : Infinity;
+        const looksLikeScanner = buffer.length >= 6 && duration <= 1200 && averageGap <= 55;
+
+        if (looksLikeScanner) {
+          clearPendingManualSearch();
+          resetKeyboardScannerState();
+          setCajaSearch("");
+          e.preventDefault();
+          e.stopPropagation();
+          handleBarcodeScanRef.current(buffer);
+          return;
+        }
+
+        if (!isInputFocused) {
+          clearPendingManualSearch();
+          resetKeyboardScannerState();
+        }
+        return;
+      }
+
+      if (e.key === "Escape") {
+        clearPendingManualSearch();
+        resetKeyboardScannerState();
       }
     };
     
     window.addEventListener("keydown", handleGlobalKeyDown);
-    return () => window.removeEventListener("keydown", handleGlobalKeyDown);
+    return () => {
+      clearPendingManualSearch();
+      resetKeyboardScannerState();
+      window.removeEventListener("keydown", handleGlobalKeyDown);
+    };
   }, [
     showGasto, showOtro, showRetiro, showCredit, showOpenShift, showCloseShift, 
     showScanner, showRestockModal, variantSelector, showCashNumpad, confirmedSale
@@ -242,6 +327,20 @@ export default function CajaPage() {
   const explainShiftLock = () => {
     alert(`La caja está a nombre de ${shiftResponsibleName}. Transferí o cerrá el turno para operar con este usuario.`);
   };
+
+  const resetKeyboardScannerState = useCallback(() => {
+    keyboardScanBufferRef.current = "";
+    keyboardScanStartedAtRef.current = 0;
+    keyboardScanLastKeyAtRef.current = 0;
+  }, []);
+
+  const clearPendingManualSearch = useCallback(() => {
+    pendingManualSearchRef.current = "";
+    if (manualSearchTimerRef.current) {
+      window.clearTimeout(manualSearchTimerRef.current);
+      manualSearchTimerRef.current = null;
+    }
+  }, []);
 
   const handleOpenShift = async ({ openingAmount, assignee }: { openingAmount: number; assignee: ShiftAssignee }) => {
     const res = await fetch("/api/turnos", {
@@ -619,7 +718,7 @@ export default function CajaPage() {
   };
 
   // ─── Barcode handling ─────────────────────────────────────────────────────
-  const handleBarcodeScan = (result: string) => {
+  const handleBarcodeScan = useCallback((result: string) => {
     // 1. Buscar en productos base
     const product = products.find(p => p.barcode === result);
     if (product) {
@@ -642,7 +741,8 @@ export default function CajaPage() {
 
     // Not found
     alert(`Código ${result} no encontrado.`);
-  };
+  }, [handleProductTap, products]);
+  handleBarcodeScanRef.current = handleBarcodeScan;
 
   // ─── Ticket item controls ─────────────────────────────────────────────────
   const changeQty = (index: number, delta: number) => {
@@ -904,6 +1004,12 @@ export default function CajaPage() {
             )}
           </div>
         </div>
+
+        {isDesktop && (
+          <div style={{ padding: "6px 16px 0", color: "var(--text-3)", fontSize: "12px" }}>
+            Acepta lectora USB: escaneÃ¡ y el producto entra directo sin tocar el buscador.
+          </div>
+        )}
 
       {/* Category Filter Pills (Scrollable Horizontal) */}
       {categories.length > 0 && (

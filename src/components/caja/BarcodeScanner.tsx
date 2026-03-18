@@ -82,7 +82,7 @@ function buildSupport(capabilities: MediaTrackCapabilities): ScannerTuningSuppor
       focusModes.includes("single-shot") ||
       focusModes.includes("continuous") ||
       zoomRange !== null,
-    canZoom: zoomRange !== null && zoomRange.max! > Math.max(1, zoomRange.min ?? 1),
+    canZoom: zoomRange !== null && typeof zoomRange.max === "number" && zoomRange.max > Math.max(1, zoomRange.min ?? 1),
     canUseTorch: torch,
   };
 }
@@ -93,6 +93,7 @@ export default function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps)
   const [cameras, setCameras] = useState<CameraOption[]>([]);
   const [selectedCameraId, setSelectedCameraId] = useState<string | null>(null);
   const [preferNearFocus, setPreferNearFocus] = useState(true);
+  const [torchEnabled, setTorchEnabled] = useState(false);
   const [tuningSupport, setTuningSupport] = useState<ScannerTuningSupport>({
     canPreferNearFocus: false,
     canZoom: false,
@@ -116,8 +117,12 @@ export default function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps)
         const isDesktopLike =
           typeof navigator !== "undefined" &&
           !/android|iphone|ipad|ipod/i.test(navigator.userAgent || "");
+        const support = buildSupport(capabilities);
 
-        setTuningSupport(buildSupport(capabilities));
+        setTuningSupport(support);
+        if (!support.canUseTorch) {
+          setTorchEnabled(false);
+        }
 
         const messages: string[] = [];
 
@@ -145,7 +150,7 @@ export default function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps)
             );
 
             if (focusApplied) {
-              messages.push("Enfoque cercano puntual activo");
+              messages.push("Enfoque puntual activo");
             }
           }
 
@@ -156,7 +161,7 @@ export default function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps)
             );
 
             if (continuousApplied) {
-              messages.push("Autofoco continuo activo");
+              messages.push("Autofoco continuo");
             }
           }
 
@@ -182,15 +187,16 @@ export default function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps)
           }
 
           if (messages.length === 0) {
-            setStatus("La camara no permite modo cerca. Uso normal con la mejor calidad disponible.");
+            setStatus("La camara no permite modo cerca. Uso el mejor fallback disponible.");
             return;
           }
 
-          setStatus(messages.join(" · "));
+          setStatus(messages.join(" | "));
           return;
         }
 
         const relaxedMessages: string[] = [];
+
         if (focusModes.includes("continuous")) {
           const continuousApplied = await applyConstraintSafely(
             scanner,
@@ -214,11 +220,7 @@ export default function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps)
           }
         }
 
-        setStatus(
-          relaxedMessages.length > 0
-            ? relaxedMessages.join(" · ")
-            : "Lectura normal activa",
-        );
+        setStatus(relaxedMessages.length > 0 ? relaxedMessages.join(" | ") : "Lectura normal activa");
       } catch {
         setStatus("Lectura normal activa");
       }
@@ -318,7 +320,7 @@ export default function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps)
         await applyPreferredTuning(html5QrCode);
       } catch (err: any) {
         if (!active) return;
-        setError("No se pudo iniciar la camara. Probá cambiar de camara o dar permiso de acceso.");
+        setError("No se pudo iniciar la camara. Proba cambiar de camara o dar permiso de acceso.");
         setStatus("Scanner no disponible");
         console.error("Barcode scanner error:", err);
       }
@@ -350,6 +352,35 @@ export default function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps)
     void applyPreferredTuning(scanner);
   }, [applyPreferredTuning, preferNearFocus]);
 
+  useEffect(() => {
+    if (!tuningSupport.canUseTorch) return;
+
+    const scanner = html5QrCodeRef.current;
+    if (!scanner) return;
+
+    const applyTorch = async () => {
+      const ok = await applyConstraintSafely(scanner, advancedConstraints({ torch: torchEnabled }));
+      if (!ok && torchEnabled) {
+        setTorchEnabled(false);
+        setStatus("La linterna no se pudo activar en esta camara.");
+        return;
+      }
+
+      if (ok) {
+        setStatus((current) => {
+          const base = current.replace(/ \| Linterna encendida| \| Linterna apagada/g, "").trim();
+          return `${base || "Lectura activa"} | Linterna ${torchEnabled ? "encendida" : "apagada"}`;
+        });
+      }
+    };
+
+    void applyTorch();
+  }, [torchEnabled, tuningSupport.canUseTorch]);
+
+  useEffect(() => {
+    setTorchEnabled(false);
+  }, [selectedCameraId]);
+
   return (
     <div className="modal-overlay animate-fade-in" onClick={onClose} style={{ zIndex: 9999 }}>
       <div
@@ -376,7 +407,7 @@ export default function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps)
             textAlign: "center",
           }}
         >
-          Acercá el codigo, buscá buena luz y evitá reflejos. En PC suele rendir mucho mejor con webcam HD o una lectora USB.
+          Acerca el codigo, busca buena luz y evita reflejos. En PC suele rendir mejor con webcam HD o lectora USB.
         </p>
 
         <div
@@ -405,7 +436,7 @@ export default function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps)
             className="btn btn-sm"
             style={{
               flex: 1,
-              minWidth: "140px",
+              minWidth: "130px",
               background: preferNearFocus ? "var(--primary)" : "rgba(255,255,255,0.08)",
               color: preferNearFocus ? "#04110a" : "#fff",
               border: "1px solid rgba(255,255,255,0.12)",
@@ -418,7 +449,7 @@ export default function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps)
             className="btn btn-sm"
             style={{
               flex: 1,
-              minWidth: "140px",
+              minWidth: "130px",
               background: !preferNearFocus ? "var(--primary)" : "rgba(255,255,255,0.08)",
               color: !preferNearFocus ? "#04110a" : "#fff",
               border: "1px solid rgba(255,255,255,0.12)",
@@ -427,6 +458,21 @@ export default function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps)
           >
             Modo normal
           </button>
+          {tuningSupport.canUseTorch && (
+            <button
+              className="btn btn-sm"
+              style={{
+                flex: 1,
+                minWidth: "130px",
+                background: torchEnabled ? "var(--amber)" : "rgba(255,255,255,0.08)",
+                color: torchEnabled ? "#241400" : "#fff",
+                border: "1px solid rgba(255,255,255,0.12)",
+              }}
+              onClick={() => setTorchEnabled((prev) => !prev)}
+            >
+              {torchEnabled ? "Linterna encendida" : "Linterna apagada"}
+            </button>
+          )}
         </div>
 
         {!tuningSupport.canPreferNearFocus && (
@@ -438,7 +484,7 @@ export default function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps)
               textAlign: "center",
             }}
           >
-            Esta cámara no expone controles avanzados de foco. Igual usamos el mejor fallback disponible.
+            Esta camara no expone controles avanzados de foco. Igual usamos el mejor fallback disponible.
           </div>
         )}
 

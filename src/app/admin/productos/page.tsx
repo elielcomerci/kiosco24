@@ -9,6 +9,7 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import PlatformProductQuickEditor from "@/app/admin/productos/PlatformProductQuickEditor";
 
 async function ensurePlatformAdmin() {
   const session = await auth();
@@ -321,42 +322,18 @@ export default async function AdminProductsPage() {
           )}
         </section>
 
-        <section
-          style={{
-            background: "rgba(15,23,42,.82)",
-            border: "1px solid rgba(148,163,184,.18)",
-            borderRadius: "22px",
-            padding: "20px",
-            display: "grid",
-            gap: "16px",
-          }}
-        >
-          <h2 style={{ margin: 0, fontSize: "24px" }}>Nuevo producto global</h2>
-          <form
-            action={savePlatformProduct}
-            style={{ display: "grid", gap: "10px", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}
-          >
-            <input name="barcode" className="input" placeholder="Codigo de barras" />
-            <input name="name" className="input" placeholder="Nombre" />
-            <input name="brand" className="input" placeholder="Marca" />
-            <input name="presentation" className="input" placeholder="Presentacion" />
-            <input name="image" className="input" placeholder="URL de imagen" />
-            <select name="status" className="input" defaultValue={PlatformProductStatus.APPROVED}>
-              <option value={PlatformProductStatus.APPROVED}>Aprobado</option>
-              <option value={PlatformProductStatus.HIDDEN}>Oculto</option>
-            </select>
-            <textarea
-              name="description"
-              className="input"
-              placeholder="Descripcion"
-              rows={2}
-              style={{ gridColumn: "1 / -1", resize: "vertical" }}
-            />
-            <button type="submit" className="btn btn-secondary" style={{ width: "fit-content" }}>
-              Guardar producto global
-            </button>
-          </form>
-        </section>
+        <PlatformProductQuickEditor
+          products={platformProducts.map((product) => ({
+            id: product.id,
+            barcode: product.barcode,
+            name: product.name,
+            brand: product.brand,
+            presentation: product.presentation,
+            description: product.description,
+            image: product.image,
+            status: product.status,
+          }))}
+        />
 
         <section
           style={{

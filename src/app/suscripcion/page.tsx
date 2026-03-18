@@ -181,7 +181,32 @@ export default async function SubscriptionPage({
               </strong>
             </div>
           )}
+          {freshAccess.manualOverride && (
+            <div style={{ display: "flex", justifyContent: "space-between", gap: "16px", flexWrap: "wrap" }}>
+              <span style={{ color: "var(--text-3)", fontSize: "13px" }}>Decision administrativa</span>
+              <strong>
+                {freshAccess.manualOverride.mode === "FORCE_BLOCK"
+                  ? "Bloqueo manual vigente"
+                  : "Habilitacion manual vigente"}
+              </strong>
+            </div>
+          )}
         </div>
+
+        {freshAccess.manualOverride?.note && (
+          <div
+            style={{
+              padding: "14px 16px",
+              borderRadius: "16px",
+              background: "rgba(245,158,11,.10)",
+              border: "1px solid rgba(245,158,11,.24)",
+              color: "var(--text-2)",
+              lineHeight: 1.6,
+            }}
+          >
+            Motivo administrativo: {freshAccess.manualOverride.note}
+          </div>
+        )}
 
         {session.user.role === "EMPLOYEE" ? (
           <div

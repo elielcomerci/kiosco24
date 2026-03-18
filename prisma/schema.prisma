@@ -18,6 +18,7 @@ model User {
   sessions      Session[]
   kiosco        Kiosco?
   createdAccessGrants AccessGrant[] @relation("AccessGrantCreator")
+  accessOverrideChanges Kiosco[] @relation("KioscoAccessOverrideBy")
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 }
@@ -55,17 +56,22 @@ model Session {
 }
 
 model Kiosco {
-  id           String        @id @default(cuid())
-  name         String
-  ownerId      String        @unique
-  owner        User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  branches     Branch[]
-  products     Product[]
-  categories   Category[]
-  subscription Subscription?
-  accessGrants AccessGrant[]
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  id                    String               @id @default(cuid())
+  name                  String
+  ownerId               String               @unique
+  owner                 User                 @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  branches              Branch[]
+  products              Product[]
+  categories            Category[]
+  subscription          Subscription?
+  accessGrants          AccessGrant[]
+  accessOverride        KioscoAccessOverride @default(INHERIT)
+  accessOverrideNote    String?              @db.Text
+  accessOverrideAt      DateTime?
+  accessOverrideById    String?
+  accessOverrideBy      User?                @relation("KioscoAccessOverrideBy", fields: [accessOverrideById], references: [id], onDelete: SetNull)
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
 }
 
 model Branch {
@@ -400,4 +406,10 @@ model AccessGrant {
 enum AccessGrantKind {
   ADMIN_GRACE
   ADMIN_INVITE
+}
+
+enum KioscoAccessOverride {
+  INHERIT
+  FORCE_ALLOW
+  FORCE_BLOCK
 }

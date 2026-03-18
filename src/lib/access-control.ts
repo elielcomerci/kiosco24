@@ -1,5 +1,6 @@
 import {
   type AccessGrantKind,
+  type KioscoAccessOverride,
   type SubscriptionStatus,
   type UserRole,
 } from "@prisma/client";
@@ -24,8 +25,16 @@ export type ActiveAccessGrant = {
   note: string | null;
 };
 
+export type ManualAccessOverride = {
+  mode: KioscoAccessOverride;
+  note: string | null;
+  changedAt: Date | null;
+};
+
 export type AccessBlockReason =
   | "PLATFORM_ADMIN"
+  | "ADMIN_FORCE_ALLOW"
+  | "ADMIN_FORCE_BLOCK"
   | "NO_KIOSCO"
   | "SUBSCRIPTION_ACTIVE"
   | "ACTIVE_GRACE"
@@ -46,6 +55,7 @@ export type KioscoAccessContext = {
   subscriptionStatus: SubscriptionStatus | null;
   managementUrl: string | null;
   activeGrant: ActiveAccessGrant | null;
+  manualOverride: ManualAccessOverride | null;
 };
 
 const activeGrantSelect = {
@@ -54,6 +64,33 @@ const activeGrantSelect = {
   startsAt: true,
   endsAt: true,
   note: true,
+} as const;
+
+const kioscoAccessSelect = {
+  id: true,
+  name: true,
+  branches: {
+    orderBy: { createdAt: "asc" },
+    take: 1,
+    select: { id: true },
+  },
+  subscription: {
+    select: {
+      status: true,
+      managementUrl: true,
+    },
+  },
+  accessGrants: {
+    where: {
+      revokedAt: null,
+    },
+    orderBy: { endsAt: "desc" },
+    take: 5,
+    select: activeGrantSelect,
+  },
+  accessOverride: true,
+  accessOverrideNote: true,
+  accessOverrideAt: true,
 } as const;
 
 function mapSubscriptionReason(status: SubscriptionStatus | null): AccessBlockReason {
@@ -78,6 +115,7 @@ function buildContext(input: {
   subscriptionStatus?: SubscriptionStatus | null;
   managementUrl?: string | null;
   activeGrant?: ActiveAccessGrant | null;
+  manualOverride?: ManualAccessOverride | null;
   isPlatformAdmin?: boolean;
 }): KioscoAccessContext {
   if (input.isPlatformAdmin) {
@@ -91,6 +129,37 @@ function buildContext(input: {
       subscriptionStatus: input.subscriptionStatus ?? null,
       managementUrl: input.managementUrl ?? null,
       activeGrant: input.activeGrant ?? null,
+      manualOverride: input.manualOverride ?? null,
+    };
+  }
+
+  if (input.manualOverride?.mode === "FORCE_BLOCK") {
+    return {
+      allowed: false,
+      reason: "ADMIN_FORCE_BLOCK",
+      isPlatformAdmin: false,
+      kioscoId: input.kioscoId ?? null,
+      kioscoName: input.kioscoName ?? null,
+      firstBranchId: input.firstBranchId ?? null,
+      subscriptionStatus: input.subscriptionStatus ?? null,
+      managementUrl: input.managementUrl ?? null,
+      activeGrant: input.activeGrant ?? null,
+      manualOverride: input.manualOverride,
+    };
+  }
+
+  if (input.manualOverride?.mode === "FORCE_ALLOW") {
+    return {
+      allowed: true,
+      reason: "ADMIN_FORCE_ALLOW",
+      isPlatformAdmin: false,
+      kioscoId: input.kioscoId ?? null,
+      kioscoName: input.kioscoName ?? null,
+      firstBranchId: input.firstBranchId ?? null,
+      subscriptionStatus: input.subscriptionStatus ?? null,
+      managementUrl: input.managementUrl ?? null,
+      activeGrant: input.activeGrant ?? null,
+      manualOverride: input.manualOverride,
     };
   }
 
@@ -105,6 +174,7 @@ function buildContext(input: {
       subscriptionStatus: input.subscriptionStatus ?? null,
       managementUrl: input.managementUrl ?? null,
       activeGrant: input.activeGrant,
+      manualOverride: input.manualOverride ?? null,
     };
   }
 
@@ -119,6 +189,7 @@ function buildContext(input: {
       subscriptionStatus: "ACTIVE",
       managementUrl: input.managementUrl ?? null,
       activeGrant: null,
+      manualOverride: input.manualOverride ?? null,
     };
   }
 
@@ -132,6 +203,7 @@ function buildContext(input: {
     subscriptionStatus: input.subscriptionStatus ?? null,
     managementUrl: input.managementUrl ?? null,
     activeGrant: null,
+    manualOverride: input.manualOverride ?? null,
   };
 }
 
@@ -139,6 +211,8 @@ export function getAccessBlockMessage(reason: AccessBlockReason) {
   switch (reason) {
     case "NO_SUBSCRIPTION":
       return "No hay una suscripcion activa para este kiosco.";
+    case "ADMIN_FORCE_BLOCK":
+      return "La cuenta fue bloqueada manualmente por un administrador.";
     case "SUBSCRIPTION_PENDING":
       return "La suscripcion todavia esta pendiente de activacion.";
     case "SUBSCRIPTION_PAUSED":
@@ -166,6 +240,7 @@ export async function getKioscoAccessContextForSession(user: SessionUserLike | n
       subscriptionStatus: null,
       managementUrl: null,
       activeGrant: null,
+      manualOverride: null,
     };
   }
 
@@ -178,6 +253,20 @@ export async function getKioscoAccessContextForSession(user: SessionUserLike | n
   }
 
   const now = new Date();
+  const activeGrant = (grants: Array<ActiveAccessGrant & { endsAt: Date }>) =>
+    grants.find((grant) => grant.startsAt <= now && grant.endsAt >= now) ?? null;
+  const manualOverride = (kiosco: {
+    accessOverride: KioscoAccessOverride;
+    accessOverrideNote: string | null;
+    accessOverrideAt: Date | null;
+  }): ManualAccessOverride | null =>
+    kiosco.accessOverride === "INHERIT"
+      ? null
+      : {
+          mode: kiosco.accessOverride,
+          note: kiosco.accessOverrideNote,
+          changedAt: kiosco.accessOverrideAt,
+        };
 
   if (user.role === "EMPLOYEE") {
     if (user.branchId) {
@@ -186,31 +275,7 @@ export async function getKioscoAccessContextForSession(user: SessionUserLike | n
           select: {
             id: true,
             kiosco: {
-              select: {
-                id: true,
-                name: true,
-                branches: {
-                  orderBy: { createdAt: "asc" },
-                  take: 1,
-                  select: { id: true },
-                },
-                subscription: {
-                  select: {
-                    status: true,
-                    managementUrl: true,
-                  },
-                },
-                accessGrants: {
-                  where: {
-                    revokedAt: null,
-                    startsAt: { lte: now },
-                    endsAt: { gte: now },
-                  },
-                  orderBy: { endsAt: "desc" },
-                  take: 1,
-                  select: activeGrantSelect,
-                },
-              },
+              select: kioscoAccessSelect,
             },
           },
         });
@@ -226,6 +291,7 @@ export async function getKioscoAccessContextForSession(user: SessionUserLike | n
           subscriptionStatus: null,
           managementUrl: null,
           activeGrant: null,
+          manualOverride: null,
         };
       }
 
@@ -235,7 +301,8 @@ export async function getKioscoAccessContextForSession(user: SessionUserLike | n
         firstBranchId: branch.id,
         subscriptionStatus: branch.kiosco.subscription?.status ?? null,
         managementUrl: branch.kiosco.subscription?.managementUrl ?? null,
-        activeGrant: branch.kiosco.accessGrants[0] ?? null,
+        activeGrant: activeGrant(branch.kiosco.accessGrants),
+        manualOverride: manualOverride(branch.kiosco),
       });
     }
 
@@ -247,31 +314,7 @@ export async function getKioscoAccessContextForSession(user: SessionUserLike | n
             branch: {
               select: {
                 kiosco: {
-                  select: {
-                    id: true,
-                    name: true,
-                    branches: {
-                      orderBy: { createdAt: "asc" },
-                      take: 1,
-                      select: { id: true },
-                    },
-                    subscription: {
-                      select: {
-                        status: true,
-                        managementUrl: true,
-                      },
-                    },
-                    accessGrants: {
-                      where: {
-                        revokedAt: null,
-                        startsAt: { lte: now },
-                        endsAt: { gte: now },
-                      },
-                      orderBy: { endsAt: "desc" },
-                      take: 1,
-                      select: activeGrantSelect,
-                    },
-                  },
+                  select: kioscoAccessSelect,
                 },
               },
             },
@@ -290,6 +333,7 @@ export async function getKioscoAccessContextForSession(user: SessionUserLike | n
         subscriptionStatus: null,
         managementUrl: null,
         activeGrant: null,
+        manualOverride: null,
       };
     }
 
@@ -300,7 +344,8 @@ export async function getKioscoAccessContextForSession(user: SessionUserLike | n
       firstBranchId: employee.branchId ?? kiosco.branches[0]?.id ?? null,
       subscriptionStatus: kiosco.subscription?.status ?? null,
       managementUrl: kiosco.subscription?.managementUrl ?? null,
-      activeGrant: kiosco.accessGrants[0] ?? null,
+      activeGrant: activeGrant(kiosco.accessGrants),
+      manualOverride: manualOverride(kiosco),
     });
   }
 
@@ -308,31 +353,7 @@ export async function getKioscoAccessContextForSession(user: SessionUserLike | n
     where: { id: user.id },
     select: {
       kiosco: {
-        select: {
-          id: true,
-          name: true,
-          branches: {
-            orderBy: { createdAt: "asc" },
-            take: 1,
-            select: { id: true },
-          },
-          subscription: {
-            select: {
-              status: true,
-              managementUrl: true,
-            },
-          },
-          accessGrants: {
-            where: {
-              revokedAt: null,
-              startsAt: { lte: now },
-              endsAt: { gte: now },
-            },
-            orderBy: { endsAt: "desc" },
-            take: 1,
-            select: activeGrantSelect,
-          },
-        },
+        select: kioscoAccessSelect,
       },
     },
   });
@@ -343,7 +364,8 @@ export async function getKioscoAccessContextForSession(user: SessionUserLike | n
     firstBranchId: owner?.kiosco?.branches[0]?.id ?? null,
     subscriptionStatus: owner?.kiosco?.subscription?.status ?? null,
     managementUrl: owner?.kiosco?.subscription?.managementUrl ?? null,
-    activeGrant: owner?.kiosco?.accessGrants[0] ?? null,
+    activeGrant: owner?.kiosco ? activeGrant(owner.kiosco.accessGrants) : null,
+    manualOverride: owner?.kiosco ? manualOverride(owner.kiosco) : null,
   });
 }
 
@@ -354,31 +376,7 @@ export async function getKioscoAccessContextByAccessKey(accessKey: string): Prom
     select: {
       id: true,
       kiosco: {
-        select: {
-          id: true,
-          name: true,
-          branches: {
-            orderBy: { createdAt: "asc" },
-            take: 1,
-            select: { id: true },
-          },
-          subscription: {
-            select: {
-              status: true,
-              managementUrl: true,
-            },
-          },
-          accessGrants: {
-            where: {
-              revokedAt: null,
-              startsAt: { lte: now },
-              endsAt: { gte: now },
-            },
-            orderBy: { endsAt: "desc" },
-            take: 1,
-            select: activeGrantSelect,
-          },
-        },
+        select: kioscoAccessSelect,
       },
     },
   });
@@ -394,6 +392,7 @@ export async function getKioscoAccessContextByAccessKey(accessKey: string): Prom
       subscriptionStatus: null,
       managementUrl: null,
       activeGrant: null,
+      manualOverride: null,
     };
   }
 
@@ -403,7 +402,15 @@ export async function getKioscoAccessContextByAccessKey(accessKey: string): Prom
     firstBranchId: branch.id,
     subscriptionStatus: branch.kiosco.subscription?.status ?? null,
     managementUrl: branch.kiosco.subscription?.managementUrl ?? null,
-    activeGrant: branch.kiosco.accessGrants[0] ?? null,
+    activeGrant: branch.kiosco.accessGrants.find((grant) => grant.startsAt <= now && grant.endsAt >= now) ?? null,
+    manualOverride:
+      branch.kiosco.accessOverride === "INHERIT"
+        ? null
+        : {
+            mode: branch.kiosco.accessOverride,
+            note: branch.kiosco.accessOverrideNote,
+            changedAt: branch.kiosco.accessOverrideAt,
+          },
   });
 }
 

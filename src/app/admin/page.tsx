@@ -1,4 +1,4 @@
-import { AccessGrantKind } from "@prisma/client";
+import { AccessGrantKind, KioscoAccessOverride } from "@prisma/client";
 import { auth, signOut } from "@/lib/auth";
 import { isPlatformAdmin } from "@/lib/platform-admin";
 import { prisma } from "@/lib/prisma";
@@ -72,6 +72,36 @@ async function revokeGrant(formData: FormData) {
   revalidatePath("/admin");
 }
 
+async function setAccessOverride(formData: FormData) {
+  "use server";
+
+  const session = await ensurePlatformAdmin();
+  const kioscoId = String(formData.get("kioscoId") ?? "");
+  const override = String(formData.get("override") ?? "INHERIT");
+  const note = String(formData.get("note") ?? "").trim();
+
+  if (!kioscoId) {
+    return;
+  }
+
+  const normalizedOverride =
+    override === KioscoAccessOverride.FORCE_ALLOW || override === KioscoAccessOverride.FORCE_BLOCK
+      ? override
+      : KioscoAccessOverride.INHERIT;
+
+  await prisma.kiosco.update({
+    where: { id: kioscoId },
+    data: {
+      accessOverride: normalizedOverride,
+      accessOverrideNote: note || null,
+      accessOverrideAt: new Date(),
+      accessOverrideById: session.user.id,
+    },
+  });
+
+  revalidatePath("/admin");
+}
+
 export default async function AdminPage() {
   await ensurePlatformAdmin();
 
@@ -100,6 +130,15 @@ export default async function AdminPage() {
           status: true,
           managementUrl: true,
           updatedAt: true,
+        },
+      },
+      accessOverride: true,
+      accessOverrideNote: true,
+      accessOverrideAt: true,
+      accessOverrideBy: {
+        select: {
+          email: true,
+          name: true,
         },
       },
       accessGrants: {
@@ -166,6 +205,12 @@ export default async function AdminPage() {
         <div style={{ display: "grid", gap: "16px" }}>
           {kioscos.map((kiosco) => {
             const activeGrant = kiosco.accessGrants.find((grant) => !grant.revokedAt && grant.endsAt >= new Date());
+            const overrideLabel =
+              kiosco.accessOverride === "FORCE_ALLOW"
+                ? "Habilitada manualmente"
+                : kiosco.accessOverride === "FORCE_BLOCK"
+                  ? "Bloqueada manualmente"
+                  : "Seguir suscripcion";
 
             return (
               <section
@@ -208,6 +253,10 @@ export default async function AdminPage() {
                     </strong>
                   </div>
                   <div style={{ padding: "14px", borderRadius: "16px", background: "rgba(30,41,59,.8)" }}>
+                    <div style={{ fontSize: "12px", color: "#94a3b8", marginBottom: "6px" }}>Override manual</div>
+                    <strong>{overrideLabel}</strong>
+                  </div>
+                  <div style={{ padding: "14px", borderRadius: "16px", background: "rgba(30,41,59,.8)" }}>
                     <div style={{ fontSize: "12px", color: "#94a3b8", marginBottom: "6px" }}>Alta del kiosco</div>
                     <strong>{formatDate(kiosco.createdAt)}</strong>
                   </div>
@@ -240,44 +289,78 @@ export default async function AdminPage() {
                     </button>
                   </form>
 
-                  <div style={{ display: "grid", gap: "10px" }}>
-                    <div style={{ fontWeight: 700 }}>Ultimos grants</div>
-                    {kiosco.accessGrants.length === 0 ? (
-                      <div style={{ color: "#94a3b8" }}>Todavia no hay accesos temporales registrados.</div>
-                    ) : (
-                      kiosco.accessGrants.map((grant) => (
-                        <div
-                          key={grant.id}
-                          style={{
-                            padding: "12px 14px",
-                            borderRadius: "14px",
-                            background: "rgba(30,41,59,.8)",
-                            display: "grid",
-                            gap: "6px",
-                          }}
-                        >
-                          <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
-                            <strong>{grant.kind === "ADMIN_INVITE" ? "Invitacion" : "Gracia"}</strong>
-                            <span style={{ color: "#94a3b8", fontSize: "13px" }}>
-                              {formatDate(grant.startsAt)} a {formatDate(grant.endsAt)}
-                            </span>
-                          </div>
-                          {grant.note && <div style={{ color: "#cbd5e1", fontSize: "14px" }}>{grant.note}</div>}
-                          {grant.revokedAt ? (
-                            <div style={{ color: "#fca5a5", fontSize: "13px" }}>
-                              Revocado el {formatDate(grant.revokedAt)}
-                            </div>
-                          ) : (
-                            <form action={revokeGrant}>
-                              <input type="hidden" name="grantId" value={grant.id} />
-                              <button type="submit" className="btn btn-ghost">
-                                Revocar
-                              </button>
-                            </form>
+                  <div style={{ display: "grid", gap: "18px" }}>
+                    <form action={setAccessOverride} style={{ display: "grid", gap: "10px" }}>
+                      <input type="hidden" name="kioscoId" value={kiosco.id} />
+                      <div style={{ fontWeight: 700 }}>Habilitar o bloquear manualmente</div>
+                      <select name="override" className="input" defaultValue={kiosco.accessOverride}>
+                        <option value={KioscoAccessOverride.INHERIT}>Seguir suscripcion o gracia</option>
+                        <option value={KioscoAccessOverride.FORCE_ALLOW}>Habilitar manualmente</option>
+                        <option value={KioscoAccessOverride.FORCE_BLOCK}>Bloquear manualmente</option>
+                      </select>
+                      <textarea
+                        name="note"
+                        className="input"
+                        placeholder="Motivo interno"
+                        rows={3}
+                        defaultValue={kiosco.accessOverrideNote ?? ""}
+                        style={{ resize: "vertical" }}
+                      />
+                      <button type="submit" className="btn btn-secondary">
+                        Guardar override
+                      </button>
+                      {kiosco.accessOverrideAt && (
+                        <div style={{ color: "#94a3b8", fontSize: "13px", lineHeight: 1.5 }}>
+                          Ultimo cambio: {formatDate(kiosco.accessOverrideAt)}
+                          {kiosco.accessOverrideBy && (
+                            <>
+                              {" "}
+                              por {kiosco.accessOverrideBy.name || kiosco.accessOverrideBy.email}
+                            </>
                           )}
                         </div>
-                      ))
-                    )}
+                      )}
+                    </form>
+
+                    <div style={{ display: "grid", gap: "10px" }}>
+                      <div style={{ fontWeight: 700 }}>Ultimos grants</div>
+                      {kiosco.accessGrants.length === 0 ? (
+                        <div style={{ color: "#94a3b8" }}>Todavia no hay accesos temporales registrados.</div>
+                      ) : (
+                        kiosco.accessGrants.map((grant) => (
+                          <div
+                            key={grant.id}
+                            style={{
+                              padding: "12px 14px",
+                              borderRadius: "14px",
+                              background: "rgba(30,41,59,.8)",
+                              display: "grid",
+                              gap: "6px",
+                            }}
+                          >
+                            <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
+                              <strong>{grant.kind === "ADMIN_INVITE" ? "Invitacion" : "Gracia"}</strong>
+                              <span style={{ color: "#94a3b8", fontSize: "13px" }}>
+                                {formatDate(grant.startsAt)} a {formatDate(grant.endsAt)}
+                              </span>
+                            </div>
+                            {grant.note && <div style={{ color: "#cbd5e1", fontSize: "14px" }}>{grant.note}</div>}
+                            {grant.revokedAt ? (
+                              <div style={{ color: "#fca5a5", fontSize: "13px" }}>
+                                Revocado el {formatDate(grant.revokedAt)}
+                              </div>
+                            ) : (
+                              <form action={revokeGrant}>
+                                <input type="hidden" name="grantId" value={grant.id} />
+                                <button type="submit" className="btn btn-ghost">
+                                  Revocar
+                                </button>
+                              </form>
+                            )}
+                          </div>
+                        ))
+                      )}
+                    </div>
                   </div>
                 </div>
               </section>

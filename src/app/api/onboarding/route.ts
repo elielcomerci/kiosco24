@@ -33,8 +33,22 @@ export async function POST(req: Request) {
   const { kioscoName } = await req.json().catch(() => ({ kioscoName: "Mi Kiosco" }));
 
   // Check if kiosco already exists
-  const existing = await prisma.kiosco.findUnique({ where: { ownerId: session.user.id } });
-  if (existing) return NextResponse.json({ kiosco: existing, alreadySetup: true });
+  const existing = await prisma.kiosco.findUnique({
+    where: { ownerId: session.user.id },
+    include: {
+      branches: {
+        orderBy: { createdAt: "asc" },
+        take: 1,
+      },
+    },
+  });
+  if (existing) {
+    return NextResponse.json({
+      kiosco: existing,
+      alreadySetup: true,
+      branchId: existing.branches[0]?.id ?? null,
+    });
+  }
 
   // Create kiosco, branch, products and inventory records all together
   const kiosco = await prisma.kiosco.create({

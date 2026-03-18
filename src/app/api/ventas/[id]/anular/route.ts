@@ -1,6 +1,9 @@
 import { auth } from "@/lib/auth";
+import { guardOperationalAccess } from "@/lib/access-control";
+import { getBranchContext } from "@/lib/branch";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
+import { createShiftForbiddenResponse, getActiveShift } from "@/lib/shift-access";
 
 // POST /api/ventas/[id]/anular
 export async function POST(
@@ -10,14 +13,32 @@ export async function POST(
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { id } = await params;
+  const accessResponse = await guardOperationalAccess(session.user);
+  if (accessResponse) {
+    return accessResponse;
+  }
 
-  const sale = await prisma.sale.findUnique({
-    where: { id },
+  const { id } = await params;
+  const { branchId } = await getBranchContext(req, session.user.id);
+
+  const sale = await prisma.sale.findFirst({
+    where: {
+      id,
+      ...(session.user.role === "EMPLOYEE"
+        ? { branchId: branchId ?? "__blocked__" }
+        : { branch: { kiosco: { ownerId: session.user.id } } }),
+    },
     include: { items: true },
   });
 
   if (!sale) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  if ((session.user as any)?.role === "EMPLOYEE") {
+    const activeShift = branchId ? await getActiveShift(branchId) : null;
+    if (!activeShift || activeShift.employeeId !== (session.user as any)?.employeeId) {
+      return createShiftForbiddenResponse(activeShift ?? { employeeName: "otro responsable" });
+    }
+  }
 
   // Revert credit balance if it was a fiado
   if (sale.creditCustomerId) {

@@ -1,9 +1,30 @@
+import { UserRole } from "@prisma/client";
+
+import { getKioscoAccessContextForSession } from "./access-control";
 import { prisma } from "./prisma";
 
 export async function getBranchContext(req: Request, userId: string): Promise<{ branchId: string | null; kioscoId: string | null }> {
   // 1. Try header (passed by frontend)
   const headerId = req.headers.get("x-branch-id");
   const preferredBranchId = (headerId && headerId !== "undefined") ? headerId : null;
+
+  const access = await getKioscoAccessContextForSession(
+    userId.startsWith("emp_")
+      ? {
+          id: userId,
+          role: UserRole.EMPLOYEE,
+          employeeId: userId.replace("emp_", ""),
+          branchId: preferredBranchId ?? undefined,
+        }
+      : {
+          id: userId,
+          role: UserRole.OWNER,
+        },
+  );
+
+  if (!access.allowed) {
+    return { branchId: null, kioscoId: access.kioscoId };
+  }
 
   if (userId.startsWith("emp_")) {
     const realId = userId.replace("emp_", "");

@@ -9,8 +9,9 @@ import GastoModal from "@/components/caja/GastoModal";
 import OtroModal from "@/components/caja/OtroModal";
 import RetiroModal from "@/components/caja/RetiroModal";
 import CreditCustomerModal from "@/components/caja/CreditCustomerModal";
-import OpenShiftModal from "@/components/turnos/OpenShiftModal";
+import OpenShiftModal, { type ShiftAssignee } from "@/components/turnos/OpenShiftModal";
 import CloseShiftModal from "@/components/turnos/CloseShiftModal";
+import TransferShiftModal from "@/components/turnos/TransferShiftModal";
 import BarcodeScanner from "@/components/caja/BarcodeScanner";
 import QuickRestockModal from "@/components/caja/QuickRestockModal";
 import { savePendingSale } from "@/lib/offline/db";
@@ -71,6 +72,34 @@ import { useParams } from "next/navigation";
 
 // ... (types)
 
+function BarcodeActionIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+      <rect x="1" y="2" width="1.5" height="14" rx="0.75" fill="currentColor" />
+      <rect x="4" y="2" width="2" height="14" rx="1" fill="currentColor" />
+      <rect x="7.5" y="2" width="1" height="14" rx="0.5" fill="currentColor" />
+      <rect x="10" y="2" width="2.5" height="14" rx="1.25" fill="currentColor" />
+      <rect x="14" y="2" width="1" height="14" rx="0.5" fill="currentColor" />
+      <rect x="16" y="2" width="1" height="14" rx="0.5" fill="currentColor" />
+    </svg>
+  );
+}
+
+function AddStockActionIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+      <path
+        d="M3 6.5 9 3l6 3.5v5L9 15l-6-3.5v-5Z"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinejoin="round"
+      />
+      <path d="M9 3v12M3 6.5l6 3.5 6-3.5" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+      <path d="M13.5 1.8v4M11.5 3.8h4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export default function CajaPage() {
   const params = useParams();
   const branchId = params.branchId as string;
@@ -95,6 +124,7 @@ export default function CajaPage() {
   const [activeShift, setActiveShift] = useState<any | null>(null);
   const [showOpenShift, setShowOpenShift] = useState(false);
   const [showCloseShift, setShowCloseShift] = useState(false);
+  const [showTransferShift, setShowTransferShift] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [showRestockModal, setShowRestockModal] = useState(false);
   const [cajaSearch, setCajaSearch] = useState("");
@@ -108,6 +138,27 @@ export default function CajaPage() {
   const isOnline = useOnlineStatus();
   const total = ticket.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const cashSuggestions = getCashSuggestions(total);
+  const shiftResponsibleName = activeShift?.employee?.name || activeShift?.employeeName || "Dueño";
+  const canOperateCurrentShift = useMemo(() => {
+    if (!activeShift) return false;
+    if (userRole === "EMPLOYEE") {
+      return Boolean(employeeId && activeShift.employeeId && activeShift.employeeId === employeeId);
+    }
+    return !activeShift.employeeId;
+  }, [activeShift, employeeId, userRole]);
+  const canManageCurrentShift = useMemo(() => {
+    if (!activeShift) return false;
+    if (userRole === "EMPLOYEE") {
+      return Boolean(employeeId && activeShift.employeeId && activeShift.employeeId === employeeId);
+    }
+    return true;
+  }, [activeShift, employeeId, userRole]);
+  const shiftLocked = Boolean(activeShift && !canOperateCurrentShift);
+  const operationsDisabled = !activeShift || shiftLocked;
+  const shiftLockMessage =
+    userRole === "EMPLOYEE"
+      ? `La caja esta a nombre de ${shiftResponsibleName}. Pedile al responsable que te transfiera el turno para poder operar.`
+      : `La caja esta a nombre de ${shiftResponsibleName}. Transferi o cerra el turno para operar desde esta sesion.`;
 
   // ─── WakeLock Logic ───────────────────────────────────────────────────────
   const wakeLockRef = useRef<any>(null);
@@ -182,40 +233,43 @@ export default function CajaPage() {
       await fetchStats();
 
       // 3. Check Active Shift
-      const shiftRes = await fetch(`/api/turnos`, {
-        headers: { "x-branch-id": branchId }
-      });
-      const shiftData = await shiftRes.json();
-      if (shiftData) {
-        setActiveShift(shiftData);
-      } else {
-        setShowOpenShift(true);
-      }
+      await fetchActiveShift();
     } catch {
       setLoading(false);
     }
   };
 
-  const handleOpenShift = async (amount: number, employeeName: string) => {
+  const explainShiftLock = () => {
+    alert(`La caja está a nombre de ${shiftResponsibleName}. Transferí o cerrá el turno para operar con este usuario.`);
+  };
+
+  const handleOpenShift = async ({ openingAmount, assignee }: { openingAmount: number; assignee: ShiftAssignee }) => {
     const res = await fetch("/api/turnos", {
       method: "POST",
       headers: { 
         "Content-Type": "application/json",
         "x-branch-id": branchId
       },
-      body: JSON.stringify({ openingAmount: amount, employeeName }),
+      body: JSON.stringify({ openingAmount, employeeId: assignee.employeeId }),
     });
     if (res.ok) {
       const shift = await res.json();
       setActiveShift(shift);
       setShowOpenShift(false);
       fetchStats();
+    } else {
+      const data = await res.json().catch(() => null);
+      alert(data?.error || "No se pudo abrir el turno.");
     }
   };
 
   const handleCloseShift = async (amount: number, note: string) => {
     if (!activeShift) return;
-    await fetch(`/api/turnos/${activeShift.id}/cerrar`, {
+    if (!canManageCurrentShift) {
+      explainShiftLock();
+      return;
+    }
+    const res = await fetch(`/api/turnos/${activeShift.id}/cerrar`, {
       method: "POST",
       headers: { 
         "Content-Type": "application/json",
@@ -223,10 +277,44 @@ export default function CajaPage() {
       },
       body: JSON.stringify({ closingAmount: amount, note }),
     });
-    setActiveShift(null);
-    setShowCloseShift(false);
-    setShowOpenShift(true);
-    fetchStats();
+    if (res.ok) {
+      setActiveShift(null);
+      setShowCloseShift(false);
+      setShowOpenShift(true);
+      fetchStats();
+    } else {
+      const data = await res.json().catch(() => null);
+      alert(data?.error || "No se pudo cerrar el turno.");
+    }
+  };
+
+  const handleTransferShift = async (assignee: ShiftAssignee) => {
+    if (!activeShift) return;
+    if (!canManageCurrentShift) {
+      explainShiftLock();
+      return;
+    }
+
+    const res = await fetch(`/api/turnos/${activeShift.id}/transferir`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-branch-id": branchId,
+      },
+      body: JSON.stringify({ employeeId: assignee.employeeId }),
+    });
+
+    if (res.ok) {
+      const nextShift = await res.json();
+      setActiveShift(nextShift);
+      setShowTransferShift(false);
+      setTicket([]);
+      setReceivedAmount("");
+      fetchStats();
+    } else {
+      const data = await res.json().catch(() => null);
+      alert(data?.error || "No se pudo transferir el turno.");
+    }
   };
 
   const fetchProducts = async () => {
@@ -237,7 +325,9 @@ export default function CajaPage() {
       const data = await res.json();
       setProducts(data);
 
-      const catRes = await fetch(`/api/categorias`);
+      const catRes = await fetch(`/api/categorias`, {
+        headers: { "x-branch-id": branchId }
+      });
       if (catRes.ok) {
         const catData = await catRes.json();
         setCategories(Array.isArray(catData) ? catData : []);
@@ -257,8 +347,73 @@ export default function CajaPage() {
     } catch {}
   };
 
+  const fetchActiveShift = useCallback(async () => {
+    try {
+      const shiftRes = await fetch(`/api/turnos`, {
+        headers: { "x-branch-id": branchId }
+      });
+
+      if (!shiftRes.ok) {
+        return;
+      }
+
+      const shiftData = await shiftRes.json();
+      if (shiftData) {
+        setActiveShift(shiftData);
+        setShowOpenShift(false);
+      } else {
+        setActiveShift(null);
+        setShowTransferShift(false);
+        setShowCloseShift(false);
+        setShowOpenShift(true);
+      }
+    } catch {}
+  }, [branchId]);
+
+  useEffect(() => {
+    if (status !== "authenticated") return;
+
+    const refreshShift = () => {
+      void fetchActiveShift();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        refreshShift();
+      }
+    };
+
+    const intervalId = window.setInterval(refreshShift, 8000);
+    window.addEventListener("focus", refreshShift);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", refreshShift);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [fetchActiveShift, status]);
+
   // ─── Product tap ─────────────────────────────────────────────────────────
+  const ensureCanOperateCurrentShift = () => {
+    if (!activeShift) {
+      alert("Abrí un turno para operar.");
+      return false;
+    }
+
+    if (!canOperateCurrentShift) {
+      explainShiftLock();
+      return false;
+    }
+
+    return true;
+  };
+
   const handleProductTap = useCallback((product: Product, variant?: Variant) => {
+    if (!ensureCanOperateCurrentShift()) {
+      return;
+    }
+
     // Si el producto tiene variantes y NO se pasó una variante específica, abrir selector
     if (product.variants && product.variants.length > 0 && !variant) {
       setVariantSelector({ product });
@@ -303,11 +458,15 @@ export default function CajaPage() {
     });
 
     if (variant) setVariantSelector(null);
-  }, []);
+  }, [activeShift, canOperateCurrentShift]);
 
   // Long press = -1
   const longPressTimer = useRef<NodeJS.Timeout | null>(null);
   const handleLongPressStart = (product: Product) => {
+    if (!ensureCanOperateCurrentShift()) {
+      return;
+    }
+
     longPressTimer.current = setTimeout(() => {
       setTicket((prev) => {
         const existing = prev.find((i) => i.productId === product.id);
@@ -328,17 +487,16 @@ export default function CajaPage() {
 
   // ─── REPETIR ─────────────────────────────────────────────────────────────
   const handleRepetir = () => {
+    if (!ensureCanOperateCurrentShift()) {
+      return;
+    }
     if (!lastSale) return;
     setTicket(lastSale.items.map((i) => ({ ...i })));
   };
 
   // ─── Payment ──────────────────────────────────────────────────────────────
   const handlePay = async (method: "CASH" | "MERCADOPAGO" | "TRANSFER" | "DEBIT" | "CREDIT_CARD" | "CREDIT", creditCustomerId?: string, creditCustomerName?: string) => {
-    // Permission check: If employee, must be the shift owner
-    if (userRole === "EMPLOYEE" && activeShift?.employeeId && activeShift.employeeId !== employeeId) {
-      alert("Solo el empleado que inició el turno (" + activeShift.employeeName + ") puede confirmar ventas.");
-      return;
-    }
+    if (!ensureCanOperateCurrentShift()) return;
 
     if (total === 0 && ticket.length === 0) return;
 
@@ -424,6 +582,7 @@ export default function CajaPage() {
           paymentMethod: method,
           receivedAmount: received,
           creditCustomerId,
+          createdByEmployeeId: employeeId,
         });
         alert("Hubo un problema de conexión. La venta se guardó como pendiente para sincronizar.");
       } catch (inner: any) {
@@ -447,6 +606,9 @@ export default function CajaPage() {
 
   // ─── CORREGIR ─────────────────────────────────────────────────────────────
   const handleCorregir = () => {
+    if (!ensureCanOperateCurrentShift()) {
+      return;
+    }
     if (!confirmedSale) return;
     setTicket(confirmedSale.items.map((i) => ({ ...i })));
     setConfirmedSale(null);
@@ -484,6 +646,10 @@ export default function CajaPage() {
 
   // ─── Ticket item controls ─────────────────────────────────────────────────
   const changeQty = (index: number, delta: number) => {
+    if (!ensureCanOperateCurrentShift()) {
+      return;
+    }
+
     setTicket((prev) => {
       const newTicket = [...prev];
       const item = newTicket[index];
@@ -501,6 +667,10 @@ export default function CajaPage() {
 
   // ─── Cash numpad ──────────────────────────────────────────────────────────
   const handleCashButton = () => {
+    if (!ensureCanOperateCurrentShift()) {
+      return;
+    }
+
     if (total === 0) return;
     setShowCashNumpad(true);
   };
@@ -631,7 +801,7 @@ export default function CajaPage() {
       </div>
       
       {/* Header */}
-      <div style={{ padding: "8px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", background: "var(--surface-2)", borderBottom: "1px solid var(--border)", flexShrink: 0 }}>
+      <div style={{ padding: "10px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", flexWrap: "wrap", background: "var(--surface-2)", borderBottom: "1px solid var(--border)", flexShrink: 0 }}>
         {activeShift ? (
           <span style={{ fontSize: "13px", color: "var(--text-3)", fontWeight: 600, display: "flex", gap: "8px", alignItems: "center" }}>
             {!isOnline && <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--amber)", display: "inline-block" }} />}
@@ -646,23 +816,53 @@ export default function CajaPage() {
             ▶ Abrir Turno
           </button>
         )}
-        <div style={{ display: "flex", gap: "8px" }}>
-           <button className="btn btn-sm btn-ghost" style={{ padding: "4px 10px", fontSize: "16px" }} onClick={() => setShowScanner(true)}>
+        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginLeft: "auto" }}>
+           <button className="btn btn-sm btn-primary" aria-label="Escanear" title="Escanear" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "8px", padding: "10px 14px", minHeight: "42px", minWidth: "120px", fontSize: 0, fontWeight: 700 }} onClick={() => setShowScanner(true)} disabled={operationsDisabled}>
+             <span style={{ display: "inline-flex", alignItems: "center", gap: "8px", fontSize: "13px", lineHeight: 1 }}>
+               <BarcodeActionIcon />
+               Escanear
+             </span>
              📷
            </button>
            <button 
              className="btn btn-sm btn-ghost" 
-             style={{ padding: "4px 8px", fontSize: "12px", color: "var(--text)" }} 
+             style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "8px", padding: "10px 14px", minHeight: "42px", minWidth: "150px", fontSize: 0, color: "var(--text)", fontWeight: 700 }} 
              onClick={() => setShowRestockModal(true)}
-             disabled={!activeShift}
+              disabled={operationsDisabled}
            >
+             <span style={{ display: "inline-flex", alignItems: "center", gap: "8px", fontSize: "13px", lineHeight: 1, color: "var(--text)" }}>
+               <AddStockActionIcon />
+               Agregar stock
+             </span>
              📦 Recepción
            </button>
-           <button className="btn btn-sm btn-ghost" style={{ padding: "4px 8px", fontSize: "12px", color: "var(--red)" }} onClick={() => setShowCloseShift(true)} disabled={!activeShift}>
+           {activeShift && canManageCurrentShift && (
+             <button className="btn btn-sm btn-ghost" style={{ padding: "4px 8px", fontSize: "12px" }} onClick={() => setShowTransferShift(true)}>
+               Transferir
+             </button>
+           )}
+           <button className="btn btn-sm btn-ghost" style={{ padding: "4px 8px", fontSize: "12px", color: "var(--red)" }} onClick={() => setShowCloseShift(true)} disabled={!activeShift || !canManageCurrentShift}>
              Cerrar Caja
            </button>
         </div>
       </div>
+
+      {shiftLocked && (
+        <div
+          style={{
+            margin: "12px 16px 0",
+            padding: "12px 14px",
+            borderRadius: "14px",
+            border: "1px solid rgba(245, 158, 11, 0.35)",
+            background: "rgba(245, 158, 11, 0.12)",
+            color: "var(--text)",
+            fontSize: "13px",
+            fontWeight: 600,
+          }}
+        >
+          {shiftLockMessage}
+        </div>
+      )}
 
 
       {/* POS BODY (Row on Desktop, Column on Mobile) */}
@@ -779,6 +979,7 @@ export default function CajaPage() {
                 onMouseUp={handleLongPressEnd}
                 onTouchStart={() => handleLongPressStart(product)}
                 onTouchEnd={handleLongPressEnd}
+                disabled={operationsDisabled}
                 style={
                   inTicket 
                   ? { borderColor: "var(--primary)", background: "rgba(var(--primary-rgb, 34, 197, 94), 0.08)", fontSize: "13px", ...(isSelected ? { outline: "2px solid var(--primary)", transform: "scale(1.02)" } : {}) } 
@@ -856,6 +1057,7 @@ export default function CajaPage() {
                 <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                   <button
                     onClick={(e) => { e.stopPropagation(); changeQty(idx, -1); }}
+                    disabled={operationsDisabled}
                     style={{ width: "28px", height: "28px", background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: "6px", cursor: "pointer", color: "var(--text-2)", fontSize: "16px" }}
                   >
                     −
@@ -863,6 +1065,7 @@ export default function CajaPage() {
                   <span style={{ minWidth: "20px", textAlign: "center", fontWeight: 600 }}>{item.quantity}</span>
                   <button
                     onClick={(e) => { e.stopPropagation(); changeQty(idx, 1); }}
+                    disabled={operationsDisabled}
                     style={{ width: "28px", height: "28px", background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: "6px", cursor: "pointer", color: "var(--text-2)", fontSize: "16px" }}
                   >
                     +
@@ -877,6 +1080,7 @@ export default function CajaPage() {
               <div style={{ marginTop: "8px", marginBottom: "8px" }}>
                 <button
                   onClick={handleRepetir}
+                  disabled={operationsDisabled}
                   style={{ width: "100%", padding: "10px", background: "var(--surface-3)", border: "1px dashed var(--border)", borderRadius: "var(--radius)", color: "var(--text-2)", fontSize: "13px", fontWeight: 600 }}
                 >
                   ↩ Repetir última venta
@@ -900,21 +1104,33 @@ export default function CajaPage() {
           <button
             className="btn btn-sm btn-ghost"
             style={{ fontSize: "12px", color: "var(--text-2)", border: "1px solid var(--border)" }}
-            onClick={() => setShowOtro(true)}
+            onClick={() => {
+              if (!ensureCanOperateCurrentShift()) return;
+              setShowOtro(true);
+            }}
+            disabled={operationsDisabled}
           >
             ➕ OTRO
           </button>
           <button
             className="btn btn-sm btn-ghost"
             style={{ fontSize: "12px", color: "var(--text-2)", border: "1px solid var(--border)" }}
-            onClick={() => setShowGasto(true)}
+            onClick={() => {
+              if (!ensureCanOperateCurrentShift()) return;
+              setShowGasto(true);
+            }}
+            disabled={operationsDisabled}
           >
             💸 GASTO
           </button>
           <button
             className="btn btn-sm btn-ghost"
             style={{ fontSize: "12px", color: "var(--text-2)", border: "1px solid var(--border)" }}
-            onClick={() => setShowRetiro(true)}
+            onClick={() => {
+              if (!ensureCanOperateCurrentShift()) return;
+              setShowRetiro(true);
+            }}
+            disabled={operationsDisabled}
           >
             💰 RETIRO
           </button>
@@ -932,7 +1148,7 @@ export default function CajaPage() {
             className="btn btn-ghost"
             style={{ flexDirection: "column", gap: "2px", borderStyle: "solid", height: "54px" }}
             onClick={handleCashButton}
-            disabled={total === 0}
+            disabled={total === 0 || operationsDisabled}
           >
             <span style={{ fontSize: "18px" }}>💵</span>
             <span style={{ fontSize: "10px", fontWeight: 700 }}>EFECTIVO</span>
@@ -941,7 +1157,7 @@ export default function CajaPage() {
             className="btn btn-ghost"
             style={{ flexDirection: "column", gap: "2px", height: "54px" }}
             onClick={() => handlePay("MERCADOPAGO")}
-            disabled={total === 0}
+            disabled={total === 0 || operationsDisabled}
           >
             <span style={{ fontSize: "18px" }}>📱</span>
             <span style={{ fontSize: "10px", fontWeight: 700 }}>MP</span>
@@ -950,7 +1166,7 @@ export default function CajaPage() {
             className="btn btn-ghost"
             style={{ flexDirection: "column", gap: "2px", height: "54px" }}
             onClick={() => handlePay("TRANSFER")}
-            disabled={total === 0}
+            disabled={total === 0 || operationsDisabled}
           >
             <span style={{ fontSize: "18px" }}>🏦</span>
             <span style={{ fontSize: "10px", fontWeight: 700 }}>TRANSF.</span>
@@ -959,7 +1175,7 @@ export default function CajaPage() {
             className="btn btn-ghost"
             style={{ flexDirection: "column", gap: "2px", height: "54px" }}
             onClick={() => handlePay("DEBIT")}
-            disabled={total === 0}
+            disabled={total === 0 || operationsDisabled}
           >
             <span style={{ fontSize: "18px" }}>💳</span>
             <span style={{ fontSize: "10px", fontWeight: 700 }}>DÉBITO</span>
@@ -968,7 +1184,7 @@ export default function CajaPage() {
             className="btn btn-ghost"
             style={{ flexDirection: "column", gap: "2px", height: "54px" }}
             onClick={() => handlePay("CREDIT_CARD")}
-            disabled={total === 0}
+            disabled={total === 0 || operationsDisabled}
           >
             <span style={{ fontSize: "18px" }}>🏧</span>
             <span style={{ fontSize: "10px", fontWeight: 700 }}>TARJETA</span>
@@ -976,8 +1192,11 @@ export default function CajaPage() {
           <button
             className="btn btn-ghost"
             style={{ flexDirection: "column", gap: "2px", borderColor: "var(--amber)", color: "var(--amber)", height: "54px" }}
-            onClick={() => setShowCredit(true)}
-            disabled={total === 0}
+            onClick={() => {
+              if (!ensureCanOperateCurrentShift()) return;
+              setShowCredit(true);
+            }}
+            disabled={total === 0 || operationsDisabled}
           >
             <span style={{ fontSize: "18px" }}>📋</span>
             <span style={{ fontSize: "10px", fontWeight: 700 }}>FIADO</span>
@@ -1034,6 +1253,13 @@ export default function CajaPage() {
             retiros: cajaStats.totalRetiros ?? 0,
             expectedAmount: cajaStats.enCaja,
           }}
+        />
+      )}
+      {showTransferShift && activeShift && (
+        <TransferShiftModal
+          currentResponsibleName={shiftResponsibleName}
+          onConfirm={handleTransferShift}
+          onCancel={() => setShowTransferShift(false)}
         />
       )}
       {showScanner && (

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { todayRange } from "@/lib/utils";
 import { getBranchId } from "@/lib/branch";
+import { canOperateShift, createShiftForbiddenResponse, getActiveShift } from "@/lib/shift-access";
 
 // GET /api/ventas — list today's sales
 export async function GET(req: Request) {
@@ -31,13 +32,19 @@ export async function POST(req: Request) {
   if (!branchId) return NextResponse.json({ error: "No branch" }, { status: 404 });
 
   const body = await req.json();
-  const { items, total, paymentMethod, receivedAmount, creditCustomerId, createdByEmployeeId } = body;
+  const { items, total, paymentMethod, receivedAmount, creditCustomerId } = body;
 
-  // Find active shift
-  const activeShift = await prisma.shift.findFirst({
-    where: { branchId, closedAt: null },
-    orderBy: { openedAt: "desc" },
-  });
+  const activeShift = await getActiveShift(branchId);
+  if (!activeShift) {
+    return NextResponse.json({ error: "No hay un turno abierto en esta sucursal." }, { status: 409 });
+  }
+
+  if (!canOperateShift(session.user as any, activeShift)) {
+    return createShiftForbiddenResponse(activeShift);
+  }
+
+  const createdByEmployeeId =
+    (session.user as any)?.role === "EMPLOYEE" ? (session.user as any)?.employeeId ?? null : null;
 
   const sale = await prisma.sale.create({
     data: {
@@ -45,9 +52,9 @@ export async function POST(req: Request) {
       total,
       paymentMethod,
       receivedAmount: receivedAmount ?? null,
-      shiftId: activeShift?.id ?? null,
+      shiftId: activeShift.id,
       creditCustomerId: creditCustomerId ?? null,
-      createdByEmployeeId: createdByEmployeeId ?? null,
+      createdByEmployeeId,
       items: {
         create: items.map((item: any) => ({
           productId: item.productId ?? null,

@@ -1,5 +1,6 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { syncSubscriptionFromMercadoPago } from "@/lib/subscription";
 import { NextResponse } from "next/server";
 
 export async function GET(req: Request) {
@@ -17,41 +18,28 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Kiosco no encontrado" }, { status: 404 });
   }
 
-  const sub = kiosco.subscription;
-
-  if (!sub) {
+  if (!kiosco.subscription) {
     return NextResponse.json(null);
   }
 
-  // Auto-heal managementUrl si existe el MP Preapproval ID pero no la URL
-  if (!sub.managementUrl && sub.mpPreapprovalId) {
-    try {
-      const mpHeaders = {
-        Authorization: `Bearer ${process.env.MP_ACCESS_TOKEN}`,
-      };
-      
-      const res = await fetch(`https://api.mercadopago.com/preapproval/${sub.mpPreapprovalId}`, {
-        headers: mpHeaders,
-      });
+  let status = kiosco.subscription.status;
+  let managementUrl = kiosco.subscription.managementUrl;
+  let updatedAt = kiosco.subscription.updatedAt;
 
-      if (res.ok) {
-        const mpData = await res.json();
-        if (mpData.permalink) {
-          sub.managementUrl = mpData.permalink;
-          await prisma.subscription.update({
-            where: { id: sub.id },
-            data: { managementUrl: mpData.permalink },
-          });
-        }
-      }
-    } catch (e) {
-      console.error("[Subscription Status] Error recupeando permalink:", e);
+  try {
+    const syncedSubscription = await syncSubscriptionFromMercadoPago(kiosco.subscription.id);
+    if (syncedSubscription) {
+      status = syncedSubscription.status;
+      managementUrl = syncedSubscription.managementUrl;
+      updatedAt = syncedSubscription.updatedAt;
     }
+  } catch (error) {
+    console.error("[Subscription Status] Error sincronizando con MercadoPago:", error);
   }
 
   return NextResponse.json({
-    status: sub.status,
-    managementUrl: sub.managementUrl,
-    updatedAt: sub.updatedAt,
+    status,
+    managementUrl,
+    updatedAt,
   });
 }

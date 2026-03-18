@@ -579,6 +579,11 @@ export default function ConfiguracionPage() {
   const [mpSetupLoading, setMpSetupLoading] = useState(false);
   const [mpSetupError, setMpSetupError] = useState<string | null>(null);
 
+  const accessEntryUrl =
+    currentBranch?.accessKey && typeof window !== "undefined"
+      ? `${window.location.origin}/${currentBranch.accessKey}`
+      : "";
+
   // Auto-trigger setup-pos cuando MP acaba de conectarse (viene con ?mp=connected)
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -642,6 +647,17 @@ export default function ConfiguracionPage() {
       }
     }
     setLoadingCurrentBranch(false);
+  };
+
+  const copyAccessValue = async (value: string, successMessage: string) => {
+    if (!value) return;
+
+    try {
+      await navigator.clipboard.writeText(value);
+      alert(successMessage);
+    } catch {
+      alert("No se pudo copiar automaticamente. Proba de nuevo.");
+    }
   };
 
   const fetchSubscription = async () => {
@@ -1074,8 +1090,8 @@ export default function ConfiguracionPage() {
           }}
         >
           <p style={{ fontSize: "13px", color: "var(--text-3)", lineHeight: "1.5" }}>
-            Usá este código para autorizar teléfonos o PCs de empleados sin compartir tu contraseña de dueño. 
-            Cualquier dispositivo con este código podrá ver el selector de empleados.
+            Usá este código para autorizar teléfonos o PCs de empleados sin compartir tu contraseña de dueño.
+            También podés compartir el enlace directo para abrir el selector de empleados al instante.
           </p>
           
           <div style={{ 
@@ -1092,6 +1108,54 @@ export default function ConfiguracionPage() {
           }}>
             {currentBranch?.accessKey || "SIN CÓDIGO GENERADO"}
           </div>
+
+          {currentBranch?.accessKey && (
+            <>
+              <div
+                style={{
+                  background: "var(--surface-2)",
+                  padding: "12px",
+                  borderRadius: "8px",
+                  border: "1px solid var(--border)",
+                  fontSize: "13px",
+                  color: "var(--text-2)",
+                  textAlign: "center",
+                  wordBreak: "break-all",
+                }}
+              >
+                {accessEntryUrl || `/${currentBranch.accessKey}`}
+              </div>
+
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", justifyContent: "center" }}>
+                <button
+                  className="btn btn-sm btn-ghost"
+                  style={{ border: "1px solid var(--border)" }}
+                  onClick={() => void copyAccessValue(currentBranch.accessKey!, "Codigo copiado.")}
+                >
+                  Copiar codigo
+                </button>
+                <button
+                  className="btn btn-sm btn-ghost"
+                  style={{ border: "1px solid var(--border)" }}
+                  onClick={() => void copyAccessValue(accessEntryUrl, "Enlace copiado.")}
+                  disabled={!accessEntryUrl}
+                >
+                  Copiar enlace
+                </button>
+                {accessEntryUrl && (
+                  <a
+                    href={accessEntryUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn btn-sm btn-ghost"
+                    style={{ border: "1px solid var(--border)", textDecoration: "none" }}
+                  >
+                    Abrir enlace
+                  </a>
+                )}
+              </div>
+            </>
+          )}
 
           <button 
             className="btn btn-sm btn-ghost" 

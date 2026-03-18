@@ -1,3 +1,4 @@
+import { getKioscoAccessContextByAccessKey } from "@/lib/access-control";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 
@@ -8,6 +9,11 @@ export async function GET(
   const { key } = await params;
 
   try {
+    const access = await getKioscoAccessContextByAccessKey(key);
+    if (!access.allowed) {
+      return NextResponse.json({ error: "La sucursal no tiene acceso vigente." }, { status: 402 });
+    }
+
     const branch = await prisma.branch.findUnique({
       where: { accessKey: key },
       select: {

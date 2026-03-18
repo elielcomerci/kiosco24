@@ -1,29 +1,39 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSession } from "next-auth/react";
 import { useParams } from "next/navigation";
+
 import NumPad from "@/components/ui/NumPad";
 import PinModal from "@/components/ui/PinModal";
 
 interface Employee {
   id: string;
   name: string;
-  hasPin: boolean; // We only expose whether they HAVE a pin, not the pin itself
+  hasPin: boolean;
+}
+
+export interface ShiftAssignee {
+  employeeId: string | null;
+  employeeName: string;
 }
 
 interface OpenShiftModalProps {
-  onConfirm: (amount: number, employeeName: string) => void;
+  onConfirm: (payload: { openingAmount: number; assignee: ShiftAssignee }) => void | Promise<void>;
 }
 
 export default function OpenShiftModal({ onConfirm }: OpenShiftModalProps) {
   const { branchId } = useParams() as { branchId: string };
+  const { data: session } = useSession();
+  const userRole = (session?.user as any)?.role as string | undefined;
+  const sessionEmployeeId = (session?.user as any)?.employeeId as string | undefined;
+  const sessionName = (session?.user as any)?.name as string | undefined;
+
   const [employees, setEmployees] = useState<Employee[]>([]);
-  const [selectedEmployee, setSelectedEmployee] = useState("");
-  const [customName, setCustomName] = useState("");
+  const [selectedEmployee, setSelectedEmployee] = useState<string>("owner");
   const [amount, setAmount] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // PIN verification flow
   const [showPinModal, setShowPinModal] = useState(false);
   const [pinError, setPinError] = useState<string | null>(null);
   const [pinLoading, setPinLoading] = useState(false);
@@ -36,7 +46,6 @@ export default function OpenShiftModal({ onConfirm }: OpenShiftModalProps) {
     })
       .then((r) => r.json())
       .then((data) => {
-        // Only active employees, add hasPin flag
         const active = Array.isArray(data)
           ? data.map((e: any) => ({
               id: e.id,
@@ -45,41 +54,59 @@ export default function OpenShiftModal({ onConfirm }: OpenShiftModalProps) {
             }))
           : [];
         setEmployees(active);
-        if (active.length > 0) setSelectedEmployee(active[0].id);
-        else setSelectedEmployee("owner");
-      })
-      .catch(() => setSelectedEmployee("owner"));
-  }, [branchId]);
 
-  const resolvedName =
-    selectedEmployee === "owner"
-      ? "Dueño"
-      : selectedEmployee === "custom"
-      ? customName.trim() || "Sin nombre"
-      : employees.find((e) => e.id === selectedEmployee)?.name || "Dueño";
+        if (userRole === "EMPLOYEE" && sessionEmployeeId) {
+          setSelectedEmployee(sessionEmployeeId);
+        } else if (active.length > 0) {
+          setSelectedEmployee(active[0].id);
+        } else {
+          setSelectedEmployee("owner");
+        }
+      })
+      .catch(() => {
+        if (userRole === "EMPLOYEE" && sessionEmployeeId) {
+          setSelectedEmployee(sessionEmployeeId);
+        } else {
+          setSelectedEmployee("owner");
+        }
+      });
+  }, [branchId, userRole, sessionEmployeeId]);
 
   const selectedEmp = employees.find((e) => e.id === selectedEmployee);
+  const resolvedAssignee: ShiftAssignee =
+    userRole === "EMPLOYEE"
+      ? {
+          employeeId: sessionEmployeeId ?? null,
+          employeeName: sessionName || selectedEmp?.name || "Empleado",
+        }
+      : selectedEmp
+        ? { employeeId: selectedEmp.id, employeeName: selectedEmp.name }
+        : { employeeId: null, employeeName: "Dueño" };
+
+  const proceed = async () => {
+    setLoading(true);
+    await onConfirm({
+      openingAmount: parseFloat(amount),
+      assignee: resolvedAssignee,
+    });
+    setLoading(false);
+  };
 
   const handleConfirmClick = async () => {
     if (!amount) return;
-    // If selected employee has PIN, show PIN modal first
-    if (selectedEmp?.hasPin) {
+
+    if (selectedEmp?.hasPin && resolvedAssignee.employeeId) {
       setPinError(null);
       setShowPinModal(true);
       return;
     }
-    // No PIN needed — proceed
+
     proceed();
   };
 
-  const proceed = async () => {
-    setLoading(true);
-    await onConfirm(parseFloat(amount), resolvedName);
-    setLoading(false);
-  };
-
   const handlePinConfirm = async (pin: string) => {
-    if (!selectedEmp) return;
+    if (!resolvedAssignee.employeeId) return;
+
     setPinLoading(true);
     setPinError(null);
 
@@ -89,7 +116,7 @@ export default function OpenShiftModal({ onConfirm }: OpenShiftModalProps) {
         "Content-Type": "application/json",
         "x-branch-id": branchId,
       },
-      body: JSON.stringify({ employeeId: selectedEmp.id, pin }),
+      body: JSON.stringify({ employeeId: resolvedAssignee.employeeId, pin }),
     });
     const data = await res.json();
     setPinLoading(false);
@@ -109,52 +136,57 @@ export default function OpenShiftModal({ onConfirm }: OpenShiftModalProps) {
           <div>
             <h2 style={{ fontSize: "20px", fontWeight: 700 }}>Abrir Turno</h2>
             <p style={{ color: "var(--text-2)", fontSize: "14px", marginBottom: "16px" }}>
-              Ingresá el dinero con el que abrís la caja y quién atiende.
+              Ingresá el dinero con el que abrís la caja y quién queda a cargo.
             </p>
           </div>
 
-          {/* Employee Selector */}
           <div style={{ marginBottom: "12px" }}>
-            <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: "6px" }}>
-              ¿Quién atiende?
+            <label
+              style={{
+                fontSize: "12px",
+                color: "var(--text-3)",
+                fontWeight: 600,
+                textTransform: "uppercase",
+                letterSpacing: "0.05em",
+                display: "block",
+                marginBottom: "6px",
+              }}
+            >
+              Responsable del turno
             </label>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
-              {/* Always show Dueño */}
-              <button
-                className={`btn btn-sm ${selectedEmployee === "owner" ? "btn-green" : "btn-ghost"}`}
-                onClick={() => setSelectedEmployee("owner")}
-              >
-                🏠 Dueño
-              </button>
-              {/* Active employees */}
-              {employees.map((emp) => (
-                <button
-                  key={emp.id}
-                  className={`btn btn-sm ${selectedEmployee === emp.id ? "btn-green" : "btn-ghost"}`}
-                  onClick={() => setSelectedEmployee(emp.id)}
-                >
-                  {emp.name}
-                  {emp.hasPin && <span style={{ marginLeft: "4px", fontSize: "11px", opacity: 0.7 }}>🔐</span>}
-                </button>
-              ))}
-              {/* Custom option */}
-              <button
-                className={`btn btn-sm ${selectedEmployee === "custom" ? "btn-green" : "btn-ghost"}`}
-                onClick={() => setSelectedEmployee("custom")}
-              >
-                ✏️ Otro
-              </button>
-            </div>
 
-            {selectedEmployee === "custom" && (
-              <input
-                className="input"
-                placeholder="Nombre"
-                value={customName}
-                onChange={(e) => setCustomName(e.target.value)}
-                style={{ marginTop: "8px", textAlign: "center" }}
-                autoFocus
-              />
+            {userRole === "EMPLOYEE" ? (
+              <div
+                style={{
+                  padding: "12px 14px",
+                  borderRadius: "12px",
+                  border: "1px solid var(--border)",
+                  background: "var(--surface-2)",
+                  fontWeight: 700,
+                  textAlign: "center",
+                }}
+              >
+                {resolvedAssignee.employeeName}
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                <button
+                  className={`btn btn-sm ${selectedEmployee === "owner" ? "btn-green" : "btn-ghost"}`}
+                  onClick={() => setSelectedEmployee("owner")}
+                >
+                  Dueño
+                </button>
+                {employees.map((emp) => (
+                  <button
+                    key={emp.id}
+                    className={`btn btn-sm ${selectedEmployee === emp.id ? "btn-green" : "btn-ghost"}`}
+                    onClick={() => setSelectedEmployee(emp.id)}
+                  >
+                    {emp.name}
+                    {emp.hasPin && <span style={{ marginLeft: "4px", fontSize: "11px", opacity: 0.7 }}>🔐</span>}
+                  </button>
+                ))}
+              </div>
             )}
           </div>
 
@@ -176,22 +208,16 @@ export default function OpenShiftModal({ onConfirm }: OpenShiftModalProps) {
 
           <NumPad value={amount} onChange={setAmount} />
 
-          <button
-            className="btn btn-green"
-            style={{ marginTop: "10px" }}
-            onClick={handleConfirmClick}
-            disabled={!amount || loading || (selectedEmployee === "custom" && !customName.trim())}
-          >
+          <button className="btn btn-green" style={{ marginTop: "10px" }} onClick={handleConfirmClick} disabled={!amount || loading}>
             {loading ? "Abriendo..." : selectedEmp?.hasPin ? "Abrir Caja 🔐" : "Abrir Caja"}
           </button>
         </div>
       </div>
 
-      {/* PIN verification overlay */}
       {showPinModal && (
         <PinModal
-          title={`PIN de ${resolvedName}`}
-          subtitle="Ingresá tu PIN para confirmar"
+          title={`PIN de ${resolvedAssignee.employeeName}`}
+          subtitle="Ingresá el PIN para confirmar"
           onConfirm={handlePinConfirm}
           onCancel={() => setShowPinModal(false)}
           loading={pinLoading}

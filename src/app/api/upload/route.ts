@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { v2 as cloudinary } from "cloudinary";
 import { auth } from "@/lib/auth";
+import { guardOperationalAccess } from "@/lib/access-control";
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -15,6 +16,11 @@ export async function POST(req: Request) {
     const session = await auth();
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const accessResponse = await guardOperationalAccess(session.user);
+    if (accessResponse) {
+      return accessResponse;
     }
 
     const formData = await req.formData();

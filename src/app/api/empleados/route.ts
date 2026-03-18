@@ -8,15 +8,19 @@ import { InvalidEmployeePinError, isEmployeePinHash, prepareEmployeePinForStorag
 export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json([], { status: 401 });
-  if (session.user.role !== "OWNER") {
+  const { searchParams } = new URL(req.url);
+  const activeOnly = searchParams.get("activeOnly") === "true";
+
+  const canListEmployees =
+    session.user.role === "OWNER" ||
+    (session.user.role === "EMPLOYEE" && activeOnly);
+
+  if (!canListEmployees) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const { branchId } = await getBranchContext(req, session.user.id);
   if (!branchId) return NextResponse.json([], { status: 200 });
-
-  const { searchParams } = new URL(req.url);
-  const activeOnly = searchParams.get("activeOnly") === "true";
 
   const employees = await prisma.employee.findMany({
     where: { 
@@ -59,8 +63,12 @@ export async function GET(req: Request) {
     employees.map((employee) => ({
       id: employee.id,
       name: employee.name,
-      active: employee.active,
-      suspendedUntil: employee.suspendedUntil,
+      ...(session.user.role === "OWNER"
+        ? {
+            active: employee.active,
+            suspendedUntil: employee.suspendedUntil,
+          }
+        : {}),
       hasPin: Boolean(employee.pin),
     }))
   );

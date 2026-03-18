@@ -25,16 +25,16 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, error: "Datos incompletos" }, { status: 400 });
     }
 
-    // Find the employee, ensuring it belongs to a branch owned by this user
+    // Find the employee inside the active branch context
     const employee = await prisma.employee.findFirst({
       where: {
         id: employeeId,
         branchId,
-        branch: {
-          kiosco: {
-            ownerId: session.user.id,
-          },
-        },
+        active: true,
+        OR: [
+          { suspendedUntil: null },
+          { suspendedUntil: { lte: new Date() } },
+        ],
       },
       select: { id: true, pin: true },
     });

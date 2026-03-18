@@ -1,4 +1,6 @@
 import { auth, signOut } from "@/lib/auth";
+import { getKioscoAccessContextForSession } from "@/lib/access-control";
+import { isPlatformAdmin } from "@/lib/platform-admin";
 import { prisma } from "@/lib/prisma";
 import { notFound, redirect } from "next/navigation";
 import BottomNav from "@/components/ui/BottomNav";
@@ -16,6 +18,19 @@ export default async function BranchLayout({
   const session = await auth();
   if (!session?.user) {
     redirect("/login");
+  }
+
+  if (isPlatformAdmin(session.user)) {
+    redirect("/admin");
+  }
+
+  const access = await getKioscoAccessContextForSession(session.user);
+  if (access.reason === "NO_KIOSCO") {
+    redirect("/onboarding");
+  }
+
+  if (!access.allowed) {
+    redirect("/suscripcion");
   }
 
   const { branchId } = await params;

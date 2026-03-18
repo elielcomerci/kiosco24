@@ -3,10 +3,12 @@ import { auth } from "@/lib/auth";
 export default auth((req: any) => {
   const { nextUrl } = req;
   const isLoggedIn = !!req.auth?.user?.id;
+  const isEmployeeAccessLink = /^\/KIOSCO-[A-Z0-9]{8}-[A-Z0-9]{8}$/i.test(nextUrl.pathname);
 
   const isPublic = 
     nextUrl.pathname === "/" || 
     nextUrl.pathname === "/onboarding" || 
+    isEmployeeAccessLink ||
     nextUrl.pathname === "/sw.js" || 
     nextUrl.pathname === "/manifest.json" ||
     nextUrl.pathname.startsWith("/api/auth");

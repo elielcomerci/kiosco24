@@ -8,6 +8,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
+  if (session.user.role === "EMPLOYEE") {
+    return NextResponse.json({ error: "Solo el dueño puede gestionar la suscripcion." }, { status: 403 });
+  }
+
+  if (!session.user.email) {
+    return NextResponse.json({ error: "Falta un email valido para generar la suscripcion." }, { status: 400 });
+  }
+
   // 1. Obtener el kiosco del usuario
   const kiosco = await prisma.kiosco.findUnique({
     where: { ownerId: session.user.id },
@@ -43,7 +51,7 @@ export async function POST(req: NextRequest) {
     },
     // MP requiere el payer_email
     payer_email: session.user.email,
-    back_url: `${process.env.NEXTAUTH_URL}/onboarding?success=subscription_created`,
+    back_url: `${process.env.NEXTAUTH_URL}/suscripcion?source=mercadopago`,
     status: "pending",
   };
 

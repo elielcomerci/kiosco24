@@ -5,6 +5,7 @@ import Credentials from "next-auth/providers/credentials";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
+import { getKioscoAccessContextByAccessKey } from "@/lib/access-control";
 import { InvalidEmployeePinError, verifyEmployeePinValue } from "@/lib/employee-pin";
 import { UserRole } from "@prisma/client";
 
@@ -92,6 +93,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         });
 
         if (!branch) {
+          return null;
+        }
+
+        const access = await getKioscoAccessContextByAccessKey(credentials.accessKey as string);
+        if (!access.allowed) {
           return null;
         }
 

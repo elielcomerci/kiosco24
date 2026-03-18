@@ -38,8 +38,8 @@ export default function OnboardingPage() {
         // Redirigir a MercadoPago para suscribirse
         window.location.href = subData.init_point;
       } else {
-        alert("Tu kiosco fue creado, pero hubo un error generando la suscripción.");
-        router.push(`/${data.branchId}/caja`);
+        alert("Tu kiosco fue creado, pero falta activar la suscripcion.");
+        router.push("/suscripcion");
       }
     } catch (err) {
       console.error(err);

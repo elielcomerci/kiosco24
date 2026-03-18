@@ -1,4 +1,5 @@
 import { auth, signOut } from "@/lib/auth";
+import { isPlatformAdmin } from "@/lib/platform-admin";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import Link from "next/link";
@@ -99,12 +100,22 @@ export default async function LandingPage() {
 
         <div style={{ display: "flex", gap: "16px", justifyContent: "center", flexWrap: "wrap" }}>
           {session ? (
-            <Link href={branchId ? `/${branchId}/caja` : "/onboarding"} className="btn btn-primary btn-lg" style={{ padding: "16px 40px" }}>
-              Ir a mi Kiosco 🚀
+            <Link
+              href={
+                isPlatformAdmin(session.user)
+                  ? "/admin"
+                  : branchId
+                    ? `/${branchId}/caja`
+                    : "/onboarding"
+              }
+              className="btn btn-primary btn-lg"
+              style={{ padding: "16px 40px" }}
+            >
+              {isPlatformAdmin(session.user) ? "Ir al Admin" : "Ir a mi Kiosco 🚀"}
             </Link>
           ) : (
             <Link href="/login" className="btn btn-primary btn-lg" style={{ padding: "16px 40px" }}>
-              Crear mi cuenta gratis
+              Crear mi cuenta
             </Link>
           )}
           <a href="#features" className="btn btn-secondary btn-lg" style={{ padding: "16px 40px" }}>

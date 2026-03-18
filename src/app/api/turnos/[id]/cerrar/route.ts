@@ -1,6 +1,12 @@
 import { auth } from "@/lib/auth";
+import { getBranchId } from "@/lib/branch";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
+import {
+  canManageShiftLifecycle,
+  computeShiftExpectedAmount,
+  createShiftForbiddenResponse,
+} from "@/lib/shift-access";
 
 // POST /api/turnos/[id]/cerrar
 export async function POST(
@@ -12,34 +18,27 @@ export async function POST(
 
   const { id } = await params;
   const { closingAmount, note } = await req.json();
+  const branchId = await getBranchId(req, session.user.id);
+  if (!branchId) return NextResponse.json({ error: "No branch" }, { status: 404 });
 
   const shift = await prisma.shift.findUnique({
     where: { id },
+    include: {
+      employee: {
+        select: { id: true, name: true },
+      },
+    },
   });
 
   if (!shift) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (shift.branchId !== branchId || shift.closedAt) {
+    return NextResponse.json({ error: "Turno invalido" }, { status: 404 });
+  }
 
-  // Calcular expectedAmount (opening + ventas cash - gastos - retiros)
-  const cashSales = await prisma.sale.aggregate({
-    where: { shiftId: id, paymentMethod: "CASH", voided: false },
-    _sum: { total: true },
-  });
-
-  const expenses = await prisma.expense.aggregate({
-    where: { shiftId: id },
-    _sum: { amount: true },
-  });
-
-  const withdrawals = await prisma.withdrawal.aggregate({
-    where: { shiftId: id },
-    _sum: { amount: true },
-  });
-
-  const expectedAmount =
-    shift.openingAmount +
-    (cashSales._sum.total ?? 0) -
-    (expenses._sum.amount ?? 0) -
-    (withdrawals._sum.amount ?? 0);
+  if (!canManageShiftLifecycle(session.user as any, shift)) {
+    return createShiftForbiddenResponse(shift);
+  }
+  const expectedAmount = await computeShiftExpectedAmount(id, shift.openingAmount);
 
   const difference = closingAmount - expectedAmount;
 

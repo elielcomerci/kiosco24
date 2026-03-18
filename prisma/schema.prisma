@@ -18,6 +18,7 @@ model User {
   accounts      Account[]
   sessions      Session[]
   kiosco        Kiosco?
+  createdAccessGrants AccessGrant[] @relation("AccessGrantCreator")
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 }
@@ -25,6 +26,7 @@ model User {
 enum UserRole {
   OWNER
   EMPLOYEE
+  PLATFORM_ADMIN
 }
 
 model Account {
@@ -62,6 +64,7 @@ model Kiosco {
   products     Product[]
   categories   Category[]
   subscription Subscription?
+  accessGrants AccessGrant[]
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 }
@@ -375,4 +378,27 @@ enum SubscriptionStatus {
   ACTIVE
   PAUSED
   CANCELLED
+}
+
+model AccessGrant {
+  id          String          @id @default(cuid())
+  kioscoId    String
+  kiosco      Kiosco          @relation(fields: [kioscoId], references: [id], onDelete: Cascade)
+  kind        AccessGrantKind
+  startsAt    DateTime        @default(now())
+  endsAt      DateTime
+  note        String?         @db.Text
+  createdById String?
+  createdBy   User?           @relation("AccessGrantCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  revokedAt   DateTime?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@index([kioscoId, startsAt, endsAt])
+  @@index([createdById])
+}
+
+enum AccessGrantKind {
+  ADMIN_GRACE
+  ADMIN_INVITE
 }

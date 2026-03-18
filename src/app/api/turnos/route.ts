@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 
 import { getBranchId } from "@/lib/branch";
+import { getActiveShift } from "@/lib/shift-access";
 
 // GET /api/turnos — returns the active (open) shift for the branch, if any
 export async function GET(req: Request) {
@@ -12,11 +13,7 @@ export async function GET(req: Request) {
   const branchId = await getBranchId(req, session.user.id);
   if (!branchId) return NextResponse.json(null);
 
-  const activeShift = await prisma.shift.findFirst({
-    where: { branchId, closedAt: null },
-    include: { employee: true },
-    orderBy: { openedAt: "desc" },
-  });
+  const activeShift = await getActiveShift(branchId);
 
   return NextResponse.json(activeShift);
 }
@@ -29,19 +26,43 @@ export async function POST(req: Request) {
   const branchId = await getBranchId(req, session.user.id);
   if (!branchId) return NextResponse.json({ error: "No branch" }, { status: 404 });
 
-  const { openingAmount, employeeName } = await req.json();
+  const currentShift = await getActiveShift(branchId);
+  if (currentShift) {
+    return NextResponse.json({ error: "Ya hay un turno abierto en esta sucursal." }, { status: 409 });
+  }
 
-  // Handle employee attribution
-  const sessionEmployeeId = (session?.user as any)?.employeeId;
-  let finalEmployeeId = sessionEmployeeId || null;
-  let finalEmployeeName = employeeName || (session?.user as any)?.name || "Dueño";
+  const { openingAmount, employeeId } = await req.json();
 
-  if (!finalEmployeeId && employeeName) {
-    let emp = await prisma.employee.findFirst({ where: { branchId, name: employeeName } });
-    if (!emp) {
-      emp = await prisma.employee.create({ data: { branchId, name: employeeName } });
+  const sessionEmployeeId = (session.user as any)?.employeeId as string | undefined;
+  const sessionRole = (session.user as any)?.role as string | undefined;
+  let finalEmployeeId: string | null = sessionEmployeeId ?? null;
+  let finalEmployeeName = (session.user as any)?.name || "Dueño";
+
+  if (sessionRole !== "EMPLOYEE") {
+    if (typeof employeeId === "string" && employeeId) {
+      const employee = await prisma.employee.findFirst({
+        where: {
+          id: employeeId,
+          branchId,
+          active: true,
+        },
+        select: {
+          id: true,
+          name: true,
+          suspendedUntil: true,
+        },
+      });
+
+      if (!employee || (employee.suspendedUntil && employee.suspendedUntil > new Date())) {
+        return NextResponse.json({ error: "Empleado no disponible para abrir el turno." }, { status: 400 });
+      }
+
+      finalEmployeeId = employee.id;
+      finalEmployeeName = employee.name;
+    } else {
+      finalEmployeeId = null;
+      finalEmployeeName = "Dueño";
     }
-    finalEmployeeId = emp.id;
   }
 
   const shift = await prisma.shift.create({

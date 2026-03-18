@@ -1,5 +1,6 @@
 import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { getKioscoAccessContextForSession } from "@/lib/access-control";
+import { isPlatformAdmin } from "@/lib/platform-admin";
 import { redirect } from "next/navigation";
 
 export default async function AppPage() {
@@ -8,35 +9,23 @@ export default async function AppPage() {
     redirect("/login");
   }
 
-  if (session.user.role === "EMPLOYEE") {
-    const employeeBranchId = session.user.branchId ?? (
-      session.user.employeeId
-        ? (await prisma.employee.findUnique({
-            where: { id: session.user.employeeId },
-            select: { branchId: true },
-          }))?.branchId ?? null
-        : null
-    );
-
-    redirect(employeeBranchId ? `/${employeeBranchId}/caja` : "/");
+  if (isPlatformAdmin(session.user)) {
+    redirect("/admin");
   }
 
-  // Buscar la primera sucursal del Kiosco del usuario
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    include: {
-      kiosco: {
-        include: { branches: { take: 1 } }
-      }
-    }
-  });
+  const access = await getKioscoAccessContextForSession(session.user);
 
-  const branchId = user?.kiosco?.branches[0]?.id ?? null;
-
-  if (branchId) {
-    redirect(`/${branchId}/caja`);
+  if (access.reason === "NO_KIOSCO") {
+    redirect("/onboarding");
   }
 
-  // Si no tiene sucursal (onboarding incompleto?), ir a onboarding.
+  if (!access.allowed) {
+    redirect("/suscripcion");
+  }
+
+  if (access.firstBranchId) {
+    redirect(`/${access.firstBranchId}/caja`);
+  }
+
   redirect("/onboarding");
 }

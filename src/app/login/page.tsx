@@ -5,11 +5,6 @@ import { useState, type FormEvent } from "react";
 
 const AUTH_TIMEOUT_MS = 15000;
 
-type BranchEmployee = {
-  id: string;
-  name: string;
-};
-
 function withTimeout<T>(promise: Promise<T>, timeoutMs = AUTH_TIMEOUT_MS): Promise<T> {
   return new Promise((resolve, reject) => {
     const timeoutId = window.setTimeout(() => {
@@ -47,21 +42,12 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
 
-  const [isEmployeeFlow, setIsEmployeeFlow] = useState(false);
-  const [employeeStep, setEmployeeStep] = useState(1);
-  const [branchKey, setBranchKey] = useState("");
-  const [selectedBranchId, setSelectedBranchId] = useState("");
-  const [selectedEmployee, setSelectedEmployee] = useState<BranchEmployee | null>(null);
-  const [pin, setPin] = useState("");
-  const [branchEmployees, setBranchEmployees] = useState<BranchEmployee[]>([]);
-  const [branchName, setBranchName] = useState("");
-
   const handleGoogleLogin = async () => {
     setLoading(true);
     setError("");
 
     try {
-      await withTimeout(signIn("google", { redirectTo: "/" }));
+      await withTimeout(signIn("google", { callbackUrl: "/" }));
     } catch (error) {
       console.error("[Login] Google sign-in failed:", error);
       setError(getAuthErrorMessage(error));
@@ -95,7 +81,7 @@ export default function LoginPage() {
             email,
             password,
             redirect: false,
-            redirectTo: "/",
+            callbackUrl: "/",
           })
         );
 
@@ -121,7 +107,7 @@ export default function LoginPage() {
           email,
           password,
           redirect: false,
-          redirectTo: "/",
+          callbackUrl: "/",
         })
       );
 
@@ -134,71 +120,6 @@ export default function LoginPage() {
       window.location.assign(result?.url || "/");
     } catch (error) {
       console.error("[Login] Credentials sign-in failed:", error);
-      setError(getAuthErrorMessage(error));
-      setLoading(false);
-    }
-  };
-
-  const handleValidateKey = async () => {
-    setLoading(true);
-    setError("");
-
-    try {
-      const res = await fetch(`/api/branches/access-key/${branchKey}/employees`);
-
-      if (!res.ok) {
-        setError("Codigo de sucursal invalido");
-        setLoading(false);
-        return;
-      }
-
-      const data = await res.json();
-      setSelectedBranchId(data.branchId || "");
-      setBranchEmployees(Array.isArray(data.employees) ? data.employees : []);
-      setBranchName(data.branchName || "");
-      setSelectedEmployee(null);
-      setPin("");
-      setEmployeeStep(2);
-    } catch (error) {
-      console.error("[Login] Branch validation failed:", error);
-      setError("Error al conectar con la sucursal");
-    }
-
-    setLoading(false);
-  };
-
-  const handleEmployeeLogin = async (e: FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError("");
-
-    if (!selectedEmployee?.id) {
-      setError("Selecciona un empleado para continuar");
-      setLoading(false);
-      return;
-    }
-
-    try {
-      const destination = selectedBranchId ? `/${selectedBranchId}/caja` : "/";
-      const result = await withTimeout(
-        signIn("employee-login", {
-          accessKey: branchKey,
-          employeeId: selectedEmployee.id,
-          pin,
-          redirect: false,
-          redirectTo: destination,
-        })
-      );
-
-      if (result?.error) {
-        setError("PIN incorrecto o empleado no autorizado");
-        setLoading(false);
-        return;
-      }
-
-      window.location.assign(result?.url || destination);
-    } catch (error) {
-      console.error("[Login] Employee sign-in failed:", error);
       setError(getAuthErrorMessage(error));
       setLoading(false);
     }
@@ -270,9 +191,7 @@ export default function LoginPage() {
           >
             {isRegister ? "Crear cuenta" : "Entrar al sistema"}
           </h2>
-          <p style={{ fontSize: "13px", color: "var(--text-2)" }}>
-            14 dias gratis, sin tarjeta.
-          </p>
+          <p style={{ fontSize: "13px", color: "var(--text-2)" }}>14 dias gratis, sin tarjeta.</p>
         </div>
 
         {error && (
@@ -290,191 +209,63 @@ export default function LoginPage() {
           </div>
         )}
 
-        {isEmployeeFlow ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-            {employeeStep === 1 && (
-              <>
-                <p style={{ fontSize: "13px", color: "var(--text-2)", textAlign: "center" }}>
-                  Ingresa el codigo de acceso de tu sucursal
-                </p>
-                <input
-                  type="text"
-                  placeholder="Ej: KIOSCO-XXXX-XXXX"
-                  className="input"
-                  value={branchKey}
-                  onChange={(e) => setBranchKey(e.target.value.toUpperCase())}
-                  onKeyDown={(e) => e.key === "Enter" && handleValidateKey()}
-                  style={{ textAlign: "center", textTransform: "uppercase", letterSpacing: "1px" }}
-                />
-                <button className="btn btn-primary" onClick={handleValidateKey} disabled={loading || !branchKey}>
-                  {loading ? "Validando..." : "Siguiente >"}
-                </button>
-              </>
-            )}
-
-            {employeeStep === 2 && (
-              <>
-                <p style={{ fontSize: "13px", color: "var(--text-2)", textAlign: "center" }}>
-                  Hola, quien sos en <strong>{branchName}</strong>?
-                </p>
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "1fr 1fr",
-                    gap: "8px",
-                    maxHeight: "200px",
-                    overflowY: "auto",
-                    padding: "4px",
-                  }}
-                >
-                  {branchEmployees.map((emp) => (
-                    <button
-                      key={emp.id}
-                      className="btn btn-ghost"
-                      onClick={() => {
-                        setSelectedEmployee(emp);
-                        setEmployeeStep(3);
-                      }}
-                      style={{
-                        height: "auto",
-                        padding: "12px 8px",
-                        flexDirection: "column",
-                        gap: "4px",
-                        background: "var(--surface-2)",
-                      }}
-                    >
-                      <div
-                        style={{
-                          width: "32px",
-                          height: "32px",
-                          borderRadius: "50%",
-                          background: "var(--primary)",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          color: "black",
-                          fontWeight: 800,
-                        }}
-                      >
-                        {emp.name.charAt(0)}
-                      </div>
-                      <span style={{ fontSize: "12px", fontWeight: 600 }}>{emp.name.split(" ")[0]}</span>
-                    </button>
-                  ))}
-                </div>
-                <button className="btn-ghost" onClick={() => setEmployeeStep(1)} style={{ fontSize: "12px" }}>
-                  {"<"} Cambiar sucursal
-                </button>
-              </>
-            )}
-
-            {employeeStep === 3 && selectedEmployee && (
-              <form onSubmit={handleEmployeeLogin} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-                <div style={{ textAlign: "center" }}>
-                  <div
-                    style={{
-                      width: "48px",
-                      height: "48px",
-                      borderRadius: "50%",
-                      background: "var(--primary)",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      color: "black",
-                      fontWeight: 800,
-                      margin: "0 auto 8px",
-                    }}
-                  >
-                    {selectedEmployee.name.charAt(0)}
-                  </div>
-                  <p style={{ fontWeight: 700 }}>{selectedEmployee.name}</p>
-                </div>
-                <input
-                  type="tel"
-                  inputMode="numeric"
-                  placeholder="Ingresa tu PIN"
-                  className="input"
-                  value={pin}
-                  onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                  autoFocus
-                  style={{ textAlign: "center", letterSpacing: "0.5em", fontSize: "20px" }}
-                />
-                <button className="btn btn-primary" type="submit" disabled={loading || !pin}>
-                  {loading ? "Entrando..." : "Entrar >"}
-                </button>
-                <button
-                  className="btn-ghost"
-                  type="button"
-                  onClick={() => {
-                    setEmployeeStep(2);
-                    setPin("");
-                  }}
-                  style={{ fontSize: "12px" }}
-                >
-                  {"<"} No soy yo
-                </button>
-              </form>
-            )}
-          </div>
-        ) : (
-          <form onSubmit={handleCredentialsSubmit} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+        <form onSubmit={handleCredentialsSubmit} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+          <input
+            type="email"
+            placeholder="Email"
+            className="input"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            autoComplete="email"
+          />
+          <div style={{ position: "relative" }}>
             <input
-              type="email"
-              placeholder="Email"
+              type={showPassword ? "text" : "password"}
+              placeholder="Contrasena"
               className="input"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
               required
-              autoComplete="email"
+              autoComplete={isRegister ? "new-password" : "current-password"}
+              style={{ paddingRight: "44px" }}
             />
-            <div style={{ position: "relative" }}>
-              <input
-                type={showPassword ? "text" : "password"}
-                placeholder="Contrasena"
-                className="input"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                autoComplete={isRegister ? "new-password" : "current-password"}
-                style={{ paddingRight: "44px" }}
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                style={{
-                  position: "absolute",
-                  right: "12px",
-                  top: "50%",
-                  transform: "translateY(-50%)",
-                  background: "none",
-                  border: "none",
-                  color: "var(--text-3)",
-                  cursor: "pointer",
-                  padding: "4px",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                {showPassword ? (
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M9.88 9.88l-3.29-3.29m7.53.61A10 10 0 0 1 21.84 12a11.59 11.59 0 0 1-3.69 4.39M15 15a3 3 0 0 1-3-3l6-6" />
-                    <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.12 13.12 0 0 1-1.55 2.35m-5.32 1.93A10.43 10.43 0 0 1 12 19c-7 0-10-7-10-7a13.12 13.12 0 0 1 1.55-2.35" />
-                    <line x1="1" y1="1" x2="23" y2="23" />
-                  </svg>
-                ) : (
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                    <circle cx="12" cy="12" r="3" />
-                  </svg>
-                )}
-              </button>
-            </div>
-            <button type="submit" className="btn btn-primary btn-full" disabled={loading}>
-              {loading ? "Cargando..." : isRegister ? "Registrarse" : "Ingresar"}
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              style={{
+                position: "absolute",
+                right: "12px",
+                top: "50%",
+                transform: "translateY(-50%)",
+                background: "none",
+                border: "none",
+                color: "var(--text-3)",
+                cursor: "pointer",
+                padding: "4px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              {showPassword ? (
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M9.88 9.88l-3.29-3.29m7.53.61A10 10 0 0 1 21.84 12a11.59 11.59 0 0 1-3.69 4.39M15 15a3 3 0 0 1-3-3l6-6" />
+                  <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.12 13.12 0 0 1-1.55 2.35m-5.32 1.93A10.43 10.43 0 0 1 12 19c-7 0-10-7-10-7a13.12 13.12 0 0 1 1.55-2.35" />
+                  <line x1="1" y1="1" x2="23" y2="23" />
+                </svg>
+              ) : (
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
+              )}
             </button>
-          </form>
-        )}
+          </div>
+          <button type="submit" className="btn btn-primary btn-full" disabled={loading}>
+            {loading ? "Cargando..." : isRegister ? "Registrarse" : "Ingresar"}
+          </button>
+        </form>
 
         <div style={{ display: "flex", alignItems: "center", gap: "10px", margin: "5px 0" }}>
           <div style={{ flex: 1, height: "1px", background: "var(--border)" }} />
@@ -515,21 +306,6 @@ export default function LoginPage() {
           style={{ fontSize: "14px", color: "var(--text-3)" }}
         >
           {isRegister ? "Ya tenes cuenta? Ingresa" : "No tenes cuenta? Registrate"}
-        </button>
-
-        <button
-          className="btn-ghost"
-          onClick={() => {
-            setIsEmployeeFlow(!isEmployeeFlow);
-            setError("");
-            setEmployeeStep(1);
-            setSelectedBranchId("");
-            setSelectedEmployee(null);
-            setPin("");
-          }}
-          style={{ fontSize: "14px", fontWeight: 700, color: "var(--primary)", marginTop: "10px" }}
-        >
-          {isEmployeeFlow ? "< Volver a dueno" : "Soy empleado"}
         </button>
       </div>
 

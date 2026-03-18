@@ -2,7 +2,7 @@ import { auth } from "@/lib/auth";
 
 export default auth((req: any) => {
   const { nextUrl } = req;
-  const isLoggedIn = !!req.auth;
+  const isLoggedIn = !!req.auth?.user?.id;
 
   const isPublic = 
     nextUrl.pathname === "/" || 

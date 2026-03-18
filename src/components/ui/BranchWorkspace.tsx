@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  useCallback,
   createContext,
   useContext,
   useEffect,
@@ -182,25 +183,25 @@ export function BranchWorkspaceProvider({
   const [showHelp, setShowHelp] = useState(false);
   const [pageShortcutMap, setPageShortcutMap] = useState<Record<string, ShortcutDefinition[]>>({});
 
-  const registerShortcuts = (id: string, shortcuts: ShortcutDefinition[]) => {
+  const registerShortcuts = useCallback((id: string, shortcuts: ShortcutDefinition[]) => {
     setPageShortcutMap((prev) => ({ ...prev, [id]: shortcuts }));
-  };
+  }, []);
 
-  const unregisterShortcuts = (id: string) => {
+  const unregisterShortcuts = useCallback((id: string) => {
     setPageShortcutMap((prev) => {
       const next = { ...prev };
       delete next[id];
       return next;
     });
-  };
+  }, []);
 
-  const requestPrint = () => {
+  const requestPrint = useCallback(() => {
     document.body.classList.add("print-rich");
     window.dispatchEvent(new CustomEvent("kiosco24:print"));
     window.setTimeout(() => {
       window.print();
     }, 40);
-  };
+  }, []);
 
   useEffect(() => {
     const handleAfterPrint = () => {
@@ -330,7 +331,7 @@ export function BranchWorkspaceProvider({
       unregisterShortcuts,
       requestPrint,
     }),
-    [branch, isEmployee]
+    [branch, isEmployee, registerShortcuts, unregisterShortcuts, requestPrint]
   );
 
   const showDesktopHelpButton =

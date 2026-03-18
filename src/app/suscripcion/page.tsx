@@ -16,7 +16,11 @@ function formatDate(date: Date) {
   }).format(date);
 }
 
-export default async function SubscriptionPage() {
+export default async function SubscriptionPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ source?: string; refresh?: string }>;
+}) {
   const session = await auth();
   if (!session?.user?.id) {
     redirect("/login");
@@ -70,7 +74,13 @@ export default async function SubscriptionPage() {
       })
     : null;
 
-  if (session.user.role !== "EMPLOYEE" && kiosco?.subscription?.id) {
+  const query = await searchParams;
+  const shouldAttemptSync =
+    session.user.role !== "EMPLOYEE" &&
+    Boolean(kiosco?.subscription?.id) &&
+    (query.source === "mercadopago" || query.refresh === "1");
+
+  if (shouldAttemptSync && kiosco?.subscription?.id) {
     try {
       await syncSubscriptionFromMercadoPago(kiosco.subscription.id);
     } catch {

@@ -37,6 +37,30 @@ export default function SubscriptionActions({
     }
   };
 
+  const handleRefreshStatus = async () => {
+    setLoading(true);
+    setError("");
+
+    try {
+      const response = await fetch("/api/subscription/status", {
+        method: "GET",
+        cache: "no-store",
+      });
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        setError(data?.error || "No se pudo actualizar el estado de la suscripcion.");
+        setLoading(false);
+        return;
+      }
+
+      router.refresh();
+    } catch {
+      setError("No se pudo verificar el estado de la suscripcion.");
+      setLoading(false);
+    }
+  };
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
       {canCreateSubscription && (
@@ -67,10 +91,10 @@ export default function SubscriptionActions({
         type="button"
         className="btn btn-ghost"
         style={{ width: "100%" }}
-        onClick={() => router.refresh()}
+        onClick={handleRefreshStatus}
         disabled={loading}
       >
-        Actualizar estado
+        {loading ? "Actualizando..." : "Actualizar estado"}
       </button>
 
       {error && (

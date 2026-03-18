@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { formatARS, todayART } from "@/lib/utils";
 import TurnosHistorial from "@/components/turnos/TurnosHistorial";
@@ -338,50 +338,55 @@ export default function EstadisticasPage() {
     return nextOffset > today;
   })();
 
-  useRegisterShortcuts([
-    {
-      key: "[",
-      combo: "[",
-      label: "Periodo anterior",
-      description: "Retrocede en el periodo que estas viendo.",
-      group: "Estadisticas",
-      action: () => handleNav(-1),
-    },
-    {
-      key: "]",
-      combo: "]",
-      label: "Periodo siguiente",
-      description: "Avanza al siguiente periodo disponible.",
-      group: "Estadisticas",
-      action: () => {
-        if (!isCurrentPeriod) handleNav(1);
+  const shortcuts = useMemo(
+    () => [
+      {
+        key: "[",
+        combo: "[",
+        label: "Periodo anterior",
+        description: "Retrocede en el periodo que estas viendo.",
+        group: "Estadisticas",
+        action: () => handleNav(-1),
       },
-    },
-    {
-      key: "d",
-      combo: "D",
-      label: "Ver dia",
-      description: "Cambia la vista al dia actual.",
-      group: "Estadisticas",
-      action: () => handlePeriodoChange("dia"),
-    },
-    {
-      key: "s",
-      combo: "S",
-      label: "Ver semana",
-      description: "Cambia la vista a esta semana.",
-      group: "Estadisticas",
-      action: () => handlePeriodoChange("semana"),
-    },
-    {
-      key: "m",
-      combo: "M",
-      label: "Ver mes",
-      description: "Cambia la vista a este mes.",
-      group: "Estadisticas",
-      action: () => handlePeriodoChange("mes"),
-    },
-  ]);
+      {
+        key: "]",
+        combo: "]",
+        label: "Periodo siguiente",
+        description: "Avanza al siguiente periodo disponible.",
+        group: "Estadisticas",
+        action: () => {
+          if (!isCurrentPeriod) handleNav(1);
+        },
+      },
+      {
+        key: "d",
+        combo: "D",
+        label: "Ver dia",
+        description: "Cambia la vista al dia actual.",
+        group: "Estadisticas",
+        action: () => handlePeriodoChange("dia"),
+      },
+      {
+        key: "s",
+        combo: "S",
+        label: "Ver semana",
+        description: "Cambia la vista a esta semana.",
+        group: "Estadisticas",
+        action: () => handlePeriodoChange("semana"),
+      },
+      {
+        key: "m",
+        combo: "M",
+        label: "Ver mes",
+        description: "Cambia la vista a este mes.",
+        group: "Estadisticas",
+        action: () => handlePeriodoChange("mes"),
+      },
+    ],
+    [handleNav, handlePeriodoChange, isCurrentPeriod]
+  );
+
+  useRegisterShortcuts(shortcuts);
 
   return (
     <>

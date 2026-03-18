@@ -29,27 +29,34 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
-  if (event.request.url.includes('/api/')) {
-    // Para las apis usamos Network-First
+
+  const url = new URL(event.request.url);
+  
+  // API requests
+  if (url.pathname.includes('/api/')) {
     event.respondWith(
       fetch(event.request).catch(() => caches.match(event.request))
     );
     return;
   }
 
-  // Para assets estáticos: Stale-While-Revalidate
+  // Static assets: Stale-While-Revalidate
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       const fetchPromise = fetch(event.request).then((networkResponse) => {
-        if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic') {
-          return networkResponse;
+        if (networkResponse && networkResponse.status === 200) {
+          try {
+            const responseToCache = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(event.request, responseToCache);
+            });
+          } catch (e) {
+            // Ignore clone errors (opaque or consumed)
+          }
         }
-        const responseToCache = networkResponse.clone();
-        caches.open(CACHE_NAME).then((cache) => {
-          cache.put(event.request, responseToCache);
-        });
         return networkResponse;
       }).catch(() => {});
+      
       return cachedResponse || fetchPromise;
     })
   );

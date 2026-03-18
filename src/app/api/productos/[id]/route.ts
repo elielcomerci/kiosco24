@@ -2,6 +2,11 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { getBranchContext } from "@/lib/branch";
+import {
+  findApprovedPlatformProductByBarcode,
+  platformDraftDiffers,
+  queuePlatformProductSubmission,
+} from "@/lib/platform-catalog";
 
 // GET /api/productos/[id] — get a single product with branch inventory
 export async function GET(
@@ -44,6 +49,7 @@ export async function GET(
     brand: inventory.product.brand,
     description: inventory.product.description,
     presentation: inventory.product.presentation,
+    platformProductId: inventory.product.platformProductId,
     price: inventory.price,
     cost: inventory.cost,
     stock: inventory.stock,
@@ -96,18 +102,25 @@ export async function PATCH(
   if (!product)
     return NextResponse.json({ error: "Not found" }, { status: 404 });
 
+  const normalizedBarcode = barcode?.trim() || null;
+  const effectiveBarcode = barcode !== undefined ? normalizedBarcode : product.barcode;
+  const platformProduct = effectiveBarcode
+    ? await findApprovedPlatformProductByBarcode(effectiveBarcode)
+    : null;
+
   // Update global product fields
   await prisma.product.update({
     where: { id },
     data: {
       ...(name !== undefined && { name: name.trim() }),
       ...(emoji !== undefined && { emoji }),
-      ...(barcode !== undefined && { barcode: barcode?.trim() || null }),
+      ...(barcode !== undefined && { barcode: normalizedBarcode }),
       ...(image !== undefined && { image }),
       ...(brand !== undefined && { brand: brand?.trim() || null }),
       ...(description !== undefined && { description: description?.trim() || null }),
       ...(presentation !== undefined && { presentation: presentation?.trim() || null }),
       ...(categoryId !== undefined && { categoryId }),
+      ...(barcode !== undefined && { platformProductId: platformProduct?.id ?? null }),
       ...(variants !== undefined && {
         variants: {
           deleteMany: { id: { notIn: variants.filter((v: any) => v.id).map((v: any) => v.id) } },
@@ -173,6 +186,30 @@ export async function PATCH(
       ...(showInGrid !== undefined && { showInGrid }),
     },
   });
+
+  if (
+    effectiveBarcode &&
+    platformDraftDiffers(platformProduct, {
+      barcode: effectiveBarcode,
+      name: name?.trim() ?? product.name,
+      brand: brand ?? product.brand,
+      description: description ?? product.description,
+      presentation: presentation ?? product.presentation,
+      image: image ?? product.image,
+    })
+  ) {
+    await queuePlatformProductSubmission({
+      platformProductId: platformProduct?.id ?? null,
+      submittedByUserId: session.user.id,
+      submittedFromKioscoId: kioscoId,
+      barcode: effectiveBarcode,
+      name: name?.trim() ?? product.name,
+      brand: brand ?? product.brand,
+      description: description ?? product.description,
+      presentation: presentation ?? product.presentation,
+      image: image ?? product.image,
+    });
+  }
 
   return NextResponse.json({ success: true });
 }

@@ -2,6 +2,11 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { getBranchContext } from "@/lib/branch";
+import {
+  findApprovedPlatformProductByBarcode,
+  platformDraftDiffers,
+  queuePlatformProductSubmission,
+} from "@/lib/platform-catalog";
 
 // GET /api/productos — list all active products for the branch
 export async function GET(req: Request) {
@@ -13,7 +18,7 @@ export async function GET(req: Request) {
 
   // Filter and map the catalog through the branch's active inventory
   const inventory = await prisma.inventoryRecord.findMany({
-    where: { branchId, showInGrid: true },
+    where: { branchId },
     include: {
       product: {
         include: {
@@ -31,7 +36,19 @@ export async function GET(req: Request) {
     orderBy: { product: { name: "asc" } },
   });
 
-  const products = inventory.map((inv: any) => ({
+  const products = inventory.map((inv: any) => {
+    const hasVariantStock = inv.product.variants.some((v: any) => (v.inventory[0]?.stock ?? 0) > 0);
+    const hasBaseStock = (inv.stock ?? 0) > 0;
+    const hasStock = inv.product.variants.length > 0 ? hasVariantStock : hasBaseStock;
+    const readyForSale =
+      inv.showInGrid &&
+      inv.price > 0 &&
+      typeof inv.cost === "number" &&
+      inv.cost > 0 &&
+      hasStock &&
+      (inv.product.category?.showInGrid ?? true);
+
+    return {
     id: inv.product.id,
     name: inv.product.name,
     emoji: inv.product.emoji,
@@ -40,12 +57,14 @@ export async function GET(req: Request) {
     brand: inv.product.brand,
     description: inv.product.description,
     presentation: inv.product.presentation,
+    platformProductId: inv.product.platformProductId,
     categoryId: inv.product.categoryId,
     price: inv.price,
     cost: inv.cost,
     stock: inv.stock,
     minStock: inv.minStock,
     showInGrid: inv.showInGrid,
+    readyForSale,
     categoryShowInGrid: inv.product.category?.showInGrid ?? true,
     variants: inv.product.variants.map((v: any) => ({
       id: v.id,
@@ -54,7 +73,8 @@ export async function GET(req: Request) {
       stock: v.inventory[0]?.stock ?? 0,
       minStock: v.inventory[0]?.minStock ?? 0,
     })),
-  }));
+  };
+  });
 
   return NextResponse.json(products);
 }
@@ -86,17 +106,23 @@ export async function POST(req: Request) {
   } = body;
 
   try {
+    const normalizedBarcode = barcode?.trim() || null;
+    const platformProduct = normalizedBarcode
+      ? await findApprovedPlatformProductByBarcode(normalizedBarcode)
+      : null;
+
     // Create global product
     const product = await prisma.product.create({
       data: {
         name: name?.trim(),
-        barcode: barcode?.trim() || null,
+        barcode: normalizedBarcode,
         emoji,
         image,
         brand: brand?.trim() || null,
         description: description?.trim() || null,
         presentation: presentation?.trim() || null,
         categoryId,
+        platformProductId: platformProduct?.id ?? null,
         kioscoId,
         variants: variants?.length ? {
           create: variants.map((v: any) => ({
@@ -144,6 +170,30 @@ export async function POST(req: Request) {
           data: variantStockData,
         });
       }
+    }
+
+    if (
+      normalizedBarcode &&
+      platformDraftDiffers(platformProduct, {
+        barcode: normalizedBarcode,
+        name: name?.trim(),
+        brand,
+        description,
+        presentation,
+        image,
+      })
+    ) {
+      await queuePlatformProductSubmission({
+        platformProductId: platformProduct?.id ?? null,
+        submittedByUserId: session.user.id,
+        submittedFromKioscoId: kioscoId,
+        barcode: normalizedBarcode,
+        name: name?.trim(),
+        brand,
+        description,
+        presentation,
+        image,
+      });
     }
 
     return NextResponse.json(product);

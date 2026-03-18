@@ -38,6 +38,7 @@ interface Product {
   stock?: number | null;
   minStock?: number | null;
   showInGrid?: boolean;
+  readyForSale?: boolean;
   categoryShowInGrid?: boolean;
   variants?: Variant[];
 }
@@ -718,9 +719,24 @@ export default function CajaPage() {
   };
 
   // ─── Barcode handling ─────────────────────────────────────────────────────
+  const sellableProducts = useMemo(
+    () => products.filter((product) => product.showInGrid !== false && product.readyForSale !== false),
+    [products],
+  );
+
+  const filteredProducts = useMemo(() => {
+    let res = sellableProducts;
+    if (activeCategory) res = res.filter(p => p.categoryId === activeCategory);
+    if (cajaSearch) {
+      const q = cajaSearch.toLowerCase();
+      res = res.filter(p => p.name.toLowerCase().includes(q) || p.barcode === q);
+    }
+    return res;
+  }, [sellableProducts, activeCategory, cajaSearch]);
+
   const handleBarcodeScan = useCallback((result: string) => {
     // 1. Buscar en productos base
-    const product = products.find(p => p.barcode === result);
+    const product = sellableProducts.find(p => p.barcode === result);
     if (product) {
       handleProductTap(product);
       setShowScanner(false);
@@ -728,7 +744,7 @@ export default function CajaPage() {
     }
 
     // 2. Buscar en variantes de todos los productos
-    for (const p of products) {
+    for (const p of sellableProducts) {
       if (p.variants) {
         const variant = p.variants.find(v => v.barcode === result);
         if (variant) {
@@ -741,7 +757,7 @@ export default function CajaPage() {
 
     // Not found
     alert(`Código ${result} no encontrado.`);
-  }, [handleProductTap, products]);
+  }, [handleProductTap, sellableProducts]);
   handleBarcodeScanRef.current = handleBarcodeScan;
 
   // ─── Ticket item controls ─────────────────────────────────────────────────
@@ -845,16 +861,6 @@ export default function CajaPage() {
       </div>
     );
   }
-
-  const filteredProducts = useMemo(() => {
-    let res = products;
-    if (activeCategory) res = res.filter(p => p.categoryId === activeCategory);
-    if (cajaSearch) {
-      const q = cajaSearch.toLowerCase();
-      res = res.filter(p => p.name.toLowerCase().includes(q) || p.barcode === q);
-    }
-    return res;
-  }, [products, activeCategory, cajaSearch]);
 
   useEffect(() => {
     setSelectedIndex(0);

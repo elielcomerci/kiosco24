@@ -3,6 +3,7 @@ import { auth, signOut } from "@/lib/auth";
 import { isPlatformAdmin } from "@/lib/platform-admin";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 function formatDate(date: Date) {
@@ -175,16 +176,21 @@ export default async function AdminPage() {
             </div>
             <h1 style={{ margin: "6px 0 0", fontSize: "34px" }}>Administrador de acceso</h1>
           </div>
-          <form
-            action={async () => {
-              "use server";
-              await signOut({ redirectTo: "/login" });
-            }}
-          >
-            <button type="submit" className="btn btn-ghost">
-              Salir
-            </button>
-          </form>
+          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+            <Link href="/admin/productos" className="btn btn-secondary">
+              Catalogo global
+            </Link>
+            <form
+              action={async () => {
+                "use server";
+                await signOut({ redirectTo: "/login" });
+              }}
+            >
+              <button type="submit" className="btn btn-ghost">
+                Salir
+              </button>
+            </form>
+          </div>
         </div>
 
         <div

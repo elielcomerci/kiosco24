@@ -19,6 +19,8 @@ model User {
   kiosco        Kiosco?
   createdAccessGrants AccessGrant[] @relation("AccessGrantCreator")
   accessOverrideChanges Kiosco[] @relation("KioscoAccessOverrideBy")
+  submittedPlatformProducts PlatformProductSubmission[] @relation("PlatformProductSubmissionSubmitter")
+  reviewedPlatformProducts PlatformProductSubmission[] @relation("PlatformProductSubmissionReviewer")
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 }
@@ -70,6 +72,7 @@ model Kiosco {
   accessOverrideAt      DateTime?
   accessOverrideById    String?
   accessOverrideBy      User?                @relation("KioscoAccessOverrideBy", fields: [accessOverrideById], references: [id], onDelete: SetNull)
+  platformProductSubmissions PlatformProductSubmission[]
   createdAt             DateTime             @default(now())
   updatedAt             DateTime             @updatedAt
 }
@@ -132,6 +135,8 @@ model Product {
   presentation String?
   categoryId String?
   category   Category?         @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  platformProductId String?
+  platformProduct PlatformProduct? @relation(fields: [platformProductId], references: [id], onDelete: SetNull)
   kioscoId   String
   kiosco     Kiosco            @relation(fields: [kioscoId], references: [id], onDelete: Cascade)
   inventory  InventoryRecord[]
@@ -143,6 +148,52 @@ model Product {
   @@index([kioscoId])
   @@index([categoryId])
   @@index([barcode])
+  @@index([platformProductId])
+}
+
+model PlatformProduct {
+  id           String                     @id @default(cuid())
+  barcode      String                     @unique
+  name         String
+  brand        String?
+  description  String?
+  presentation String?
+  image        String?
+  status       PlatformProductStatus      @default(APPROVED)
+  products     Product[]
+  submissions  PlatformProductSubmission[]
+  createdAt    DateTime                   @default(now())
+  updatedAt    DateTime                   @updatedAt
+
+  @@index([status])
+}
+
+model PlatformProductSubmission {
+  id                   String                          @id @default(cuid())
+  barcode              String
+  name                 String
+  brand                String?
+  description          String?
+  presentation         String?
+  image                String?
+  status               PlatformProductSubmissionStatus @default(PENDING)
+  reviewNote           String?                         @db.Text
+  platformProductId    String?
+  platformProduct      PlatformProduct?                @relation(fields: [platformProductId], references: [id], onDelete: SetNull)
+  submittedByUserId    String?
+  submittedByUser      User?                           @relation("PlatformProductSubmissionSubmitter", fields: [submittedByUserId], references: [id], onDelete: SetNull)
+  submittedFromKioscoId String?
+  submittedFromKiosco  Kiosco?                         @relation(fields: [submittedFromKioscoId], references: [id], onDelete: SetNull)
+  reviewedById         String?
+  reviewedBy           User?                           @relation("PlatformProductSubmissionReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt           DateTime?
+  createdAt            DateTime                        @default(now())
+  updatedAt            DateTime                        @updatedAt
+
+  @@index([barcode, status])
+  @@index([submittedByUserId])
+  @@index([submittedFromKioscoId])
+  @@index([platformProductId])
 }
 
 model InventoryRecord {
@@ -412,4 +463,15 @@ enum KioscoAccessOverride {
   INHERIT
   FORCE_ALLOW
   FORCE_BLOCK
+}
+
+enum PlatformProductStatus {
+  APPROVED
+  HIDDEN
+}
+
+enum PlatformProductSubmissionStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }

@@ -36,6 +36,8 @@ interface Product {
   stock: number | null;
   minStock: number | null;
   showInGrid: boolean;
+  readyForSale?: boolean;
+  platformProductId?: string | null;
   variants?: Variant[];
 }
 
@@ -81,7 +83,7 @@ function ProductModal({
   const [variants, setVariants] = useState<Variant[]>(product?.variants || []);
   const [hasVariants, setHasVariants] = useState((product?.variants?.length ?? 0) > 0);
   const [suggestion, setSuggestion] = useState<BarcodeSuggestion | null>(null);
-  const [lookupState, setLookupState] = useState<"idle" | "loading" | "ready" | "not-found">("idle");
+  const [lookupState, setLookupState] = useState<"idle" | "loading" | "ready">("idle");
   const [dismissedSuggestionCode, setDismissedSuggestionCode] = useState<string | null>(null);
   const barcodeRef = useRef<HTMLInputElement>(null);
 
@@ -126,7 +128,7 @@ function ProductModal({
       setLookupState("loading");
 
       try {
-        const res = await fetch(`/api/barcodes/lookup?code=${encodeURIComponent(code)}`);
+        const res = await fetch(`/api/platform-products/lookup?code=${encodeURIComponent(code)}`);
         const data = (await res.json()) as BarcodeLookupResponse;
 
         if (cancelled) return;
@@ -136,7 +138,7 @@ function ProductModal({
           setLookupState("ready");
         } else {
           setSuggestion(null);
-          setLookupState("not-found");
+          setLookupState("idle");
         }
       } catch (error) {
         console.error(error);
@@ -154,7 +156,7 @@ function ProductModal({
   }, [barcode, dismissedSuggestionCode, hasVariants]);
 
   const handleSave = async () => {
-    if (!name.trim() || !price) return;
+    if (!name.trim()) return;
     setLoading(true);
 
     const payload = {
@@ -232,6 +234,99 @@ function ProductModal({
             </h2>
           </div>
 
+        <div style={{ marginBottom: "12px" }}>
+          <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase" }}>
+            Codigo de barras
+          </label>
+          <div style={{ display: "flex", gap: "8px" }}>
+            <input
+              ref={barcodeRef}
+              className="input"
+              placeholder="Escanea o escribe el codigo"
+              value={barcode}
+              onChange={(e) => setBarcode(e.target.value)}
+              style={{ flex: 1 }}
+              autoFocus={isNew}
+            />
+            <button
+              className="btn btn-ghost"
+              style={{ padding: "0 16px", flexShrink: 0, fontSize: "20px" }}
+              onClick={() => setShowScanner(true)}
+              title="Escanear con camara"
+            >
+              📷
+            </button>
+          </div>
+          {lookupState === "loading" && (
+            <div style={{ marginTop: "8px", fontSize: "12px", color: "var(--text-3)" }}>
+              Buscando en la base general...
+            </div>
+          )}
+          {lookupState === "ready" && suggestion && (
+            <div
+              style={{
+                marginTop: "10px",
+                padding: "12px",
+                borderRadius: "var(--radius)",
+                border: "1px solid var(--border)",
+                background: "var(--surface-2)",
+                display: "flex",
+                flexDirection: "column",
+                gap: "10px",
+              }}
+            >
+              <div style={{ fontSize: "12px", fontWeight: 700, textTransform: "uppercase", color: "var(--text-3)" }}>
+                Base general
+              </div>
+              <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+                {suggestion?.image ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={suggestion.image ?? undefined}
+                    alt={suggestion.name}
+                    style={{ width: "56px", height: "56px", objectFit: "cover", borderRadius: "10px", flexShrink: 0 }}
+                  />
+                ) : (
+                  <div
+                    style={{
+                      width: "56px",
+                      height: "56px",
+                      borderRadius: "10px",
+                      background: "var(--surface)",
+                      border: "1px dashed var(--border)",
+                      flexShrink: 0,
+                    }}
+                  />
+                )}
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontWeight: 700 }}>{suggestion?.name}</div>
+                  {(suggestion?.brand || suggestion?.presentation || suggestion?.description) && (
+                    <div style={{ fontSize: "12px", color: "var(--text-3)", marginTop: "4px" }}>
+                      {[suggestion?.brand, suggestion?.presentation, suggestion?.description].filter(Boolean).join(" · ")}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: "8px" }}>
+                <button
+                  className="btn btn-ghost"
+                  style={{ flex: 1 }}
+                  onClick={() => {
+                    setDismissedSuggestionCode(normalizeBarcodeCode(barcode));
+                    setSuggestion(null);
+                    setLookupState("idle");
+                  }}
+                >
+                  Ocultar
+                </button>
+                <button className="btn btn-green" style={{ flex: 1 }} onClick={() => suggestion && applySuggestion(suggestion)}>
+                  Usar
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Emoji Picker */}
         <div style={{ display: "flex", gap: "10px", alignItems: "center", marginBottom: "12px" }}>
           <button
@@ -249,15 +344,14 @@ function ProductModal({
           >
             {emoji || "＋"}
           </button>
-          <input
-            className="input"
-            placeholder="Nombre del producto *"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            style={{ flex: 1 }}
-            autoFocus
-          />
-        </div>
+            <input
+              className="input"
+              placeholder="Nombre del producto *"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              style={{ flex: 1 }}
+            />
+          </div>
 
         {showEmojiPicker && (
           <div
@@ -388,10 +482,24 @@ function ProductModal({
           />
         </div>
 
-        {/* Price & Cost */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "12px" }}>
-          <div>
-            <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase" }}>Precio *</label>
+          <div
+            style={{
+              marginBottom: "12px",
+              padding: "10px 12px",
+              borderRadius: "var(--radius)",
+              background: "var(--surface-2)",
+              color: "var(--text-3)",
+              fontSize: "12px",
+              lineHeight: 1.5,
+            }}
+          >
+            Este producto queda fuera de la caja hasta que completes precio, costo unitario y stock.
+          </div>
+
+          {/* Price & Cost */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "12px" }}>
+            <div>
+              <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase" }}>Precio</label>
             <input
               className="input"
               type="number"
@@ -525,6 +633,8 @@ function ProductModal({
               </div>
             </div>
 
+            {false && (
+            <>
             {/* Barcode Base */}
             <div style={{ marginBottom: "12px" }}>
               <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase" }}>Código de barras</label>
@@ -568,11 +678,11 @@ function ProductModal({
                     Datos sugeridos
                   </div>
                   <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-                    {suggestion.image ? (
+                    {suggestion?.image ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
-                        src={suggestion.image}
-                        alt={suggestion.name}
+                        src={suggestion?.image ?? undefined}
+                        alt={suggestion?.name || "Producto"}
                         style={{ width: "56px", height: "56px", objectFit: "cover", borderRadius: "10px", flexShrink: 0 }}
                       />
                     ) : (
@@ -588,10 +698,10 @@ function ProductModal({
                       />
                     )}
                     <div style={{ minWidth: 0, flex: 1 }}>
-                      <div style={{ fontWeight: 700 }}>{suggestion.name}</div>
-                      {(suggestion.brand || suggestion.presentation || suggestion.description) && (
+                      <div style={{ fontWeight: 700 }}>{suggestion?.name}</div>
+                      {(suggestion?.brand || suggestion?.presentation || suggestion?.description) && (
                         <div style={{ fontSize: "12px", color: "var(--text-3)", marginTop: "4px" }}>
-                          {[suggestion.brand, suggestion.presentation, suggestion.description].filter(Boolean).join(" · ")}
+                          {[suggestion?.brand, suggestion?.presentation, suggestion?.description].filter(Boolean).join(" · ")}
                         </div>
                       )}
                     </div>
@@ -608,18 +718,23 @@ function ProductModal({
                     >
                       Ocultar
                     </button>
-                    <button className="btn btn-green" style={{ flex: 1 }} onClick={() => applySuggestion(suggestion)}>
+                    <button
+                      className="btn btn-green"
+                      style={{ flex: 1 }}
+                      onClick={() => {
+                        if (suggestion) {
+                          applySuggestion(suggestion);
+                        }
+                      }}
+                    >
                       Usar
                     </button>
                   </div>
                 </div>
               )}
-              {lookupState === "not-found" && (
-                <div style={{ marginTop: "8px", fontSize: "12px", color: "var(--text-3)" }}>
-                  No encontramos datos sugeridos para este codigo.
-                </div>
-              )}
             </div>
+            </>
+            )}
           </>
         )}
 
@@ -690,7 +805,7 @@ function ProductModal({
             className="btn btn-green"
             style={{ flex: 2 }}
             onClick={handleSave}
-            disabled={loading || !name.trim() || !price}
+            disabled={loading || !name.trim()}
           >
             {loading ? "..." : isNew ? "Crear" : "Guardar"}
           </button>

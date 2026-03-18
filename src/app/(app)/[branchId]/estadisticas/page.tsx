@@ -1,0 +1,600 @@
+"use client";
+
+import { useEffect, useState, useCallback } from "react";
+import { useParams } from "next/navigation";
+import { formatARS, todayART } from "@/lib/utils";
+import TurnosHistorial from "@/components/turnos/TurnosHistorial";
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface PeriodoData {
+  periodo: string;
+  totalVentas: number;
+  ventasPorMetodo: Record<string, number>;
+  totalGastos: number;
+  totalRetiros: number;
+  gananciasBrutas: number | null;
+  gananciasNetas: number | null;
+  hasCosts: boolean;
+  margenPorcentaje: number | null;
+  promedioVentasDia: number;
+  gastosPorCategoria: Record<string, number>;
+  topProductos: { name: string; cantidad: number; total: number }[];
+  ventasPorDia: { fecha: string; ventas: number; ganancia: number | null }[];
+  ventasPorSemana: { semana: number; ventas: number; ganancia: number | null }[] | null;
+}
+
+type Periodo = "dia" | "semana" | "mes";
+
+const PERIODO_LABEL: Record<Periodo, string> = {
+  dia: "Hoy",
+  semana: "Esta semana",
+  mes: "Este mes",
+};
+
+const METODO_LABEL: Record<string, string> = {
+  CASH: "💵 Efectivo",
+  MERCADOPAGO: "📱 MercadoPago",
+  TRANSFER: "🏦 Transferencia",
+  DEBIT: "💳 Débito",
+  CREDIT_CARD: "🏧 Tarjeta",
+  CREDIT: "📋 Fiado",
+};
+
+const GASTO_LABEL: Record<string, string> = {
+  ICE: "🧊 Hielo",
+  MERCHANDISE: "📦 Mercadería",
+  DELIVERY: "🚚 Delivery",
+  OTHER: "💸 Otros",
+};
+
+// ─── Helper components ────────────────────────────────────────────────────────
+
+function KpiCard({
+  label,
+  value,
+  sub,
+  highlight,
+  warning,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  highlight?: boolean;
+  warning?: boolean;
+}) {
+  return (
+    <div
+      style={{
+        background: highlight
+          ? "linear-gradient(135deg, rgba(34,197,94,0.10), rgba(34,197,94,0.03))"
+          : "var(--surface)",
+        border: `1px solid ${highlight ? "rgba(34,197,94,0.25)" : "var(--border)"}`,
+        borderRadius: "var(--radius-lg)",
+        padding: "16px",
+        display: "flex",
+        flexDirection: "column",
+        gap: 4,
+      }}
+    >
+      <span
+        style={{
+          fontSize: 11,
+          fontWeight: 700,
+          textTransform: "uppercase",
+          letterSpacing: "0.08em",
+          color: "var(--text-3)",
+        }}
+      >
+        {label}
+      </span>
+      <span
+        style={{
+          fontSize: 22,
+          fontWeight: 800,
+          color: warning ? "var(--red)" : highlight ? "var(--green)" : "var(--text)",
+          lineHeight: 1.1,
+        }}
+      >
+        {value}
+      </span>
+      {sub && (
+        <span style={{ fontSize: 12, color: "var(--text-3)" }}>{sub}</span>
+      )}
+    </div>
+  );
+}
+
+function BarChart({
+  data,
+  valueKey,
+  labelKey,
+  color = "var(--primary)",
+}: {
+  data: Record<string, number | string>[];
+  valueKey: string;
+  labelKey: string;
+  color?: string;
+}) {
+  const max = Math.max(...data.map((d) => Number(d[valueKey]) || 0), 1);
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "flex-end",
+        gap: 4,
+        height: 80,
+        padding: "0 4px",
+      }}
+    >
+      {data.map((d, i) => {
+        const val = Number(d[valueKey]) || 0;
+        const height = Math.max((val / max) * 72, val > 0 ? 4 : 0);
+        const label = String(d[labelKey]);
+        return (
+          <div
+            key={i}
+            style={{
+              flex: 1,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: 2,
+            }}
+          >
+            <div
+              title={`${label}: ${formatARS(val)}`}
+              style={{
+                width: "100%",
+                height,
+                background: val > 0 ? color : "var(--border)",
+                borderRadius: "3px 3px 0 0",
+                transition: "height 0.3s ease",
+              }}
+            />
+            <span
+              style={{
+                fontSize: 9,
+                color: "var(--text-3)",
+                overflow: "hidden",
+                whiteSpace: "nowrap",
+                textOverflow: "ellipsis",
+                maxWidth: "100%",
+              }}
+            >
+              {label}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function MetodoBar({
+  label,
+  amount,
+  total,
+}: {
+  label: string;
+  amount: number;
+  total: number;
+}) {
+  const pct = total > 0 ? Math.round((amount / total) * 100) : 0;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
+        <span style={{ color: "var(--text-2)" }}>{label}</span>
+        <span style={{ fontWeight: 600 }}>
+          {formatARS(amount)}
+          <span style={{ color: "var(--text-3)", fontWeight: 400, marginLeft: 6 }}>
+            {pct}%
+          </span>
+        </span>
+      </div>
+      <div
+        style={{
+          height: 6,
+          background: "var(--surface-2)",
+          borderRadius: 99,
+          overflow: "hidden",
+        }}
+      >
+        <div
+          style={{
+            height: "100%",
+            width: `${pct}%`,
+            background: "var(--primary)",
+            borderRadius: 99,
+            transition: "width 0.4s ease",
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
+// ─── Main ─────────────────────────────────────────────────────────────────────
+
+export default function EstadisticasPage() {
+  const params = useParams();
+  const branchId = params.branchId as string;
+  const [periodo, setPeriodo] = useState<Periodo>("semana");
+  const [data, setData] = useState<PeriodoData | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const today = todayART();
+
+  const load = useCallback(async (p: Periodo) => {
+    setLoading(true);
+    setData(null);
+    try {
+      const res = await fetch(
+        `/api/stats/periodo?periodo=${p}&isoDate=${today}`,
+        { headers: { "x-branch-id": branchId } }
+      );
+      const json = await res.json();
+      setData(json);
+    } finally {
+      setLoading(false);
+    }
+  }, [branchId, today]);
+
+  useEffect(() => {
+    load(periodo);
+  }, [periodo, load]);
+
+  // Build period date range for TurnosHistorial
+  const { from, to } = getPeriodRange(periodo, today);
+
+  // Build chart data
+  const chartData = buildChartData(data, periodo);
+
+  return (
+    <div style={{ padding: "20px 16px", display: "flex", flexDirection: "column", gap: 20, paddingBottom: 100 }}>
+
+      {/* Header */}
+      <div>
+        <h1 style={{ fontSize: 22, fontWeight: 800, marginBottom: 4 }}>📊 Estadísticas</h1>
+        <p style={{ color: "var(--text-3)", fontSize: 13 }}>
+          Ventas, rentabilidad y rendimiento de tu kiosco
+        </p>
+      </div>
+
+      {/* Period selector */}
+      <div
+        style={{
+          display: "flex",
+          gap: 8,
+          background: "var(--surface-2)",
+          padding: 4,
+          borderRadius: "var(--radius)",
+          border: "1px solid var(--border)",
+        }}
+      >
+        {(["dia", "semana", "mes"] as Periodo[]).map((p) => (
+          <button
+            key={p}
+            onClick={() => setPeriodo(p)}
+            style={{
+              flex: 1,
+              padding: "8px 0",
+              borderRadius: "calc(var(--radius) - 2px)",
+              border: "none",
+              background: periodo === p ? "var(--primary)" : "transparent",
+              color: periodo === p ? "#000" : "var(--text-2)",
+              fontWeight: 700,
+              fontSize: 13,
+              cursor: "pointer",
+              transition: "all 0.2s",
+            }}
+          >
+            {PERIODO_LABEL[p]}
+          </button>
+        ))}
+      </div>
+
+      {loading && (
+        <div style={{ textAlign: "center", padding: "60px 0", color: "var(--text-3)" }}>
+          Calculando...
+        </div>
+      )}
+
+      {!loading && data && (
+        <>
+          {/* KPIs grid */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <KpiCard
+              label="Total ventas"
+              value={formatARS(data.totalVentas)}
+              sub={`Prom: ${formatARS(data.promedioVentasDia)}/día`}
+            />
+            {data.hasCosts && data.gananciasNetas !== null ? (
+              <KpiCard
+                label="Ganancia neta"
+                value={formatARS(data.gananciasNetas)}
+                sub={data.margenPorcentaje !== null ? `Margen: ${data.margenPorcentaje}%` : undefined}
+                highlight
+              />
+            ) : (
+              <div
+                style={{
+                  background: "var(--surface)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "var(--radius-lg)",
+                  padding: "16px",
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "center",
+                  gap: 4,
+                }}
+              >
+                <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-3)" }}>
+                  Ganancia neta
+                </span>
+                <span style={{ fontSize: 13, color: "var(--text-3)", fontStyle: "italic" }}>
+                  Cargá costos en productos
+                </span>
+              </div>
+            )}
+            <KpiCard
+              label="Gastos"
+              value={formatARS(data.totalGastos)}
+              warning={data.totalGastos > 0}
+            />
+            <KpiCard
+              label="Margen %"
+              value={data.margenPorcentaje !== null ? `${data.margenPorcentaje}%` : "—"}
+              sub={data.hasCosts ? undefined : "Requiere costos"}
+            />
+          </div>
+
+          {/* Chart */}
+          {chartData.length > 1 && (
+            <div
+              className="card"
+              style={{ padding: "16px" }}
+            >
+              <h3
+                style={{
+                  fontSize: 11,
+                  fontWeight: 700,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.08em",
+                  color: "var(--text-3)",
+                  marginBottom: 16,
+                }}
+              >
+                {periodo === "mes" ? "Ventas por semana" : "Ventas por día"}
+              </h3>
+              <BarChart
+                data={chartData}
+                valueKey="ventas"
+                labelKey="label"
+              />
+              {data.hasCosts && (
+                <>
+                  <div style={{ height: 1, background: "var(--border)", margin: "12px 0" }} />
+                  <h3
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      textTransform: "uppercase",
+                      letterSpacing: "0.08em",
+                      color: "var(--text-3)",
+                      marginBottom: 8,
+                    }}
+                  >
+                    Ganancia por{periodo === "mes" ? " semana" : " día"}
+                  </h3>
+                  <BarChart
+                    data={chartData}
+                    valueKey="ganancia"
+                    labelKey="label"
+                    color="rgba(34,197,94,0.7)"
+                  />
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Payment method breakdown */}
+          {data.totalVentas > 0 && Object.keys(data.ventasPorMetodo).length > 0 && (
+            <div className="card" style={{ padding: "16px" }}>
+              <h3
+                style={{
+                  fontSize: 11,
+                  fontWeight: 700,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.08em",
+                  color: "var(--text-3)",
+                  marginBottom: 14,
+                }}
+              >
+                Desglose por método de cobro
+              </h3>
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {Object.entries(data.ventasPorMetodo)
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([method, amount]) => (
+                    <MetodoBar
+                      key={method}
+                      label={METODO_LABEL[method] ?? method}
+                      amount={amount}
+                      total={data.totalVentas}
+                    />
+                  ))}
+              </div>
+            </div>
+          )}
+
+          {/* Top productos */}
+          {data.topProductos.length > 0 && (
+            <div className="card" style={{ padding: "16px" }}>
+              <h3
+                style={{
+                  fontSize: 11,
+                  fontWeight: 700,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.08em",
+                  color: "var(--text-3)",
+                  marginBottom: 14,
+                }}
+              >
+                🏆 Productos más vendidos
+              </h3>
+              <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+                {data.topProductos.map((p, idx) => (
+                  <div
+                    key={p.name}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      padding: "10px 0",
+                      borderBottom: idx < data.topProductos.length - 1 ? "1px solid var(--border)" : "none",
+                      fontSize: 14,
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <span
+                        style={{
+                          width: 22,
+                          height: 22,
+                          borderRadius: "50%",
+                          background: idx < 3 ? "var(--primary)" : "var(--surface-2)",
+                          color: idx < 3 ? "#000" : "var(--text-3)",
+                          fontSize: 10,
+                          fontWeight: 800,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          flexShrink: 0,
+                        }}
+                      >
+                        {idx + 1}
+                      </span>
+                      <span style={{ color: "var(--text-2)" }}>{p.name}</span>
+                    </div>
+                    <div style={{ textAlign: "right" }}>
+                      <div style={{ fontWeight: 600 }}>{p.cantidad} ud.</div>
+                      <div style={{ fontSize: 12, color: "var(--text-3)" }}>{formatARS(p.total)}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Gastos por categoría */}
+          {data.totalGastos > 0 && (
+            <div className="card" style={{ padding: "16px" }}>
+              <h3
+                style={{
+                  fontSize: 11,
+                  fontWeight: 700,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.08em",
+                  color: "var(--text-3)",
+                  marginBottom: 14,
+                }}
+              >
+                💸 Gastos por categoría
+              </h3>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, fontSize: 14 }}>
+                {Object.entries(data.gastosPorCategoria)
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([cat, amount]) => (
+                    <div
+                      key={cat}
+                      style={{ display: "flex", justifyContent: "space-between" }}
+                    >
+                      <span style={{ color: "var(--text-2)" }}>{GASTO_LABEL[cat] ?? cat}</span>
+                      <span style={{ fontWeight: 600, color: "var(--red)" }}>
+                        {formatARS(amount)}
+                      </span>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+
+          {/* Turnos del período */}
+          <TurnosHistorial from={from} to={to} collapsible={false} limit={15} />
+
+          {/* Empty state */}
+          {data.totalVentas === 0 && (
+            <div
+              style={{
+                textAlign: "center",
+                padding: "40px 20px",
+                color: "var(--text-3)",
+                fontSize: 15,
+              }}
+            >
+              <div style={{ fontSize: 40, marginBottom: 12 }}>📭</div>
+              Sin ventas en este período
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function getPeriodRange(periodo: Periodo, today: string): { from: string; to: string } {
+  if (periodo === "dia") {
+    return { from: `${today}T00:00:00-03:00`, to: `${today}T23:59:59.999-03:00` };
+  }
+  if (periodo === "semana") {
+    const d = new Date(`${today}T12:00:00-03:00`);
+    const dow = d.getDay(); // 0=Sun
+    const daysBack = dow === 0 ? 6 : dow - 1;
+    const mon = new Date(d);
+    mon.setDate(d.getDate() - daysBack);
+    const sun = new Date(mon);
+    sun.setDate(mon.getDate() + 6);
+    const fmt = (dt: Date) => dt.toISOString().slice(0, 10);
+    return {
+      from: `${fmt(mon)}T00:00:00-03:00`,
+      to: `${fmt(sun)}T23:59:59.999-03:00`,
+    };
+  }
+  // mes
+  const [y, m] = today.split("-").map(Number);
+  const lastDay = new Date(y, m, 0).getDate();
+  return {
+    from: `${y}-${String(m).padStart(2, "0")}-01T00:00:00-03:00`,
+    to: `${y}-${String(m).padStart(2, "0")}-${lastDay}T23:59:59.999-03:00`,
+  };
+}
+
+const DAY_LABELS = ["Lu", "Ma", "Mi", "Ju", "Vi", "Sá", "Do"];
+
+function buildChartData(
+  data: PeriodoData | null,
+  periodo: Periodo
+): { label: string; ventas: number; ganancia: number }[] {
+  if (!data) return [];
+  if (periodo === "mes" && data.ventasPorSemana) {
+    return data.ventasPorSemana.map((w) => ({
+      label: `S${w.semana}`,
+      ventas: w.ventas,
+      ganancia: w.ganancia ?? 0,
+    }));
+  }
+  return data.ventasPorDia.map((d, i) => {
+    // Convert date to day label
+    const dt = new Date(`${d.fecha}T12:00:00-03:00`);
+    const dow = dt.getDay(); // 0=Sun
+    const labelIdx = dow === 0 ? 6 : dow - 1; // map to Mon-Sun 0-6
+    return {
+      label: periodo === "semana" ? DAY_LABELS[labelIdx] : String(dt.getDate()),
+      ventas: d.ventas,
+      ganancia: d.ganancia ?? 0,
+    };
+  });
+}

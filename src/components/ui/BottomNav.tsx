@@ -4,10 +4,11 @@ import Link from "next/link";
 import { useParams, usePathname } from "next/navigation";
 
 const getNavItems = (branchId: string) => [
-  { href: `/${branchId}/caja`,      label: "Caja",      icon: "🏪" },
-  { href: `/${branchId}/productos`, label: "Productos",  icon: "📦" },
-  { href: `/${branchId}/fiados`,    label: "Fiados",     icon: "📋" },
-  { href: `/${branchId}/resumen`,   label: "Resumen",    icon: "📊" },
+  { href: `/${branchId}/caja`,          label: "Caja",        icon: "🏪" },
+  { href: `/${branchId}/productos`,     label: "Productos",   icon: "📦" },
+  { href: `/${branchId}/fiados`,        label: "Fiados",      icon: "📋" },
+  { href: `/${branchId}/resumen`,       label: "Resumen",     icon: "🧾" },
+  { href: `/${branchId}/estadisticas`,  label: "Stats",       icon: "📊" },
 ];
 
 export default function BottomNav() {

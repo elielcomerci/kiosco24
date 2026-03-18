@@ -67,12 +67,17 @@ export async function GET(req: Request) {
     }
   }
 
-  // Subtract expenses from ganancia
-  ganancia -= expensesTotal;
+  // Only subtract expenses from ganancia when there are costs loaded
+  if (hasCosts) ganancia -= expensesTotal;
 
   return NextResponse.json({
     enCaja: Math.round(enCaja),
-    ganancia: hasCosts ? Math.round(ganancia) : 0,
+    ganancia: hasCosts ? Math.round(ganancia) : null,
     hasCosts,
+    // Shift close summary breakdown
+    openingAmount: Math.round(openingAmount),
+    ventasEfectivo: Math.round(cashSalesTotal),
+    totalGastos: Math.round(expensesTotal),
+    totalRetiros: Math.round(withdrawalsTotal),
   });
 }

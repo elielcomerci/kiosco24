@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { formatARS } from "@/lib/utils";
+import { formatARS, getCashSuggestions } from "@/lib/utils";
 import NumPad from "@/components/ui/NumPad";
 import ConfirmationScreen from "@/components/caja/ConfirmationScreen";
 import GastoModal from "@/components/caja/GastoModal";
@@ -76,7 +76,7 @@ export default function CajaPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [ticket, setTicket] = useState<TicketItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [cajaStats, setCajaStats] = useState({ enCaja: 0, ganancia: 0 });
+  const [cajaStats, setCajaStats] = useState<{ enCaja: number; ganancia: number | null; hasCosts: boolean; openingAmount?: number; ventasEfectivo?: number; totalGastos?: number; totalRetiros?: number }>({ enCaja: 0, ganancia: null, hasCosts: false });
   const [lastSale, setLastSale] = useState<Sale | null>(null);
   const [confirmedSale, setConfirmedSale] = useState<Sale | null>(null);
   const [showGasto, setShowGasto] = useState(false);
@@ -99,6 +99,7 @@ export default function CajaPage() {
 
   const isOnline = useOnlineStatus();
   const total = ticket.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const cashSuggestions = getCashSuggestions(total);
 
   // ─── WakeLock Logic ───────────────────────────────────────────────────────
   const wakeLockRef = useRef<any>(null);
@@ -326,15 +327,38 @@ export default function CajaPage() {
             },
             body: JSON.stringify(reqBody),
           });
-          if (!res.ok) throw new Error("Error registrando");
+
+          if (!res.ok) {
+            const errorText = await res.text().catch(() => "");
+            console.error("[Ventas] Error HTTP registrando venta:", res.status, errorText);
+            alert("No se pudo registrar la venta en el servidor. Intentá de nuevo en unos segundos.");
+            return;
+          }
+
           const sale = await res.json();
           newSale.id = sale.id;
         } else {
-          // OFFLINE SAVE
-          // Assuming savePendingSale generates a temporary ID or handles it internally
-          await savePendingSale(reqBody);
-          // For offline sales, we might generate a temporary ID or leave it empty
-          // For now, newSale.id remains "" as initialized
+          // OFFLINE SAVE (sin conexión)
+          try {
+            await savePendingSale(reqBody);
+            alert("Estás sin conexión. La venta se guardó como pendiente para sincronizar.");
+          } catch (err: any) {
+            console.error("[Ventas] Error guardando venta offline:", err);
+            const message = typeof err?.message === "string" ? err.message.toLowerCase() : "";
+            const name = (err as any)?.name || "";
+            const isQuota =
+              name === "QuotaExceededError" ||
+              message.includes("quota") ||
+              message.includes("storage") ||
+              message.includes("no space");
+
+            if (isQuota) {
+              alert("No se pudo guardar la venta: no hay espacio en el dispositivo. Liberá espacio y anotá esta venta manualmente.");
+            } else {
+              alert("Error inesperado al guardar la venta offline. Anotá esta venta manualmente.");
+            }
+            return;
+          }
         }
 
         setLastSale(newSale);
@@ -343,8 +367,35 @@ export default function CajaPage() {
       setReceivedAmount("");
       setShowCashNumpad(false);
       fetchStats();
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      console.error("[Ventas] Error de red o inesperado al registrar venta:", err);
+
+      // Fallback: intentar guardar como pendiente aunque pensáramos que había conexión
+      try {
+        await savePendingSale({
+          items: ticket,
+          total,
+          paymentMethod: method,
+          receivedAmount: received,
+          creditCustomerId,
+        });
+        alert("Hubo un problema de conexión. La venta se guardó como pendiente para sincronizar.");
+      } catch (inner: any) {
+        console.error("[Ventas] Error adicional al guardar venta offline en fallback:", inner);
+        const message = typeof inner?.message === "string" ? inner.message.toLowerCase() : "";
+        const name = (inner as any)?.name || "";
+        const isQuota =
+          name === "QuotaExceededError" ||
+          message.includes("quota") ||
+          message.includes("storage") ||
+          message.includes("no space");
+
+        if (isQuota) {
+          alert("No se pudo guardar la venta: no hay espacio en el dispositivo. Liberá espacio y anotá esta venta manualmente.");
+        } else {
+          alert("Error inesperado. Esta venta no quedó guardada, anotala manualmente.");
+        }
+      }
     }
   };
 
@@ -435,7 +486,22 @@ export default function CajaPage() {
       <div style={{ padding: "24px", display: "flex", flexDirection: "column", gap: "20px", minHeight: "100dvh" }}>
         <h2 style={{ fontSize: "20px", fontWeight: 700 }}>¿Cuánto entregó?</h2>
         <p style={{ color: "var(--text-2)" }}>Total: <strong style={{ color: "var(--text)" }}>{formatARS(total)}</strong></p>
-        
+
+        {cashSuggestions.length > 0 && (
+          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+            {cashSuggestions.map((s) => (
+              <button
+                key={s}
+                className="btn btn-sm btn-ghost"
+                style={{ flex: 1, minWidth: "0", fontSize: "13px" }}
+                onClick={() => setReceivedAmount(String(s))}
+              >
+                {formatARS(s)}
+              </button>
+            ))}
+          </div>
+        )}
+
         <div style={{ background: "var(--surface)", border: "1px solid var(--border-2)", borderRadius: "var(--radius)", padding: "20px", textAlign: "center" }}>
           <div style={{ fontSize: "32px", fontWeight: 800, minHeight: "48px" }}>
             {receivedAmount ? formatARS(parseFloat(receivedAmount)) : <span style={{ color: "var(--text-3)" }}>$0</span>}
@@ -484,8 +550,8 @@ export default function CajaPage() {
         <div className="separator" style={{ width: "1px", height: "32px", background: "var(--border-2)" }} />
         <div className="status-bar-item" style={{ alignItems: "flex-end" }}>
           <span className="status-bar-label">Ganancia estimada</span>
-          <span className="status-bar-value" style={{ color: cajaStats.ganancia >= 0 ? "var(--primary)" : "var(--red)" }}>
-            {formatARS(cajaStats.ganancia)}
+          <span className="status-bar-value" style={{ color: cajaStats.ganancia !== null && cajaStats.ganancia >= 0 ? "var(--primary)" : "var(--red)" }}>
+            {cajaStats.ganancia !== null ? formatARS(cajaStats.ganancia) : "—"}
           </span>
         </div>
       </div>
@@ -873,10 +939,17 @@ export default function CajaPage() {
       {showOpenShift && (
         <OpenShiftModal onConfirm={handleOpenShift} />
       )}
-      {showCloseShift && (
+      {showCloseShift && activeShift && (
         <CloseShiftModal 
           onConfirm={handleCloseShift} 
-          onCancel={() => setShowCloseShift(false)} 
+          onCancel={() => setShowCloseShift(false)}
+          summary={{
+            openingAmount: cajaStats.openingAmount ?? activeShift.openingAmount ?? 0,
+            ventasEfectivo: cajaStats.ventasEfectivo ?? 0,
+            gastos: cajaStats.totalGastos ?? 0,
+            retiros: cajaStats.totalRetiros ?? 0,
+            expectedAmount: cajaStats.enCaja,
+          }}
         />
       )}
       {showScanner && (

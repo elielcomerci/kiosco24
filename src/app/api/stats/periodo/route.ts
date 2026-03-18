@@ -1,0 +1,212 @@
+import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { NextResponse } from "next/server";
+import { artDayRange, todayART } from "@/lib/utils";
+import { getBranchId } from "@/lib/branch";
+
+// GET /api/stats/periodo?periodo=dia|semana|mes&isoDate=YYYY-MM-DD
+export async function GET(req: Request) {
+  const session = await auth();
+  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const branchId = await getBranchId(req, session.user.id);
+  if (!branchId) return NextResponse.json({ error: "No branch" }, { status: 404 });
+
+  const { searchParams } = new URL(req.url);
+  const periodo = searchParams.get("periodo") ?? "dia";
+  const isoDate = searchParams.get("isoDate") ?? todayART();
+
+  // ─── Build date range ─────────────────────────────────────────────────────
+  const { start: dayStart, end: dayEnd } = artDayRange(isoDate);
+
+  let start: Date;
+  let end: Date;
+
+  if (periodo === "semana") {
+    // Monday of the week containing isoDate (ART)
+    const d = new Date(dayStart);
+    const dow = d.getUTCDay(); // 0=Sun, 1=Mon
+    const daysFromMonday = dow === 0 ? 6 : dow - 1;
+    start = new Date(d);
+    start.setUTCDate(d.getUTCDate() - daysFromMonday);
+    end = new Date(start);
+    end.setUTCDate(start.getUTCDate() + 6);
+    end.setUTCHours(23, 59, 59, 999);
+  } else if (periodo === "mes") {
+    // First and last day of the month in isoDate (ART)
+    const [y, m] = isoDate.split("-").map(Number);
+    start = new Date(`${y}-${String(m).padStart(2, "0")}-01T00:00:00-03:00`);
+    const lastDay = new Date(y, m, 0).getDate();
+    end = new Date(
+      `${y}-${String(m).padStart(2, "0")}-${lastDay}T23:59:59.999-03:00`
+    );
+  } else {
+    // "dia"
+    start = dayStart;
+    end = dayEnd;
+  }
+
+  // ─── Load data ────────────────────────────────────────────────────────────
+  const [sales, expenses, withdrawals] = await Promise.all([
+    prisma.sale.findMany({
+      where: { branchId, voided: false, createdAt: { gte: start, lte: end } },
+      include: { items: true },
+    }),
+    prisma.expense.findMany({
+      where: { branchId, createdAt: { gte: start, lte: end } },
+    }),
+    prisma.withdrawal.findMany({
+      where: { branchId, createdAt: { gte: start, lte: end } },
+    }),
+  ]);
+
+  // ─── Aggregate by payment method ─────────────────────────────────────────
+  const ventasPorMetodo: Record<string, number> = {};
+  let totalVentas = 0;
+  let gananciasBrutas = 0;
+  let hasCosts = false;
+
+  // For per-day breakdown
+  const mapaVentas: Record<string, number> = {};
+  const mapaGanancia: Record<string, number> = {};
+  const mapaCostsPresent: Record<string, boolean> = {};
+
+  for (const sale of sales) {
+    const saleDateART = toARTDateString(sale.createdAt);
+    ventasPorMetodo[sale.paymentMethod] = (ventasPorMetodo[sale.paymentMethod] ?? 0) + sale.total;
+    totalVentas += sale.total;
+    mapaVentas[saleDateART] = (mapaVentas[saleDateART] ?? 0) + sale.total;
+
+    for (const item of sale.items) {
+      if (item.cost !== null) {
+        hasCosts = true;
+        mapaCostsPresent[saleDateART] = true;
+        const profit = (item.price - item.cost) * item.quantity;
+        gananciasBrutas += profit;
+        mapaGanancia[saleDateART] = (mapaGanancia[saleDateART] ?? 0) + profit;
+      } else {
+        mapaGanancia[saleDateART] = (mapaGanancia[saleDateART] ?? 0) + item.price * item.quantity;
+      }
+    }
+  }
+
+  const totalGastos = expenses.reduce((s, e) => s + e.amount, 0);
+  const totalRetiros = withdrawals.reduce((s, w) => s + w.amount, 0);
+
+  const gananciasNetas = hasCosts ? gananciasBrutas - totalGastos : null;
+  const margenPorcentaje =
+    hasCosts && totalVentas > 0
+      ? Math.round(((gananciasNetas ?? 0) / totalVentas) * 100)
+      : null;
+
+  // ─── Gastos por categoría ─────────────────────────────────────────────────
+  const gastosPorCategoria: Record<string, number> = {};
+  for (const e of expenses) {
+    gastosPorCategoria[e.reason] = (gastosPorCategoria[e.reason] ?? 0) + e.amount;
+  }
+
+  // ─── Top productos ────────────────────────────────────────────────────────
+  const productoMap: Record<string, { cantidad: number; total: number }> = {};
+  for (const sale of sales) {
+    for (const item of sale.items) {
+      if (!productoMap[item.name]) productoMap[item.name] = { cantidad: 0, total: 0 };
+      productoMap[item.name].cantidad += item.quantity;
+      productoMap[item.name].total += item.price * item.quantity;
+    }
+  }
+  const topProductos = Object.entries(productoMap)
+    .map(([name, data]) => ({ name, ...data }))
+    .sort((a, b) => b.cantidad - a.cantidad)
+    .slice(0, 10);
+
+  // ─── Build ventasPorDia (zero-filled) ─────────────────────────────────────
+  const allDays = eachDayOfInterval(start, end);
+  const ventasPorDia = allDays.map((day) => {
+    const key = toARTDateString(day);
+    return {
+      fecha: key,
+      ventas: mapaVentas[key] ?? 0,
+      ganancia: mapaCostsPresent[key] ? (mapaGanancia[key] ?? 0) : null,
+    };
+  });
+
+  // ─── For monthly view: aggregate by week ──────────────────────────────────
+  let ventasPorSemana: { semana: number; ventas: number; ganancia: number | null }[] | null = null;
+  if (periodo === "mes") {
+    const weekMap: Record<number, { ventas: number; ganancia: number; hasCosts: boolean }> = {};
+    for (const day of ventasPorDia) {
+      const dayDate = new Date(`${day.fecha}T00:00:00-03:00`);
+      const weekNum = getWeekOfMonth(dayDate, start);
+      if (!weekMap[weekNum]) weekMap[weekNum] = { ventas: 0, ganancia: 0, hasCosts: false };
+      weekMap[weekNum].ventas += day.ventas;
+      if (day.ganancia !== null) {
+        weekMap[weekNum].ganancia += day.ganancia;
+        weekMap[weekNum].hasCosts = true;
+      }
+    }
+    ventasPorSemana = Object.entries(weekMap).map(([w, data]) => ({
+      semana: Number(w),
+      ventas: data.ventas,
+      ganancia: data.hasCosts ? data.ganancia : null,
+    }));
+  }
+
+  const promedioVentasDia = allDays.length > 0 ? Math.round(totalVentas / allDays.length) : 0;
+
+  return NextResponse.json({
+    periodo,
+    totalVentas: Math.round(totalVentas),
+    ventasPorMetodo,
+    totalGastos: Math.round(totalGastos),
+    totalRetiros: Math.round(totalRetiros),
+    gananciasBrutas: hasCosts ? Math.round(gananciasBrutas) : null,
+    gananciasNetas: hasCosts ? Math.round(gananciasNetas ?? 0) : null,
+    hasCosts,
+    margenPorcentaje,
+    promedioVentasDia,
+    gastosPorCategoria,
+    topProductos,
+    ventasPorDia,
+    ventasPorSemana,
+  });
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/** Convert a UTC Date to a YYYY-MM-DD string in ART timezone */
+function toARTDateString(date: Date): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Argentina/Buenos_Aires",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const y = parts.find((p) => p.type === "year")?.value;
+  const m = parts.find((p) => p.type === "month")?.value;
+  const d = parts.find((p) => p.type === "day")?.value;
+  return `${y}-${m}-${d}`;
+}
+
+/** Returns an array of Date objects for each day in [start, end] (UTC midnight-aligned) */
+function eachDayOfInterval(start: Date, end: Date): Date[] {
+  const days: Date[] = [];
+  const cur = new Date(start);
+  // Normalize to midnight UTC of the start day
+  cur.setUTCHours(0, 0, 0, 0);
+  const endNorm = new Date(end);
+  endNorm.setUTCHours(23, 59, 59, 999);
+
+  while (cur <= endNorm) {
+    days.push(new Date(cur));
+    cur.setUTCDate(cur.getUTCDate() + 1);
+  }
+  return days;
+}
+
+/** Returns 1-based week number within the month (week 1 = days 1-7, etc.) */
+function getWeekOfMonth(date: Date, monthStart: Date): number {
+  const dayIndex = Math.floor(
+    (date.getTime() - monthStart.getTime()) / (1000 * 60 * 60 * 24)
+  );
+  return Math.floor(dayIndex / 7) + 1;
+}

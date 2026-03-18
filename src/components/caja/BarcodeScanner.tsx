@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Html5Qrcode } from "html5-qrcode";
 
 interface BarcodeScannerProps {
@@ -13,18 +13,6 @@ interface CameraOption {
   label: string;
 }
 
-interface ScannerTuningSupport {
-  canPreferNearFocus: boolean;
-  canZoom: boolean;
-  canUseTorch: boolean;
-}
-
-type NumericRangeCapability = {
-  min?: number;
-  max?: number;
-  step?: number;
-};
-
 function pickPreferredCamera(cameras: CameraOption[]) {
   return (
     cameras.find((camera) => /(back|rear|environment|trasera|externa)/i.test(camera.label)) ||
@@ -33,81 +21,15 @@ function pickPreferredCamera(cameras: CameraOption[]) {
   );
 }
 
-function hasExplicitRearLabel(camera: CameraOption | null) {
-  return Boolean(camera && /(back|rear|environment|trasera|externa)/i.test(camera.label));
-}
-
-function getFocusModes(capabilities: MediaTrackCapabilities) {
-  const focusMode = (capabilities as any).focusMode;
-  return Array.isArray(focusMode) ? (focusMode as string[]) : [];
-}
-
-function getNumericRange(capabilities: MediaTrackCapabilities, key: "zoom" | "focusDistance") {
-  const value = (capabilities as any)[key];
-  if (!value || typeof value !== "object") return null;
-
-  const range = value as NumericRangeCapability;
-  if (typeof range.min !== "number" || typeof range.max !== "number") {
-    return null;
-  }
-
-  return range;
-}
-
-function roundZoom(value: number, step?: number) {
-  if (!step || step <= 0) {
-    return Number(value.toFixed(2));
-  }
-
-  return Number((Math.round(value / step) * step).toFixed(2));
-}
-
-async function applyConstraintSafely(scanner: Html5Qrcode, constraints: MediaTrackConstraints) {
-  try {
-    await scanner.applyVideoConstraints(constraints);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function advancedConstraints(values: Record<string, unknown>): MediaTrackConstraints {
-  return { advanced: [values as any] };
-}
-
-function buildSupport(capabilities: MediaTrackCapabilities): ScannerTuningSupport {
-  const focusModes = getFocusModes(capabilities);
-  const zoomRange = getNumericRange(capabilities, "zoom");
-  const torch = Boolean((capabilities as any).torch);
-
-  return {
-    canPreferNearFocus:
-      focusModes.includes("manual") ||
-      focusModes.includes("single-shot") ||
-      focusModes.includes("continuous") ||
-      zoomRange !== null,
-    canZoom: zoomRange !== null && typeof zoomRange.max === "number" && zoomRange.max > Math.max(1, zoomRange.min ?? 1),
-    canUseTorch: torch,
-  };
-}
-
 export default function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
   const [error, setError] = useState<string | null>(null);
-  const [status, setStatus] = useState<string>("Preparando camara...");
+  const [status, setStatus] = useState("Preparando camara...");
   const [cameras, setCameras] = useState<CameraOption[]>([]);
   const [selectedCameraId, setSelectedCameraId] = useState<string | null>(null);
   const [activeCameraId, setActiveCameraId] = useState<string | null>(null);
-  const [preferNearFocus, setPreferNearFocus] = useState(true);
-  const [torchEnabled, setTorchEnabled] = useState(false);
-  const [tuningSupport, setTuningSupport] = useState<ScannerTuningSupport>({
-    canPreferNearFocus: false,
-    canZoom: false,
-    canUseTorch: false,
-  });
 
   const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
   const onScanRef = useRef(onScan);
-  const preferNearFocusRef = useRef(preferNearFocus);
   const hasMultipleCameras = cameras.length > 1;
   const displayedCameraId = selectedCameraId ?? activeCameraId;
   const selectedCameraLabel = useMemo(
@@ -118,132 +40,6 @@ export default function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps)
   useEffect(() => {
     onScanRef.current = onScan;
   }, [onScan]);
-
-  useEffect(() => {
-    preferNearFocusRef.current = preferNearFocus;
-  }, [preferNearFocus]);
-
-  const applyPreferredTuning = useCallback(
-    async (scanner: Html5Qrcode) => {
-      try {
-        const capabilities = scanner.getRunningTrackCapabilities();
-        const focusModes = getFocusModes(capabilities);
-        const focusDistanceRange = getNumericRange(capabilities, "focusDistance");
-        const zoomRange = getNumericRange(capabilities, "zoom");
-        const isDesktopLike =
-          typeof navigator !== "undefined" &&
-          !/android|iphone|ipad|ipod/i.test(navigator.userAgent || "");
-        const support = buildSupport(capabilities);
-        const useNearFocus = preferNearFocusRef.current;
-
-        setTuningSupport(support);
-        if (!support.canUseTorch) {
-          setTorchEnabled(false);
-        }
-
-        const messages: string[] = [];
-
-        if (useNearFocus) {
-          let focusApplied = false;
-
-          if (focusModes.includes("manual") && focusDistanceRange) {
-            focusApplied = await applyConstraintSafely(
-              scanner,
-              advancedConstraints({
-                focusMode: "manual",
-                focusDistance: focusDistanceRange.min,
-              }),
-            );
-
-            if (focusApplied) {
-              messages.push("Modo cerca activo");
-            }
-          }
-
-          if (!focusApplied && focusModes.includes("single-shot")) {
-            focusApplied = await applyConstraintSafely(
-              scanner,
-              advancedConstraints({ focusMode: "single-shot" }),
-            );
-
-            if (focusApplied) {
-              messages.push("Enfoque puntual activo");
-            }
-          }
-
-          if (!focusApplied && focusModes.includes("continuous")) {
-            const continuousApplied = await applyConstraintSafely(
-              scanner,
-              advancedConstraints({ focusMode: "continuous" }),
-            );
-
-            if (continuousApplied) {
-              messages.push("Autofoco continuo");
-            }
-          }
-
-          if (
-            zoomRange &&
-            typeof zoomRange.max === "number" &&
-            zoomRange.max > Math.max(1, zoomRange.min ?? 1)
-          ) {
-            const baseZoom = isDesktopLike ? 1.8 : 1.35;
-            const targetZoom = roundZoom(
-              Math.min(zoomRange.max, Math.max(zoomRange.min ?? 1, baseZoom)),
-              zoomRange.step,
-            );
-
-            const zoomApplied = await applyConstraintSafely(
-              scanner,
-              advancedConstraints({ zoom: targetZoom }),
-            );
-
-            if (zoomApplied) {
-              messages.push(`Zoom ${targetZoom}x`);
-            }
-          }
-
-          if (messages.length === 0) {
-            setStatus("La camara no permite modo cerca. Uso el mejor fallback disponible.");
-            return;
-          }
-
-          setStatus(messages.join(" | "));
-          return;
-        }
-
-        const relaxedMessages: string[] = [];
-
-        if (focusModes.includes("continuous")) {
-          const continuousApplied = await applyConstraintSafely(
-            scanner,
-            advancedConstraints({ focusMode: "continuous" }),
-          );
-
-          if (continuousApplied) {
-            relaxedMessages.push("Autofoco continuo");
-          }
-        }
-
-        if (zoomRange && typeof zoomRange.min === "number") {
-          const neutralZoom = roundZoom(Math.max(1, zoomRange.min), zoomRange.step);
-          const zoomApplied = await applyConstraintSafely(
-            scanner,
-            advancedConstraints({ zoom: neutralZoom }),
-          );
-
-          if (zoomApplied) {
-            relaxedMessages.push("Zoom normal");
-          }
-        }
-
-        setStatus(relaxedMessages.length > 0 ? relaxedMessages.join(" | ") : "Lectura normal activa");
-      } catch {
-        setStatus("Lectura normal activa");
-      }
-    },
-    [],
-  );
 
   useEffect(() => {
     let html5QrCode: Html5Qrcode | null = null;
@@ -267,8 +63,7 @@ export default function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps)
         }
 
         const preferredCamera = pickPreferredCamera(normalizedCameras);
-        const resolvedCameraId =
-          selectedCameraId ?? (hasExplicitRearLabel(preferredCamera) ? preferredCamera?.id ?? null : null);
+        const resolvedCameraId = selectedCameraId ?? preferredCamera?.id ?? null;
 
         html5QrCode = new Html5Qrcode("reader", {
           verbose: false,
@@ -301,18 +96,13 @@ export default function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps)
         await html5QrCode.start(
           cameraConfig as any,
           {
-            fps: 18,
-            qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
-              const width = Math.min(viewfinderWidth - 24, 420);
-              const height = Math.min(viewfinderHeight - 24, Math.max(110, Math.round(width * 0.35)));
-              return { width, height };
-            },
-            aspectRatio: 1.777,
+            fps: 15,
+            qrbox: { width: 300, height: 100 },
+            aspectRatio: 1,
             disableFlip: false,
-            rememberLastUsedCamera: false,
             videoConstraints: {
-              width: { ideal: 1920 },
-              height: { ideal: 1080 },
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
             },
             experimentalFeatures: {
               useBarCodeDetectorIfSupported: true,
@@ -334,7 +124,7 @@ export default function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps)
         const runningCameraId =
           typeof runningSettings?.deviceId === "string" ? runningSettings.deviceId : resolvedCameraId;
         setActiveCameraId(runningCameraId ?? null);
-        await applyPreferredTuning(html5QrCode);
+        setStatus("Apunta al codigo y evita reflejos.");
       } catch (err: any) {
         if (!active) return;
         setError("No se pudo iniciar la camara. Proba cambiar de camara o dar permiso de acceso.");
@@ -361,42 +151,6 @@ export default function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps)
           });
       }
     };
-  }, [applyPreferredTuning, selectedCameraId]);
-
-  useEffect(() => {
-    const scanner = html5QrCodeRef.current;
-    if (!scanner) return;
-
-    void applyPreferredTuning(scanner);
-  }, [applyPreferredTuning, preferNearFocus]);
-
-  useEffect(() => {
-    if (!tuningSupport.canUseTorch) return;
-
-    const scanner = html5QrCodeRef.current;
-    if (!scanner) return;
-
-    const applyTorch = async () => {
-      const ok = await applyConstraintSafely(scanner, advancedConstraints({ torch: torchEnabled }));
-      if (!ok && torchEnabled) {
-        setTorchEnabled(false);
-        setStatus("La linterna no se pudo activar en esta camara.");
-        return;
-      }
-
-      if (ok) {
-        setStatus((current) => {
-          const base = current.replace(/ \| Linterna encendida| \| Linterna apagada/g, "").trim();
-          return `${base || "Lectura activa"} | Linterna ${torchEnabled ? "encendida" : "apagada"}`;
-        });
-      }
-    };
-
-    void applyTorch();
-  }, [torchEnabled, tuningSupport.canUseTorch]);
-
-  useEffect(() => {
-    setTorchEnabled(false);
   }, [selectedCameraId]);
 
   return (
@@ -441,70 +195,6 @@ export default function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps)
         >
           {status}
         </div>
-
-        <div
-          style={{
-            display: "flex",
-            gap: "8px",
-            marginBottom: "12px",
-            flexWrap: "wrap",
-          }}
-        >
-          <button
-            className="btn btn-sm"
-            style={{
-              flex: 1,
-              minWidth: "130px",
-              background: preferNearFocus ? "var(--primary)" : "rgba(255,255,255,0.08)",
-              color: preferNearFocus ? "#04110a" : "#fff",
-              border: "1px solid rgba(255,255,255,0.12)",
-            }}
-            onClick={() => setPreferNearFocus(true)}
-          >
-            Modo cerca
-          </button>
-          <button
-            className="btn btn-sm"
-            style={{
-              flex: 1,
-              minWidth: "130px",
-              background: !preferNearFocus ? "var(--primary)" : "rgba(255,255,255,0.08)",
-              color: !preferNearFocus ? "#04110a" : "#fff",
-              border: "1px solid rgba(255,255,255,0.12)",
-            }}
-            onClick={() => setPreferNearFocus(false)}
-          >
-            Modo normal
-          </button>
-          {tuningSupport.canUseTorch && (
-            <button
-              className="btn btn-sm"
-              style={{
-                flex: 1,
-                minWidth: "130px",
-                background: torchEnabled ? "var(--amber)" : "rgba(255,255,255,0.08)",
-                color: torchEnabled ? "#241400" : "#fff",
-                border: "1px solid rgba(255,255,255,0.12)",
-              }}
-              onClick={() => setTorchEnabled((prev) => !prev)}
-            >
-              {torchEnabled ? "Linterna encendida" : "Linterna apagada"}
-            </button>
-          )}
-        </div>
-
-        {!tuningSupport.canPreferNearFocus && (
-          <div
-            style={{
-              marginBottom: "12px",
-              fontSize: "12px",
-              color: "rgba(255,255,255,0.62)",
-              textAlign: "center",
-            }}
-          >
-            Esta camara no expone controles avanzados de foco. Igual usamos el mejor fallback disponible.
-          </div>
-        )}
 
         {hasMultipleCameras && (
           <label
@@ -611,18 +301,6 @@ export default function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps)
             <div id="reader" style={{ width: "100%" }} />
           </div>
         )}
-
-        <div
-          style={{
-            marginTop: "12px",
-            fontSize: "11px",
-            color: "rgba(255,255,255,0.56)",
-            textAlign: "center",
-          }}
-        >
-          {tuningSupport.canZoom ? "La camara permite zoom." : "Sin zoom controlado."}{" "}
-          {tuningSupport.canUseTorch ? "Tambien soporta linterna." : ""}
-        </div>
 
         <button
           className="btn btn-ghost"

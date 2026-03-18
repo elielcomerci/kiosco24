@@ -10,12 +10,16 @@ export async function GET(
   try {
     const branch = await prisma.branch.findUnique({
       where: { accessKey: key },
-      include: {
+      select: {
+        id: true,
+        name: true,
         employees: {
+          where: { active: true },
+          orderBy: { name: "asc" },
           select: {
             id: true,
             name: true,
-            active: true,
+            pin: true,
             suspendedUntil: true,
           },
         },
@@ -23,22 +27,29 @@ export async function GET(
     });
 
     if (!branch) {
-      return NextResponse.json({ error: "Código inválido" }, { status: 404 });
+      return NextResponse.json({ error: "Codigo invalido" }, { status: 404 });
     }
 
-    // Filter active and non-suspended employees
-    const activeEmployees = branch.employees.filter((e) => {
-      if (!e.active) return false;
-      if (e.suspendedUntil && e.suspendedUntil > new Date()) return false;
-      return true;
-    });
+    const employees = branch.employees
+      .filter((employee) => {
+        if (employee.suspendedUntil && employee.suspendedUntil > new Date()) {
+          return false;
+        }
+        return true;
+      })
+      .map((employee) => ({
+        id: employee.id,
+        name: employee.name,
+        hasPin: Boolean(employee.pin),
+      }));
 
     return NextResponse.json({
       branchId: branch.id,
       branchName: branch.name,
-      employees: activeEmployees,
+      employees,
     });
   } catch (error) {
-    return NextResponse.json({ error: "Failed to fetch employees" }, { status: 500 });
+    console.error("Error fetching employees by access key:", error);
+    return NextResponse.json({ error: "No se pudo consultar la sucursal" }, { status: 500 });
   }
 }

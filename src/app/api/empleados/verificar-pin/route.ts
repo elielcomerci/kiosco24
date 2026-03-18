@@ -1,4 +1,6 @@
 import { auth } from "@/lib/auth";
+import { getBranchContext } from "@/lib/branch";
+import { InvalidEmployeePinError, verifyEmployeePinValue } from "@/lib/employee-pin";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 
@@ -12,7 +14,12 @@ export async function POST(req: Request) {
   }
 
   try {
+    const { branchId } = await getBranchContext(req, session.user.id);
     const { employeeId, pin } = await req.json();
+
+    if (!branchId) {
+      return NextResponse.json({ ok: false, error: "Sucursal no encontrada" }, { status: 404 });
+    }
 
     if (!employeeId || !pin) {
       return NextResponse.json({ ok: false, error: "Datos incompletos" }, { status: 400 });
@@ -22,13 +29,14 @@ export async function POST(req: Request) {
     const employee = await prisma.employee.findFirst({
       where: {
         id: employeeId,
+        branchId,
         branch: {
           kiosco: {
             ownerId: session.user.id,
           },
         },
       },
-      select: { pin: true },
+      select: { id: true, pin: true },
     });
 
     if (!employee) {
@@ -40,9 +48,20 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true });
     }
 
-    const isCorrect = employee.pin === pin;
-    return NextResponse.json({ ok: isCorrect });
+    const verification = await verifyEmployeePinValue(employee.pin, pin);
+
+    if (verification.ok && verification.upgradedHash) {
+      await prisma.employee.update({
+        where: { id: employee.id },
+        data: { pin: verification.upgradedHash },
+      });
+    }
+
+    return NextResponse.json({ ok: verification.ok });
   } catch (error) {
+    if (error instanceof InvalidEmployeePinError) {
+      return NextResponse.json({ ok: false, error: "PIN invalido" }, { status: 400 });
+    }
     console.error("Error verifying PIN:", error);
     return NextResponse.json({ ok: false, error: "Error interno" }, { status: 500 });
   }

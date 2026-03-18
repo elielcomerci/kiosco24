@@ -5,6 +5,7 @@ import Credentials from "next-auth/providers/credentials";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
+import { InvalidEmployeePinError, verifyEmployeePinValue } from "@/lib/employee-pin";
 import { UserRole } from "@prisma/client";
 
 declare module "next-auth" {
@@ -72,23 +73,113 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         return user;
       },
     }),
+    Credentials({
+      id: "employee-login",
+      name: "Empleado",
+      credentials: {
+        accessKey: { label: "Codigo de acceso", type: "text" },
+        employeeId: { label: "Employee ID", type: "text" },
+        pin: { label: "PIN", type: "password" },
+      },
+      async authorize(credentials) {
+        if (!credentials?.accessKey || !credentials?.employeeId) {
+          return null;
+        }
+
+        const branch = await prisma.branch.findUnique({
+          where: { accessKey: credentials.accessKey as string },
+          select: { id: true },
+        });
+
+        if (!branch) {
+          return null;
+        }
+
+        const employee = await prisma.employee.findUnique({
+          where: { id: credentials.employeeId as string },
+          select: {
+            id: true,
+            name: true,
+            pin: true,
+            active: true,
+            suspendedUntil: true,
+            branchId: true,
+          },
+        });
+
+        if (!employee || !employee.active || employee.branchId !== branch.id) {
+          return null;
+        }
+
+        if (employee.suspendedUntil && employee.suspendedUntil > new Date()) {
+          return null;
+        }
+
+        if (employee.pin) {
+          const pin = typeof credentials.pin === "string" ? credentials.pin : "";
+          let verification;
+          try {
+            verification = await verifyEmployeePinValue(employee.pin, pin);
+          } catch (error) {
+            if (error instanceof InvalidEmployeePinError) {
+              return null;
+            }
+            throw error;
+          }
+          if (!verification.ok) {
+            return null;
+          }
+
+          if (verification.upgradedHash) {
+            await prisma.employee.update({
+              where: { id: employee.id },
+              data: { pin: verification.upgradedHash },
+            });
+          }
+        }
+
+        return {
+          id: `emp_${employee.id}`,
+          name: employee.name,
+          role: UserRole.EMPLOYEE,
+          employeeId: employee.id,
+          branchId: branch.id,
+        };
+      },
+    }),
   ],
   callbacks: {
     jwt({ token, user }) {
-      if (!user && typeof token.id === "string" && token.id.startsWith("emp_")) {
-        delete token.id;
-        delete token.role;
-        delete token.employeeId;
-        delete token.branchId;
-        return token;
-      }
-
       if (user) {
         token.id = user.id;
         token.role = user.role ?? UserRole.OWNER;
-        delete token.employeeId;
-        delete token.branchId;
-      } else if (!token.role) {
+        if ((user.role ?? UserRole.OWNER) === UserRole.EMPLOYEE) {
+          token.employeeId = user.employeeId;
+          token.branchId = user.branchId;
+        } else {
+          delete token.employeeId;
+          delete token.branchId;
+        }
+        return token;
+      }
+
+      if (token.role === UserRole.EMPLOYEE) {
+        const isValidEmployeeToken =
+          typeof token.id === "string" &&
+          token.id.startsWith("emp_") &&
+          typeof token.employeeId === "string" &&
+          typeof token.branchId === "string";
+
+        if (!isValidEmployeeToken) {
+          delete token.id;
+          delete token.role;
+          delete token.employeeId;
+          delete token.branchId;
+        }
+        return token;
+      }
+
+      if (!token.role) {
         token.role = UserRole.OWNER;
       }
 

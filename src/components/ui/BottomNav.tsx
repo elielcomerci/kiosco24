@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSession } from "next-auth/react";
 import { useParams, usePathname } from "next/navigation";
 
 const getNavItems = (branchId: string) => [
@@ -12,11 +13,13 @@ const getNavItems = (branchId: string) => [
 ];
 
 export default function BottomNav() {
+  const { data: session } = useSession();
   const pathname = usePathname();
   const params = useParams();
   const branchId = params.branchId as string;
 
   if (!branchId) return null; // No mostrar si no estamos en contexto de sucursal
+  if (session?.user?.role === "EMPLOYEE") return null;
 
   const navItems = getNavItems(branchId);
 

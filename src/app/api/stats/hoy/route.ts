@@ -9,6 +9,7 @@ import { getBranchId } from "@/lib/branch";
 export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ enCaja: 0, ganancia: 0 });
+  const canSeeProfit = session.user.role === "OWNER";
 
   const branchId = await getBranchId(req, session.user.id);
   if (!branchId) return NextResponse.json({ enCaja: 0, ganancia: 0 });
@@ -72,8 +73,8 @@ export async function GET(req: Request) {
 
   return NextResponse.json({
     enCaja: Math.round(enCaja),
-    ganancia: hasCosts ? Math.round(ganancia) : null,
-    hasCosts,
+    ganancia: canSeeProfit && hasCosts ? Math.round(ganancia) : null,
+    hasCosts: canSeeProfit ? hasCosts : false,
     // Shift close summary breakdown
     openingAmount: Math.round(openingAmount),
     ventasEfectivo: Math.round(cashSalesTotal),

@@ -1,6 +1,6 @@
 import { requireOwnerBranchPage } from "@/lib/route-access";
 
-export default async function ConfigurationLayout({
+export default async function ProductsLayout({
   children,
   params,
 }: {

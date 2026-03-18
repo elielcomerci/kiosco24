@@ -8,7 +8,7 @@ import ThemeEditor from "@/components/ui/ThemeEditor";
 interface Employee {
   id: string;
   name: string;
-  pin: string | null;
+  hasPin: boolean;
   active: boolean;
   suspendedUntil: string | null; // ISO string for form state
 }
@@ -34,37 +34,76 @@ interface Branch {
 
 // ─── Employee Form Modal ───────────────────────────────────────────────────────
 function EmployeeModal({
+  branchId,
   employee,
   onClose,
   onSave,
 }: {
+  branchId: string;
   employee: Employee | null;
   onClose: () => void;
   onSave: () => void;
 }) {
   const isNew = !employee;
   const [name, setName] = useState(employee?.name || "");
-  const [pin, setPin] = useState(employee?.pin || "");
+  const [pin, setPin] = useState("");
   const [active, setActive] = useState(employee?.active ?? true);
   const [suspendedUntil, setSuspendedUntil] = useState(employee?.suspendedUntil || "");
+  const [removePin, setRemovePin] = useState(false);
   const [loading, setLoading] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const hasStoredPin = Boolean(employee?.hasPin);
 
   const handleSave = async () => {
     if (!name.trim()) return;
     setLoading(true);
     if (isNew) {
-      await fetch("/api/empleados", {
+      const res = await fetch("/api/empleados", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-branch-id": branchId,
+        },
         body: JSON.stringify({ name, pin: pin || null }),
       });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        alert(data?.error || "No se pudo crear el empleado.");
+        setLoading(false);
+        return;
+      }
     } else {
-      await fetch(`/api/empleados/${employee.id}`, {
+      const payload: {
+        name: string;
+        active: boolean;
+        suspendedUntil: string | null;
+        pin?: string | null;
+      } = {
+        name,
+        active,
+        suspendedUntil: suspendedUntil || null,
+      };
+
+      if (removePin) {
+        payload.pin = null;
+      } else if (pin.trim()) {
+        payload.pin = pin;
+      }
+
+      const res = await fetch(`/api/empleados/${employee.id}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, pin: pin || null, active, suspendedUntil: suspendedUntil || null }),
+        headers: {
+          "Content-Type": "application/json",
+          "x-branch-id": branchId,
+        },
+        body: JSON.stringify(payload),
       });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        alert(data?.error || "No se pudo guardar el empleado.");
+        setLoading(false);
+        return;
+      }
     }
     setLoading(false);
     onSave();
@@ -73,10 +112,17 @@ function EmployeeModal({
   const handleDelete = async () => {
     if (!confirming) { setConfirming(true); return; }
     setLoading(true);
-    const res = await fetch(`/api/empleados/${employee!.id}`, { method: "DELETE" });
+    const res = await fetch(`/api/empleados/${employee!.id}`, {
+      method: "DELETE",
+      headers: {
+        "x-branch-id": branchId,
+      },
+    });
     if (!res.ok) {
-      const data = await res.json();
-      alert(data.error || "No se pudo eliminar.");
+      const data = await res.json().catch(() => null);
+      alert(data?.error || "No se pudo eliminar.");
+      setLoading(false);
+      return;
     }
     setLoading(false);
     onSave();
@@ -129,11 +175,45 @@ function EmployeeModal({
               type="tel"
               inputMode="numeric"
               pattern="[0-9]*"
-              placeholder="Ej: 1234"
+              placeholder={
+                removePin
+                  ? "El PIN actual se va a quitar"
+                  : !isNew && hasStoredPin
+                    ? "Escribi uno nuevo para reemplazarlo"
+                    : "Ej: 1234"
+              }
               value={pin}
-              onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 6))}
+              onChange={(e) => {
+                setPin(e.target.value.replace(/\D/g, "").slice(0, 6));
+                if (removePin) {
+                  setRemovePin(false);
+                }
+              }}
+              disabled={removePin}
               style={{ letterSpacing: "0.3em", textAlign: "center", fontSize: "20px" }}
             />
+            {!isNew && hasStoredPin && (
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "6px", gap: "10px" }}>
+                <span style={{ fontSize: "11px", color: removePin ? "var(--amber)" : "var(--text-3)" }}>
+                  {removePin
+                    ? "El PIN se quitara cuando guardes."
+                    : pin
+                      ? "Se reemplazara el PIN actual."
+                      : "Deja vacio para mantener el PIN actual."}
+                </span>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-ghost"
+                  style={{ border: "1px solid var(--border)", whiteSpace: "nowrap" }}
+                  onClick={() => {
+                    setRemovePin((prev) => !prev);
+                    setPin("");
+                  }}
+                >
+                  {removePin ? "Mantener PIN" : "Quitar PIN"}
+                </button>
+              </div>
+            )}
           </div>
 
           <div>
@@ -515,7 +595,11 @@ export default function ConfiguracionPage() {
 
   const fetchEmployees = async () => {
     setLoadingEmployees(true);
-    const res = await fetch("/api/empleados");
+    const res = await fetch("/api/empleados", {
+      headers: {
+        "x-branch-id": branchId,
+      },
+    });
     if(res.ok) {
       const data = await res.json();
       setEmployees(data);
@@ -584,7 +668,10 @@ export default function ConfiguracionPage() {
     setSavingBranch(true);
     await fetch(`/api/branches/${branchId}`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "x-branch-id": branchId,
+      },
       body: JSON.stringify({
         name: editBranchName,
         logoUrl: editLogoUrl || null,
@@ -1011,8 +1098,26 @@ export default function ConfiguracionPage() {
             style={{ alignSelf: "center", border: "1px solid var(--border)" }}
             onClick={async () => {
               if (confirm("¿Generar un nuevo código? Los dispositivos viejos perderán el acceso.")) {
-                const res = await fetch(`/api/branches/${branchId}/access-key`, { method: "POST" });
-                if (res.ok) window.location.reload();
+                const res = await fetch(`/api/branches/${branchId}/access-key`, {
+                  method: "POST",
+                  headers: {
+                    "x-branch-id": branchId,
+                  },
+                });
+                if (res.ok) {
+                  const data = await res.json();
+                  setCurrentBranch((prev) => (
+                    prev ? { ...prev, accessKey: data.accessKey ?? null } : prev
+                  ));
+                  setBranches((prev) => prev.map((branch) => (
+                    branch.id === branchId
+                      ? { ...branch, accessKey: data.accessKey ?? null }
+                      : branch
+                  )));
+                } else {
+                  const data = await res.json().catch(() => null);
+                  alert(data?.error || "No se pudo generar el cÃ³digo.");
+                }
               }
             }}
           >
@@ -1146,7 +1251,7 @@ export default function ConfiguracionPage() {
                     )}
                   </div>
                   <div style={{ fontSize: "12px", color: "var(--text-3)" }}>
-                    {emp.pin ? "PIN configurado" : "Sin PIN"}
+                    {emp.hasPin ? "PIN configurado" : "Sin PIN"}
                   </div>
                 </div>
                 <span style={{ color: "var(--text-3)", fontSize: "18px" }}>›</span>
@@ -1159,6 +1264,7 @@ export default function ConfiguracionPage() {
       {/* Modals */}
       {employeeModal && (
         <EmployeeModal
+          branchId={branchId}
           employee={employeeModal === "new" ? null : employeeModal}
           onClose={handleEmployeeModalClose}
           onSave={handleEmployeeModalSave}

@@ -8,6 +8,9 @@ import { getBranchId } from "@/lib/branch";
 export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (session.user.role !== "OWNER") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const branchId = await getBranchId(req, session.user.id);
   if (!branchId) return NextResponse.json({ error: "No branch" }, { status: 404 });

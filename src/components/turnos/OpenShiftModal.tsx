@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useParams } from "next/navigation";
 import NumPad from "@/components/ui/NumPad";
 import PinModal from "@/components/ui/PinModal";
 
@@ -15,6 +16,7 @@ interface OpenShiftModalProps {
 }
 
 export default function OpenShiftModal({ onConfirm }: OpenShiftModalProps) {
+  const { branchId } = useParams() as { branchId: string };
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [selectedEmployee, setSelectedEmployee] = useState("");
   const [customName, setCustomName] = useState("");
@@ -27,15 +29,19 @@ export default function OpenShiftModal({ onConfirm }: OpenShiftModalProps) {
   const [pinLoading, setPinLoading] = useState(false);
 
   useEffect(() => {
-    fetch("/api/empleados?activeOnly=true")
+    fetch("/api/empleados?activeOnly=true", {
+      headers: {
+        "x-branch-id": branchId,
+      },
+    })
       .then((r) => r.json())
       .then((data) => {
         // Only active employees, add hasPin flag
         const active = Array.isArray(data)
-          ? data.filter((e: any) => e.active).map((e: any) => ({
+          ? data.map((e: any) => ({
               id: e.id,
               name: e.name,
-              hasPin: !!e.pin,
+              hasPin: Boolean(e.hasPin),
             }))
           : [];
         setEmployees(active);
@@ -43,7 +49,7 @@ export default function OpenShiftModal({ onConfirm }: OpenShiftModalProps) {
         else setSelectedEmployee("owner");
       })
       .catch(() => setSelectedEmployee("owner"));
-  }, []);
+  }, [branchId]);
 
   const resolvedName =
     selectedEmployee === "owner"
@@ -79,7 +85,10 @@ export default function OpenShiftModal({ onConfirm }: OpenShiftModalProps) {
 
     const res = await fetch("/api/empleados/verificar-pin", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "x-branch-id": branchId,
+      },
       body: JSON.stringify({ employeeId: selectedEmp.id, pin }),
     });
     const data = await res.json();

@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { getBranchContext } from "@/lib/branch";
+import { InvalidEmployeePinError, prepareEmployeePinForStorage } from "@/lib/employee-pin";
 
 // PATCH /api/empleados/[id] — update employee
 export async function PATCH(
@@ -22,19 +23,54 @@ export async function PATCH(
   if (!employee || employee.branchId !== branchId)
     return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const { name, pin, active } = await req.json();
+  const { name, pin, active, suspendedUntil } = await req.json();
+  const parsedSuspendedUntil =
+    suspendedUntil === undefined
+      ? undefined
+      : suspendedUntil
+        ? new Date(suspendedUntil)
+        : null;
+
+  if (
+    parsedSuspendedUntil !== undefined &&
+    parsedSuspendedUntil !== null &&
+    Number.isNaN(parsedSuspendedUntil.getTime())
+  ) {
+    return NextResponse.json({ error: "Fecha de suspensión inválida" }, { status: 400 });
+  }
+
+  let hashedPin: string | null | undefined;
+  try {
+    hashedPin = await prepareEmployeePinForStorage(pin);
+  } catch (error) {
+    if (error instanceof InvalidEmployeePinError) {
+      return NextResponse.json({ error: "El PIN debe tener entre 1 y 6 digitos numericos." }, { status: 400 });
+    }
+    throw error;
+  }
 
   const updated = await prisma.employee.update({
     where: { id },
+    select: {
+      id: true,
+      name: true,
+      active: true,
+      suspendedUntil: true,
+      pin: true,
+    },
     data: {
       ...(name !== undefined && { name: name.trim() }),
-      ...(pin !== undefined && { pin: pin?.trim() || null }),
+      ...(hashedPin !== undefined && { pin: hashedPin }),
       ...(active !== undefined && { active }),
+      ...(parsedSuspendedUntil !== undefined && { suspendedUntil: parsedSuspendedUntil }),
     },
   });
 
   // Si se está suspendiendo al empleado, cerrar automáticamente su turno actual si lo hubiese
-  if (active === false) {
+  if (
+    active === false ||
+    (parsedSuspendedUntil instanceof Date && parsedSuspendedUntil > new Date())
+  ) {
     const openShift = await prisma.shift.findFirst({
       where: { employeeId: id, closedAt: null }
     });
@@ -52,7 +88,13 @@ export async function PATCH(
     }
   }
 
-  return NextResponse.json(updated);
+  return NextResponse.json({
+    id: updated.id,
+    name: updated.name,
+    active: updated.active,
+    suspendedUntil: updated.suspendedUntil,
+    hasPin: Boolean(updated.pin),
+  });
 }
 
 // DELETE /api/empleados/[id] — delete employee

@@ -1,4 +1,4 @@
-import { auth } from "@/lib/auth";
+import { auth, signOut } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { notFound, redirect } from "next/navigation";
 import BottomNav from "@/components/ui/BottomNav";
@@ -96,15 +96,32 @@ export default async function BranchLayout({
           )}
           <BranchSelector branches={branches} currentBranchId={effectiveBranchId} />
         </div>
-        {!isEmployee && (
-          <a
-            href={`/${effectiveBranchId}/configuracion`}
-            style={{ fontSize: "20px", textDecoration: "none", color: "var(--text)" }}
-            title="Configuracion"
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          {!isEmployee && (
+            <a
+              href={`/${effectiveBranchId}/configuracion`}
+              style={{ fontSize: "20px", textDecoration: "none", color: "var(--text)" }}
+              title="Configuracion"
+            >
+              {"\u2699\uFE0F"}
+            </a>
+          )}
+          <form
+            action={async () => {
+              "use server";
+              await signOut({ redirectTo: "/login" });
+            }}
           >
-            {"\u2699\uFE0F"}
-          </a>
-        )}
+            <button
+              type="submit"
+              className="btn btn-sm btn-ghost"
+              style={{ border: "1px solid var(--border)", padding: "6px 10px" }}
+              title="Salir"
+            >
+              Salir
+            </button>
+          </form>
+        </div>
       </header>
 
       <main className="app-content">{children}</main>

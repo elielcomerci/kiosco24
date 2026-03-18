@@ -1,7 +1,43 @@
 "use client";
 
 import { signIn } from "next-auth/react";
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
+
+const AUTH_TIMEOUT_MS = 15000;
+
+type BranchEmployee = {
+  id: string;
+  name: string;
+};
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs = AUTH_TIMEOUT_MS): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timeoutId = window.setTimeout(() => {
+      reject(new Error("AUTH_TIMEOUT"));
+    }, timeoutMs);
+
+    promise.then(
+      (value) => {
+        window.clearTimeout(timeoutId);
+        resolve(value);
+      },
+      (error) => {
+        window.clearTimeout(timeoutId);
+        reject(error);
+      }
+    );
+  });
+}
+
+function getAuthErrorMessage(error: unknown) {
+  const message = error instanceof Error ? error.message : "";
+
+  if (message === "AUTH_TIMEOUT") {
+    return "El login tardo demasiado en responder. Reintenta en unos segundos.";
+  }
+
+  return "No se pudo completar el inicio de sesion. Reintenta en unos segundos.";
+}
 
 export default function LoginPage() {
   const [loading, setLoading] = useState(false);
@@ -11,28 +47,34 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
 
-  // Employee Flow State
   const [isEmployeeFlow, setIsEmployeeFlow] = useState(false);
-  const [employeeStep, setEmployeeStep] = useState(1); // 1: Key, 2: Selection, 3: PIN
+  const [employeeStep, setEmployeeStep] = useState(1);
   const [branchKey, setBranchKey] = useState("");
   const [selectedBranchId, setSelectedBranchId] = useState("");
-  const [selectedEmployee, setSelectedEmployee] = useState<any>(null);
+  const [selectedEmployee, setSelectedEmployee] = useState<BranchEmployee | null>(null);
   const [pin, setPin] = useState("");
-  const [branchEmployees, setBranchEmployees] = useState<any[]>([]);
+  const [branchEmployees, setBranchEmployees] = useState<BranchEmployee[]>([]);
   const [branchName, setBranchName] = useState("");
 
   const handleGoogleLogin = async () => {
     setLoading(true);
-    await signIn("google", { callbackUrl: "/" });
+    setError("");
+
+    try {
+      await withTimeout(signIn("google", { redirectTo: "/" }));
+    } catch (error) {
+      console.error("[Login] Google sign-in failed:", error);
+      setError(getAuthErrorMessage(error));
+      setLoading(false);
+    }
   };
 
-  const handleCredentialsSubmit = async (e: React.FormEvent) => {
+  const handleCredentialsSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError("");
 
     if (isRegister) {
-      // Registro
       try {
         const res = await fetch("/api/auth/register", {
           method: "POST",
@@ -40,7 +82,7 @@ export default function LoginPage() {
           body: JSON.stringify({ email, password }),
         });
 
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
 
         if (!res.ok) {
           setError(data.error || "Error al registrarse");
@@ -48,72 +90,117 @@ export default function LoginPage() {
           return;
         }
 
-        // Login automático tras registro
-        await signIn("credentials", {
+        const result = await withTimeout(
+          signIn("credentials", {
+            email,
+            password,
+            redirect: false,
+            redirectTo: "/",
+          })
+        );
+
+        if (result?.error) {
+          setError("No se pudo iniciar sesion despues del registro.");
+          setLoading(false);
+          return;
+        }
+
+        window.location.assign(result?.url || "/");
+        return;
+      } catch (error) {
+        console.error("[Login] Registration sign-in failed:", error);
+        setError(getAuthErrorMessage(error));
+        setLoading(false);
+        return;
+      }
+    }
+
+    try {
+      const result = await withTimeout(
+        signIn("credentials", {
           email,
           password,
-          callbackUrl: "/",
-        });
-      } catch (err) {
-        setError("Error de conexión");
-        setLoading(false);
-      }
-    } else {
-      // Login
-      const result = await signIn("credentials", {
-        email,
-        password,
-        redirect: false,
-      });
+          redirect: false,
+          redirectTo: "/",
+        })
+      );
 
       if (result?.error) {
-        setError("Email o contraseña incorrectos");
+        setError("Email o contrasena incorrectos");
         setLoading(false);
-      } else {
-        window.location.href = "/";
+        return;
       }
+
+      window.location.assign(result?.url || "/");
+    } catch (error) {
+      console.error("[Login] Credentials sign-in failed:", error);
+      setError(getAuthErrorMessage(error));
+      setLoading(false);
     }
   };
 
   const handleValidateKey = async () => {
     setLoading(true);
     setError("");
+
     try {
       const res = await fetch(`/api/branches/access-key/${branchKey}/employees`);
+
       if (!res.ok) {
-        setError("Código de sucursal inválido");
+        setError("Codigo de sucursal invalido");
         setLoading(false);
         return;
       }
+
       const data = await res.json();
       setSelectedBranchId(data.branchId || "");
-      setBranchEmployees(data.employees);
-      setBranchName(data.branchName);
+      setBranchEmployees(Array.isArray(data.employees) ? data.employees : []);
+      setBranchName(data.branchName || "");
       setSelectedEmployee(null);
       setPin("");
       setEmployeeStep(2);
-    } catch (err) {
+    } catch (error) {
+      console.error("[Login] Branch validation failed:", error);
       setError("Error al conectar con la sucursal");
     }
+
     setLoading(false);
   };
 
-  const handleEmployeeLogin = async (e: React.FormEvent) => {
+  const handleEmployeeLogin = async (e: FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError("");
-    const result = await signIn("employee-login", {
-      accessKey: branchKey,
-      employeeId: selectedEmployee.id,
-      pin: pin,
-      redirect: false,
-    });
 
-    if (result?.error) {
-      setError("PIN incorrecto o empleado no autorizado");
+    if (!selectedEmployee?.id) {
+      setError("Selecciona un empleado para continuar");
       setLoading(false);
-    } else {
-      window.location.href = selectedBranchId ? `/${selectedBranchId}/caja` : "/";
+      return;
+    }
+
+    try {
+      const destination = selectedBranchId ? `/${selectedBranchId}/caja` : "/";
+      const result = await withTimeout(
+        signIn("employee-login", {
+          accessKey: branchKey,
+          employeeId: selectedEmployee.id,
+          pin,
+          redirect: false,
+          redirectTo: destination,
+        })
+      );
+
+      if (result?.error) {
+        setError("PIN incorrecto o empleado no autorizado");
+        setLoading(false);
+        return;
+      }
+
+      window.location.assign(result?.url || destination);
+    } catch (error) {
+      console.error("[Login] Employee sign-in failed:", error);
+      setError(getAuthErrorMessage(error));
+      setLoading(false);
     }
   };
 
@@ -130,7 +217,6 @@ export default function LoginPage() {
         background: "var(--bg)",
       }}
     >
-      {/* Logo / Brand */}
       <div style={{ textAlign: "center" }}>
         <div
           style={{
@@ -159,11 +245,10 @@ export default function LoginPage() {
             fontWeight: 400,
           }}
         >
-          Sabé exactamente cuánto ganaste hoy.
+          Sabe exactamente cuanto ganaste hoy.
         </p>
       </div>
 
-      {/* Login box */}
       <div
         className="card"
         style={{
@@ -186,19 +271,21 @@ export default function LoginPage() {
             {isRegister ? "Crear cuenta" : "Entrar al sistema"}
           </h2>
           <p style={{ fontSize: "13px", color: "var(--text-2)" }}>
-            14 días gratis, sin tarjeta.
+            14 dias gratis, sin tarjeta.
           </p>
         </div>
 
         {error && (
-          <div style={{
-            color: "#ef4444",
-            fontSize: "13px",
-            background: "rgba(239, 68, 68, 0.1)",
-            padding: "10px",
-            borderRadius: "8px",
-            textAlign: "center"
-          }}>
+          <div
+            style={{
+              color: "#ef4444",
+              fontSize: "13px",
+              background: "rgba(239, 68, 68, 0.1)",
+              padding: "10px",
+              borderRadius: "8px",
+              textAlign: "center",
+            }}
+          >
             {error}
           </div>
         )}
@@ -208,7 +295,7 @@ export default function LoginPage() {
             {employeeStep === 1 && (
               <>
                 <p style={{ fontSize: "13px", color: "var(--text-2)", textAlign: "center" }}>
-                  Ingresá el código de acceso de tu sucursal
+                  Ingresa el codigo de acceso de tu sucursal
                 </p>
                 <input
                   type="text"
@@ -220,7 +307,7 @@ export default function LoginPage() {
                   style={{ textAlign: "center", textTransform: "uppercase", letterSpacing: "1px" }}
                 />
                 <button className="btn btn-primary" onClick={handleValidateKey} disabled={loading || !branchKey}>
-                  {loading ? "Validando..." : "Siguiente ›"}
+                  {loading ? "Validando..." : "Siguiente >"}
                 </button>
               </>
             )}
@@ -228,17 +315,47 @@ export default function LoginPage() {
             {employeeStep === 2 && (
               <>
                 <p style={{ fontSize: "13px", color: "var(--text-2)", textAlign: "center" }}>
-                  Hola! Quién sos? en <strong>{branchName}</strong>
+                  Hola, quien sos en <strong>{branchName}</strong>?
                 </p>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", maxHeight: "200px", overflowY: "auto", padding: "4px" }}>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    gap: "8px",
+                    maxHeight: "200px",
+                    overflowY: "auto",
+                    padding: "4px",
+                  }}
+                >
                   {branchEmployees.map((emp) => (
                     <button
                       key={emp.id}
                       className="btn btn-ghost"
-                      onClick={() => { setSelectedEmployee(emp); setEmployeeStep(3); }}
-                      style={{ height: "auto", padding: "12px 8px", flexDirection: "column", gap: "4px", background: "var(--surface-2)" }}
+                      onClick={() => {
+                        setSelectedEmployee(emp);
+                        setEmployeeStep(3);
+                      }}
+                      style={{
+                        height: "auto",
+                        padding: "12px 8px",
+                        flexDirection: "column",
+                        gap: "4px",
+                        background: "var(--surface-2)",
+                      }}
                     >
-                      <div style={{ width: "32px", height: "32px", borderRadius: "50%", background: "var(--primary)", display: "flex", alignItems: "center", justifyContent: "center", color: "black", fontWeight: 800 }}>
+                      <div
+                        style={{
+                          width: "32px",
+                          height: "32px",
+                          borderRadius: "50%",
+                          background: "var(--primary)",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          color: "black",
+                          fontWeight: 800,
+                        }}
+                      >
                         {emp.name.charAt(0)}
                       </div>
                       <span style={{ fontSize: "12px", fontWeight: 600 }}>{emp.name.split(" ")[0]}</span>
@@ -246,15 +363,28 @@ export default function LoginPage() {
                   ))}
                 </div>
                 <button className="btn-ghost" onClick={() => setEmployeeStep(1)} style={{ fontSize: "12px" }}>
-                  ‹ Cambiar Sucursal
+                  {"<"} Cambiar sucursal
                 </button>
               </>
             )}
 
-            {employeeStep === 3 && (
+            {employeeStep === 3 && selectedEmployee && (
               <form onSubmit={handleEmployeeLogin} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
                 <div style={{ textAlign: "center" }}>
-                  <div style={{ width: "48px", height: "48px", borderRadius: "50%", background: "var(--primary)", display: "flex", alignItems: "center", justifyContent: "center", color: "black", fontWeight: 800, margin: "0 auto 8px" }}>
+                  <div
+                    style={{
+                      width: "48px",
+                      height: "48px",
+                      borderRadius: "50%",
+                      background: "var(--primary)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      color: "black",
+                      fontWeight: 800,
+                      margin: "0 auto 8px",
+                    }}
+                  >
                     {selectedEmployee.name.charAt(0)}
                   </div>
                   <p style={{ fontWeight: 700 }}>{selectedEmployee.name}</p>
@@ -262,7 +392,7 @@ export default function LoginPage() {
                 <input
                   type="tel"
                   inputMode="numeric"
-                  placeholder="Ingresá tu PIN"
+                  placeholder="Ingresa tu PIN"
                   className="input"
                   value={pin}
                   onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 6))}
@@ -270,10 +400,18 @@ export default function LoginPage() {
                   style={{ textAlign: "center", letterSpacing: "0.5em", fontSize: "20px" }}
                 />
                 <button className="btn btn-primary" type="submit" disabled={loading || !pin}>
-                  {loading ? "Entrando..." : "Entrar ›"}
+                  {loading ? "Entrando..." : "Entrar >"}
                 </button>
-                <button className="btn-ghost" type="button" onClick={() => { setEmployeeStep(2); setPin(""); }} style={{ fontSize: "12px" }}>
-                  ‹ No soy yo
+                <button
+                  className="btn-ghost"
+                  type="button"
+                  onClick={() => {
+                    setEmployeeStep(2);
+                    setPin("");
+                  }}
+                  style={{ fontSize: "12px" }}
+                >
+                  {"<"} No soy yo
                 </button>
               </form>
             )}
@@ -292,7 +430,7 @@ export default function LoginPage() {
             <div style={{ position: "relative" }}>
               <input
                 type={showPassword ? "text" : "password"}
-                placeholder="Contraseña"
+                placeholder="Contrasena"
                 className="input"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -315,7 +453,7 @@ export default function LoginPage() {
                   padding: "4px",
                   display: "flex",
                   alignItems: "center",
-                  justifyContent: "center"
+                  justifyContent: "center",
                 }}
               >
                 {showPassword ? (
@@ -332,20 +470,16 @@ export default function LoginPage() {
                 )}
               </button>
             </div>
-            <button
-              type="submit"
-              className="btn btn-primary btn-full"
-              disabled={loading}
-            >
-              {loading ? "Cargando..." : (isRegister ? "Registrarse" : "Ingresar")}
+            <button type="submit" className="btn btn-primary btn-full" disabled={loading}>
+              {loading ? "Cargando..." : isRegister ? "Registrarse" : "Ingresar"}
             </button>
           </form>
         )}
 
         <div style={{ display: "flex", alignItems: "center", gap: "10px", margin: "5px 0" }}>
-          <div style={{ flex: 1, height: "1px", background: "var(--border)" }}></div>
+          <div style={{ flex: 1, height: "1px", background: "var(--border)" }} />
           <span style={{ fontSize: "12px", color: "var(--text-3)" }}>O</span>
-          <div style={{ flex: 1, height: "1px", background: "var(--border)" }}></div>
+          <div style={{ flex: 1, height: "1px", background: "var(--border)" }} />
         </div>
 
         <button
@@ -374,12 +508,13 @@ export default function LoginPage() {
           </svg>
           Google
         </button>
+
         <button
           className="btn-ghost"
           onClick={() => setIsRegister(!isRegister)}
           style={{ fontSize: "14px", color: "var(--text-3)" }}
         >
-          {isRegister ? "¿Ya tenés cuenta? Ingresá" : "¿No tenés cuenta? Registrate"}
+          {isRegister ? "Ya tenes cuenta? Ingresa" : "No tenes cuenta? Registrate"}
         </button>
 
         <button
@@ -394,13 +529,11 @@ export default function LoginPage() {
           }}
           style={{ fontSize: "14px", fontWeight: 700, color: "var(--primary)", marginTop: "10px" }}
         >
-          {isEmployeeFlow ? "‹ Volver a Dueño" : "👤 Soy Empleado"}
+          {isEmployeeFlow ? "< Volver a dueno" : "Soy empleado"}
         </button>
       </div>
 
-      <p style={{ fontSize: "13px", color: "var(--text-3)" }}>
-        $9.900/mes después de la prueba
-      </p>
+      <p style={{ fontSize: "13px", color: "var(--text-3)" }}>$9.900/mes despues de la prueba</p>
     </div>
   );
 }

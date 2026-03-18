@@ -82,6 +82,7 @@ model Branch {
   primaryColor       String?            @default("#22c55e")
   bgColor            String?            @default("#0f172a")
   ownerPin           String?
+  accessKey          String?            @unique // Código para vincular dispositivos
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
   variantInventories VariantInventory[]
@@ -185,10 +186,14 @@ model Employee {
   name          String
   pin           String?
   active        Boolean        @default(true)
+  suspendedUntil  DateTime?         // Suspensión temporal
   branchId      String
   branch        Branch         @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  shifts        Shift[]
-  restockEvents RestockEvent[]
+  shifts          Shift[]
+  restockEvents   RestockEvent[]
+  sales           Sale[]            @relation("CreatedBy")
+  expenses        Expense[]         @relation("CreatedBy")
+  withdrawals     Withdrawal[]      @relation("CreatedBy")
 
   @@index([branchId])
 }
@@ -221,9 +226,11 @@ model Expense {
   note      String?
   shiftId   String?
   shift     Shift?        @relation(fields: [shiftId], references: [id], onDelete: SetNull)
-  branchId  String
-  branch    Branch        @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  createdAt DateTime      @default(now())
+  branchId              String
+  branch                Branch         @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  createdByEmployeeId   String?
+  createdByEmployee     Employee?      @relation("CreatedBy", fields: [createdByEmployeeId], references: [id], onDelete: SetNull)
+  createdAt             DateTime       @default(now())
 
   @@index([branchId, createdAt])
 }
@@ -234,9 +241,11 @@ model Withdrawal {
   note      String?
   shiftId   String?
   shift     Shift?   @relation(fields: [shiftId], references: [id], onDelete: SetNull)
-  branchId  String
-  branch    Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
+  branchId              String
+  branch                Branch         @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  createdByEmployeeId   String?
+  createdByEmployee     Employee?      @relation("CreatedBy", fields: [createdByEmployeeId], references: [id], onDelete: SetNull)
+  createdAt             DateTime       @default(now())
 
   @@index([branchId, createdAt])
 }
@@ -248,9 +257,11 @@ model Sale {
   receivedAmount   Float?
   shiftId          String?
   shift            Shift?          @relation(fields: [shiftId], references: [id], onDelete: SetNull)
-  branchId         String
-  branch           Branch          @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  items            SaleItem[]
+  branchId            String
+  branch              Branch          @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  createdByEmployeeId String?
+  createdByEmployee   Employee?       @relation("CreatedBy", fields: [createdByEmployeeId], references: [id], onDelete: SetNull)
+  items               SaleItem[]
   creditCustomerId String?
   creditCustomer   CreditCustomer? @relation(fields: [creditCustomerId], references: [id], onDelete: SetNull)
   voided           Boolean         @default(false)

@@ -25,6 +25,7 @@ export async function POST(req: Request) {
       amount: Number(amount),
       note,
       shiftId: activeShift?.id ?? null,
+      createdByEmployeeId: (session?.user as any)?.employeeId || null,
     },
   });
 

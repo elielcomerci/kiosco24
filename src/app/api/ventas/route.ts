@@ -31,7 +31,7 @@ export async function POST(req: Request) {
   if (!branchId) return NextResponse.json({ error: "No branch" }, { status: 404 });
 
   const body = await req.json();
-  const { items, total, paymentMethod, receivedAmount, creditCustomerId } = body;
+  const { items, total, paymentMethod, receivedAmount, creditCustomerId, createdByEmployeeId } = body;
 
   // Find active shift
   const activeShift = await prisma.shift.findFirst({
@@ -47,6 +47,7 @@ export async function POST(req: Request) {
       receivedAmount: receivedAmount ?? null,
       shiftId: activeShift?.id ?? null,
       creditCustomerId: creditCustomerId ?? null,
+      createdByEmployeeId: createdByEmployeeId ?? null,
       items: {
         create: items.map((item: any) => ({
           productId: item.productId ?? null,

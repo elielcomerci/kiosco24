@@ -1,0 +1,30 @@
+import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { NextResponse } from "next/server";
+import crypto from "crypto";
+
+export async function POST(
+  req: Request,
+  { params }: { params: Promise<{ branchId: string }> }
+) {
+  const session = await auth();
+  if (!session?.user?.id || session.user.role !== "OWNER") {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { branchId } = await params;
+
+  // Generate a random high-entropy key
+  const accessKey = `KIOSCO-${crypto.randomBytes(4).toString("hex").toUpperCase()}-${crypto.randomBytes(4).toString("hex").toUpperCase()}`;
+
+  try {
+    const branch = await prisma.branch.update({
+      where: { id: branchId },
+      data: { accessKey },
+    });
+
+    return NextResponse.json({ accessKey: branch.accessKey });
+  } catch (error) {
+    return NextResponse.json({ error: "Failed to generate key" }, { status: 500 });
+  }
+}

@@ -31,22 +31,25 @@ export async function POST(req: Request) {
 
   const { openingAmount, employeeName } = await req.json();
 
-  // Handle employee (create generic if not provided)
-  let employeeId = null;
-  if (employeeName) {
+  // Handle employee attribution
+  const sessionEmployeeId = (session?.user as any)?.employeeId;
+  let finalEmployeeId = sessionEmployeeId || null;
+  let finalEmployeeName = employeeName || (session?.user as any)?.name || "Dueño";
+
+  if (!finalEmployeeId && employeeName) {
     let emp = await prisma.employee.findFirst({ where: { branchId, name: employeeName } });
     if (!emp) {
       emp = await prisma.employee.create({ data: { branchId, name: employeeName } });
     }
-    employeeId = emp.id;
+    finalEmployeeId = emp.id;
   }
 
   const shift = await prisma.shift.create({
     data: {
       branchId,
       openingAmount: Number(openingAmount),
-      employeeId,
-      employeeName: employeeName ?? "Dueño",
+      employeeId: finalEmployeeId,
+      employeeName: finalEmployeeName,
     },
     include: { employee: true },
   });

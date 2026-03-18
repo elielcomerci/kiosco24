@@ -10,6 +10,7 @@ interface Employee {
   name: string;
   pin: string | null;
   active: boolean;
+  suspendedUntil: string | null; // ISO string for form state
 }
 
 interface Category {
@@ -28,6 +29,7 @@ interface Branch {
   mpUserId: string | null;
   mpStoreId: string | null;
   mpPosId: string | null;
+  accessKey: string | null;
 }
 
 // ─── Employee Form Modal ───────────────────────────────────────────────────────
@@ -44,6 +46,7 @@ function EmployeeModal({
   const [name, setName] = useState(employee?.name || "");
   const [pin, setPin] = useState(employee?.pin || "");
   const [active, setActive] = useState(employee?.active ?? true);
+  const [suspendedUntil, setSuspendedUntil] = useState(employee?.suspendedUntil || "");
   const [loading, setLoading] = useState(false);
   const [confirming, setConfirming] = useState(false);
 
@@ -60,7 +63,7 @@ function EmployeeModal({
       await fetch(`/api/empleados/${employee.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, pin: pin || null, active }),
+        body: JSON.stringify({ name, pin: pin || null, active, suspendedUntil: suspendedUntil || null }),
       });
     }
     setLoading(false);
@@ -131,6 +134,24 @@ function EmployeeModal({
               onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 6))}
               style={{ letterSpacing: "0.3em", textAlign: "center", fontSize: "20px" }}
             />
+          </div>
+
+          <div>
+            <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              Suspender hasta (Opcional)
+            </label>
+            <input
+              className="input"
+              type="date"
+              value={suspendedUntil ? suspendedUntil.split('T')[0] : ""}
+              onChange={(e) => setSuspendedUntil(e.target.value ? `${e.target.value}T23:59:59Z` : "")}
+              style={{ colorScheme: "dark" }}
+            />
+            {suspendedUntil && (
+              <p style={{ fontSize: "11px", color: "var(--amber)", marginTop: "4px" }}>
+                El empleado no podrá entrar hasta esta fecha.
+              </p>
+            )}
           </div>
 
           {!isNew && (
@@ -947,11 +968,11 @@ export default function ConfiguracionPage() {
         )}
       </section>
 
-      {/* Security Section */}
+      {/* Branch Access Key Section (Phase 7) */}
       <section style={{ marginBottom: "32px" }}>
         <div style={{ marginBottom: "12px" }}>
           <h2 style={{ fontSize: "16px", fontWeight: 700, color: "var(--text-2)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-            🔐 Seguridad y PINs
+            🔑 Acceso de Dispositivos (Solo Empleados)
           </h2>
         </div>
         <div
@@ -962,21 +983,41 @@ export default function ConfiguracionPage() {
             padding: "16px",
             display: "flex",
             flexDirection: "column",
-            gap: "10px",
+            gap: "12px",
           }}
         >
-          <div>
-            <div style={{ fontWeight: 700, marginBottom: "4px" }}>PIN por Empleado</div>
-            <div style={{ fontSize: "13px", color: "var(--text-3)", lineHeight: "1.5" }}>
-              En la sección <strong style={{ color: "var(--text)" }}>Empleados</strong> podés asignarle un PIN (de hasta 6 dígitos) a cada empleado. Al iniciar turno, si el empleado tiene PIN configurado, la app lo va a pedir antes de abrir la caja → <span style={{ fontSize: "14px" }}>🔐</span>
-            </div>
+          <p style={{ fontSize: "13px", color: "var(--text-3)", lineHeight: "1.5" }}>
+            Usá este código para autorizar teléfonos o PCs de empleados sin compartir tu contraseña de dueño. 
+            Cualquier dispositivo con este código podrá ver el selector de empleados.
+          </p>
+          
+          <div style={{ 
+            background: "var(--surface-2)", 
+            padding: "12px", 
+            borderRadius: "8px", 
+            border: "1px solid var(--border)",
+            fontSize: "18px",
+            fontWeight: 800,
+            textAlign: "center",
+            letterSpacing: "0.1em",
+            color: currentBranch?.accessKey ? "var(--primary)" : "var(--text-3)",
+            fontFamily: "monospace"
+          }}>
+            {currentBranch?.accessKey || "SIN CÓDIGO GENERADO"}
           </div>
-          <div style={{ borderTop: "1px solid var(--border)", paddingTop: "10px" }}>
-            <div style={{ fontWeight: 700, marginBottom: "4px" }}>PIN del Dueño 🏠</div>
-            <div style={{ fontSize: "13px", color: "var(--text-3)", lineHeight: "1.5" }}>
-              Para proteger operaciones como Gastos y Retiros, creá un empleado con nombre <strong style={{ color: "var(--text)" }}>"Dueño"</strong> en la lista de abajo y ponele un PIN. Ese PIN se va a pedir cuando querés hacer cambios sensibles estando en modo empleado.
-            </div>
-          </div>
+
+          <button 
+            className="btn btn-sm btn-ghost" 
+            style={{ alignSelf: "center", border: "1px solid var(--border)" }}
+            onClick={async () => {
+              if (confirm("¿Generar un nuevo código? Los dispositivos viejos perderán el acceso.")) {
+                const res = await fetch(`/api/branches/${branchId}/access-key`, { method: "POST" });
+                if (res.ok) window.location.reload();
+              }
+            }}
+          >
+            {currentBranch?.accessKey ? "🔄 Generar nuevo código" : "✨ Generar primer código"}
+          </button>
         </div>
       </section>
 

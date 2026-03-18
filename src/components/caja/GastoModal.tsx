@@ -15,9 +15,10 @@ const REASONS = [
 interface GastoModalProps {
   onClose: () => void;
   onSuccess: () => void;
+  employeeId?: string;
 }
 
-export default function GastoModal({ onClose, onSuccess }: GastoModalProps) {
+export default function GastoModal({ onClose, onSuccess, employeeId }: GastoModalProps) {
   const params = useParams();
   const branchId = params.branchId as string;
   const [amount, setAmount] = useState("");
@@ -34,7 +35,7 @@ export default function GastoModal({ onClose, onSuccess }: GastoModalProps) {
           "Content-Type": "application/json",
           "x-branch-id": branchId
         },
-        body: JSON.stringify({ amount: parseFloat(amount), reason }),
+        body: JSON.stringify({ amount: parseFloat(amount), reason, createdByEmployeeId: employeeId }),
       });
       onSuccess();
     } finally {

@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { formatARS } from "@/lib/utils";
+import BarcodeScanner from "./BarcodeScanner";
 
 interface RestockItem {
   productId: string;
@@ -29,19 +30,18 @@ export default function QuickRestockModal({ products, employeeId, onClose, onSuc
   const [search, setSearch] = useState("");
   const [note, setNote] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
+  const [selectedIndex, setSelectedIndex] = useState(0);
   const [focusIndex, setFocusIndex] = useState<number | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const qtyRefs = useRef<(HTMLInputElement | null)[]>([]);
 
-  // Auto-focus logic for barcode scanners
+  // Auto-focus logic: always keep focus on search input for rapid scanning
   useEffect(() => {
-    if (focusIndex !== null && qtyRefs.current[focusIndex]) {
-      qtyRefs.current[focusIndex]?.focus();
-      setFocusIndex(null); // Reset after focus
-    } else if (items.length === 0) {
+    if (!showScanner) {
       inputRef.current?.focus();
     }
-  }, [focusIndex, items.length]);
+  }, [items.length, showScanner]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -78,8 +78,48 @@ export default function QuickRestockModal({ products, employeeId, onClose, onSuc
     if (foundProduct) {
       handleAddItem(foundProduct, foundVariant);
       setSearch("");
-    } else {
-      // Could show a "Not found" toast here
+    }
+  };
+
+  const searchResults = useMemo(() => {
+    if (!search.trim() || search.length < 2) return [];
+    const term = search.toLowerCase();
+    
+    const results: { product: Product, variant?: any }[] = [];
+    
+    for (const p of products) {
+      if (p.name.toLowerCase().includes(term) || p.barcode === search) {
+        results.push({ product: p });
+      }
+      if (p.variants) {
+        for (const v of p.variants) {
+          if (v.name.toLowerCase().includes(term) || v.barcode === search) {
+            results.push({ product: p, variant: v });
+          }
+        }
+      }
+    }
+    return results.slice(0, 5); // Limit to top 5 matches
+  }, [search, products]);
+
+  useEffect(() => {
+    setSelectedIndex(0);
+  }, [search]);
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (searchResults.length > 0) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setSelectedIndex(prev => (prev + 1) % searchResults.length);
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setSelectedIndex(prev => (prev - 1 + searchResults.length) % searchResults.length);
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        const res = searchResults[selectedIndex];
+        handleAddItem(res.product, res.variant);
+        setSearch("");
+      }
     }
   };
 
@@ -171,21 +211,66 @@ export default function QuickRestockModal({ products, employeeId, onClose, onSuc
           <button className="btn btn-ghost" style={{ padding: "8px" }} onClick={onClose}>✕</button>
         </div>
 
-        <div style={{ padding: "16px", borderBottom: "1px solid var(--border)", background: "var(--surface-2)" }}>
+        <div style={{ padding: "16px", borderBottom: "1px solid var(--border)", background: "var(--surface-2)", position: "relative" }}>
           <form onSubmit={handleSearchSubmit} style={{ display: "flex", gap: "8px" }}>
             <input
               ref={inputRef}
               className="input"
-              placeholder="🔍 Código de barras o nombre..."
+              placeholder="🔍 Escaneá o buscá..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={handleKeyDown}
               style={{ flex: 1, height: "44px", fontSize: "16px" }}
               autoFocus
             />
-            <button type="submit" className="btn btn-black" style={{ height: "44px", padding: "0 20px" }}>
-              Añadir
+            <button 
+              type="button" 
+              className="btn btn-black" 
+              style={{ height: "44px", width: "44px", padding: 0 }}
+              onClick={() => setShowScanner(true)}
+            >
+              📷
             </button>
           </form>
+
+          {/* Manual Search Results Dropdown */}
+          {searchResults.length > 0 && (
+            <div style={{ 
+              position: "absolute", top: "100%", left: "16px", right: "16px", 
+              background: "var(--surface)", border: "1px solid var(--border)", 
+              borderRadius: "0 0 var(--radius) var(--radius)", zIndex: 100,
+              boxShadow: "0 10px 15px -3px rgba(0,0,0,0.1)",
+              maxHeight: "200px", overflowY: "auto"
+            }}>
+              {searchResults.map((res, i) => (
+                <button
+                  key={`${res.product.id}-${res.variant?.id || 'main'}`}
+                  className="btn btn-ghost"
+                  style={{ 
+                    width: "100%", justifyContent: "flex-start", padding: "12px 16px", 
+                    borderBottom: "1px solid var(--border-2)", borderRadius: 0,
+                    background: i === selectedIndex ? "var(--surface-2)" : "transparent",
+                    borderColor: i === selectedIndex ? "var(--primary)" : "transparent"
+                  }}
+                  onClick={() => {
+                    handleAddItem(res.product, res.variant);
+                    setSearch("");
+                  }}
+                >
+                  <div style={{ textAlign: "left" }}>
+                    <div style={{ fontWeight: 600, fontSize: "14px" }}>
+                      {res.variant ? `${res.product.name} - ${res.variant.name}` : res.product.name}
+                    </div>
+                    {res.variant?.barcode || res.product.barcode ? (
+                      <div style={{ fontSize: "11px", color: "var(--text-3)" }}>
+                        {res.variant?.barcode || res.product.barcode}
+                      </div>
+                    ) : null}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         <div style={{ flex: 1, overflowY: "auto", padding: "16px" }}>
@@ -249,6 +334,35 @@ export default function QuickRestockModal({ products, employeeId, onClose, onSuc
           </div>
         </div>
       </div>
+
+      {showScanner && (
+        <BarcodeScanner 
+          onScan={(code) => {
+            setSearch(code);
+            setShowScanner(false);
+            // The handleSearchSubmit will trigger on the next render through a hidden submit or similar? 
+            // Better: trigger search logic directly
+            const term = code.toLowerCase();
+            let foundProduct = products.find(p => p.barcode === code);
+            let foundVariant = null;
+            if (!foundProduct) {
+              for (const p of products) {
+                if (p.variants) {
+                  const v = p.variants.find(v => v.barcode === code);
+                  if (v) { foundProduct = p; foundVariant = v; break; }
+                }
+              }
+            }
+            if (foundProduct) {
+              handleAddItem(foundProduct, foundVariant);
+              setSearch("");
+            } else {
+              alert(`Código ${code} no encontrado.`);
+            }
+          }}
+          onClose={() => setShowScanner(false)}
+        />
+      )}
     </div>
   );
 }

@@ -8,9 +8,10 @@ import { formatARS } from "@/lib/utils";
 interface RetiroModalProps {
   onClose: () => void;
   onSuccess: () => void;
+  employeeId?: string;
 }
 
-export default function RetiroModal({ onClose, onSuccess }: RetiroModalProps) {
+export default function RetiroModal({ onClose, onSuccess, employeeId }: RetiroModalProps) {
   const params = useParams();
   const branchId = params.branchId as string;
   const [amount, setAmount] = useState("");
@@ -27,7 +28,7 @@ export default function RetiroModal({ onClose, onSuccess }: RetiroModalProps) {
           "Content-Type": "application/json",
           "x-branch-id": branchId
         },
-        body: JSON.stringify({ amount: parseFloat(amount), note }),
+        body: JSON.stringify({ amount: parseFloat(amount), note, createdByEmployeeId: employeeId }),
       });
       onSuccess();
     } finally {

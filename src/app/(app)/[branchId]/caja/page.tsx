@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useSession } from "next-auth/react";
 import { formatARS, getCashSuggestions } from "@/lib/utils";
 import NumPad from "@/components/ui/NumPad";
 import ConfirmationScreen from "@/components/caja/ConfirmationScreen";
@@ -74,6 +75,9 @@ export default function CajaPage() {
   const params = useParams();
   const branchId = params.branchId as string;
   const isDesktop = useIsDesktop();
+  const { data: session } = useSession();
+  const userRole = (session?.user as any)?.role;
+  const employeeId = (session?.user as any)?.employeeId;
   
   const [products, setProducts] = useState<Product[]>([]);
   const [ticket, setTicket] = useState<TicketItem[]>([]);
@@ -327,6 +331,12 @@ export default function CajaPage() {
 
   // ─── Payment ──────────────────────────────────────────────────────────────
   const handlePay = async (method: "CASH" | "MERCADOPAGO" | "TRANSFER" | "DEBIT" | "CREDIT_CARD" | "CREDIT", creditCustomerId?: string, creditCustomerName?: string) => {
+    // Permission check: If employee, must be the shift owner
+    if (userRole === "EMPLOYEE" && activeShift?.employeeId && activeShift.employeeId !== employeeId) {
+      alert("Solo el empleado que inició el turno (" + activeShift.employeeName + ") puede confirmar ventas.");
+      return;
+    }
+
     if (total === 0 && ticket.length === 0) return;
 
     const received = method === "CASH" && receivedAmount
@@ -340,6 +350,7 @@ export default function CajaPage() {
           paymentMethod: method,
           receivedAmount: received,
           creditCustomerId,
+          createdByEmployeeId: employeeId,
         };
 
         const newSale: Sale = {
@@ -976,6 +987,7 @@ export default function CajaPage() {
       {/* Modals */}
       {showGasto && (
         <GastoModal
+          employeeId={employeeId}
           onClose={() => setShowGasto(false)}
           onSuccess={() => { setShowGasto(false); fetchStats(); }}
         />
@@ -991,6 +1003,7 @@ export default function CajaPage() {
       )}
       {showRetiro && (
         <RetiroModal
+          employeeId={employeeId}
           onClose={() => setShowRetiro(false)}
           onSuccess={() => { setShowRetiro(false); fetchStats(); }}
         />
@@ -1058,7 +1071,7 @@ export default function CajaPage() {
       {showRestockModal && (
         <QuickRestockModal
           products={products}
-          employeeId={activeShift?.employee?.id || activeShift?.employeeId}
+          employeeId={employeeId}
           onClose={() => setShowRestockModal(false)}
           onSuccess={() => {
             setShowRestockModal(false);

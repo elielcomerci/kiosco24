@@ -137,7 +137,7 @@ export default function CloseShiftModal({ onConfirm, onCancel, summary }: CloseS
               ? "✓ Caja exacta"
               : difference < 0
               ? `⚠️ Faltante: ${formatARS(Math.abs(difference))}`
-              : `✓ Sobrante: +${formatARS(difference)}`}
+              : `✓ A favor: +${formatARS(difference)}`}
           </div>
         )}
 

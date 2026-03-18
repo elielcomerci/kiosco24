@@ -608,7 +608,7 @@ export default function ResumenPage() {
                             <span>
                               {shift.difference! < 0
                                 ? "⚠️ Faltante"
-                                : "✓ Sobrante"}
+                                : "✓ A favor"}
                             </span>
                             <span>
                               {shift.difference! < 0 ? "" : "+"}

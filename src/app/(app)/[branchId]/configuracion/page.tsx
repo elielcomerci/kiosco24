@@ -704,14 +704,18 @@ export default function ConfiguracionPage() {
           </h2>
         </div>
         <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: "20px" }}>
-          <ThemeEditor
-            branchId={branchId}
-            initialBg={editBgColor}
-            initialAccent={editPrimaryColor}
-            onSaved={() => window.location.reload()}
-            onChangeBg={setEditBgColor}
-            onChangeAccent={setEditPrimaryColor}
-          />
+          {loadingCurrentBranch ? (
+            <div style={{ color: "var(--text-3)", fontSize: "14px" }}>Cargando editor de temas...</div>
+          ) : (
+            <ThemeEditor
+              branchId={branchId}
+              initialBg={editBgColor}
+              initialAccent={editPrimaryColor}
+              onSaved={() => window.location.reload()}
+              onChangeBg={setEditBgColor}
+              onChangeAccent={setEditPrimaryColor}
+            />
+          )}
         </div>
       </section>
 

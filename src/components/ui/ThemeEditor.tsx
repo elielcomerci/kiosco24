@@ -43,11 +43,15 @@ export default function ThemeEditor({ branchId, initialBg, initialAccent, onSave
   const [accent, setAccent] = useState(initialAccent || "#22c55e");
   const [saving, setSaving] = useState(false);
 
-  // Apply immediately on mount to keep in sync
+  useEffect(() => {
+    setBg(initialBg || "#0f172a");
+    setAccent(initialAccent || "#22c55e");
+  }, [initialBg, initialAccent]);
+
+  // Apply immediately on mount or config change to keep in sync
   useEffect(() => {
     applyThemeToDOM(bg, accent);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [bg, accent]);
 
   const handleBgChange = useCallback((val: string) => {
     setBg(val);

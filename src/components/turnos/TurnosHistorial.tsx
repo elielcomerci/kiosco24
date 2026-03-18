@@ -195,7 +195,7 @@ export default function TurnosHistorial({
                       borderTop: "1px dashed var(--border)",
                     }}
                   >
-                    <span>{shift.difference! < 0 ? "⚠️ Faltante" : "✓ Sobrante"}</span>
+                    <span>{shift.difference! < 0 ? "⚠️ Faltante" : "✓ A favor"}</span>
                     <span>
                       {shift.difference! < 0 ? "" : "+"}
                       {formatARS(shift.difference!)}

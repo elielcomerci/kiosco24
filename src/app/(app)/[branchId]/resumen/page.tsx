@@ -43,6 +43,7 @@ interface ResumenData {
     retiros: number;
   }[];
   fiados: { name: string; total: number }[];
+  lowStockItems: { name: string; stock: number; minStock: number }[];
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -381,6 +382,43 @@ export default function ResumenPage() {
 
       {/* ── Saldo MercadoPago ────────────────────────────────────────────── */}
       <MpBalanceCard />
+
+      {/* ── Alertas de Bajo Stock ─────────────────────────────────────────── */}
+      {data.lowStockItems && data.lowStockItems.length > 0 && (
+        <div
+          style={{
+            background: "linear-gradient(135deg, rgba(249,115,22,0.1), rgba(249,115,22,0.02))",
+            border: "1px solid rgba(249,115,22,0.3)",
+            borderRadius: "var(--radius-lg)",
+            padding: "20px",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "16px" }}>
+            <span style={{ fontSize: "22px" }}>⚠️</span>
+            <div>
+              <h3 style={{ fontSize: "16px", fontWeight: 800, color: "var(--text)", margin: 0, lineHeight: 1.2 }}>
+                {data.lowStockItems.length} {data.lowStockItems.length === 1 ? 'producto necesita' : 'productos necesitan'} reposición
+              </h3>
+              <div style={{ fontSize: "13px", color: "var(--text-2)", marginTop: 4 }}>
+                Stock disponible igual o menor al mínimo configurado
+              </div>
+            </div>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "8px", background: "var(--surface)", padding: "12px", borderRadius: "12px" }}>
+            {data.lowStockItems.slice(0, 5).map((item, idx) => (
+              <div key={idx} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "14px", paddingBottom: "8px", borderBottom: idx < Math.min(data.lowStockItems.length - 1, 4) ? "1px dashed var(--border)" : "none" }}>
+                <span style={{ fontWeight: 600 }}>{item.name}</span>
+                <span style={{ color: "#f97316", fontWeight: 700 }}>{item.stock} / {item.minStock}</span>
+              </div>
+            ))}
+            {data.lowStockItems.length > 5 && (
+              <div style={{ fontSize: "13px", color: "var(--text-3)", textAlign: "center", marginTop: "4px", fontWeight: 600 }}>
+                y {data.lowStockItems.length - 5} más... (ver inventario)
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ── Caja Física ─────────────────────────────────────────────────── */}
       <div

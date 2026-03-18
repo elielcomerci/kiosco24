@@ -102,6 +102,37 @@ export async function GET(req: Request) {
     ? Math.round((Date.now() - firstShift.openedAt.getTime()) / 3_600_000)
     : 0;
 
+  // ─── Alertas de Bajo Stock ────────────────────────────────────────────────
+  const lowStockItems: { name: string; stock: number; minStock: number }[] = [];
+
+  const productInventories = await prisma.inventoryRecord.findMany({
+    where: { 
+      branchId,
+      minStock: { gt: 0 }
+    },
+    include: { product: true }
+  });
+
+  const variantInventories = await prisma.variantInventory.findMany({
+    where: { 
+      branchId,
+      minStock: { gt: 0 }
+    },
+    include: { variant: { include: { product: true } } }
+  });
+
+  for (const inv of productInventories) {
+    if (inv.stock !== null && inv.minStock !== null && inv.stock <= inv.minStock) {
+       lowStockItems.push({ name: inv.product.name, stock: inv.stock, minStock: inv.minStock });
+    }
+  }
+
+  for (const inv of variantInventories) {
+    if (inv.stock !== null && inv.minStock !== null && inv.stock <= inv.minStock) {
+       lowStockItems.push({ name: `${inv.variant.product.name} - ${inv.variant.name}`, stock: inv.stock, minStock: inv.minStock });
+    }
+  }
+
   return NextResponse.json({
     // Caja física
     apertura,
@@ -143,5 +174,8 @@ export async function GET(req: Request) {
         .filter((s) => s.creditCustomerId === f.id)
         .reduce((sum, s) => sum + s.total, 0),
     })),
+    
+    // Alertas
+    lowStockItems,
   });
 }

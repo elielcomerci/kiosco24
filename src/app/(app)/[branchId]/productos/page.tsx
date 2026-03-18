@@ -93,12 +93,28 @@ function ProductModal({
   };
 
   const applySuggestion = (nextSuggestion: BarcodeSuggestion) => {
-    setName(nextSuggestion.name);
-    setBrand(nextSuggestion.brand || "");
-    setDescription(nextSuggestion.description || "");
-    setPresentation(nextSuggestion.presentation || "");
+    const suggestedVariants = (nextSuggestion.variants ?? []).map((variant) => ({
+      name: variant.name,
+      barcode: variant.barcode,
+      stock: null,
+      minStock: null,
+    }));
+
+      setName(nextSuggestion.name);
+      setBrand(nextSuggestion.brand || "");
+      setDescription(nextSuggestion.description || "");
+      setPresentation(nextSuggestion.presentation || "");
+      setBarcode(suggestedVariants.length > 0 ? "" : (nextSuggestion.code || ""));
     if (nextSuggestion.image) {
       setImage(nextSuggestion.image);
+    }
+    if (suggestedVariants.length > 0) {
+      setHasVariants(true);
+      setVariants(suggestedVariants);
+      setStock("");
+      setMinStock("");
+    } else {
+      setHasVariants(false);
     }
     setSuggestion(nextSuggestion);
     setLookupState("ready");
@@ -242,21 +258,28 @@ function ProductModal({
             <input
               ref={barcodeRef}
               className="input"
-              placeholder="Escanea o escribe el codigo"
+              placeholder={hasVariants ? "Las variantes llevan su propio codigo" : "Escanea o escribe el codigo"}
               value={barcode}
               onChange={(e) => setBarcode(e.target.value)}
               style={{ flex: 1 }}
               autoFocus={isNew}
+              disabled={hasVariants}
             />
             <button
               className="btn btn-ghost"
               style={{ padding: "0 16px", flexShrink: 0, fontSize: "20px" }}
               onClick={() => setShowScanner(true)}
               title="Escanear con camara"
+              disabled={hasVariants}
             >
               📷
             </button>
           </div>
+          {hasVariants && (
+            <div style={{ marginTop: "8px", fontSize: "12px", color: "var(--text-3)" }}>
+              Al usar variantes, el codigo principal se elimina y cada variante usa el suyo.
+            </div>
+          )}
           {lookupState === "loading" && (
             <div style={{ marginTop: "8px", fontSize: "12px", color: "var(--text-3)" }}>
               Buscando en la base general...
@@ -530,7 +553,13 @@ function ProductModal({
             <input
               type="checkbox"
               checked={hasVariants}
-              onChange={(e) => setHasVariants(e.target.checked)}
+              onChange={(e) => {
+                const checked = e.target.checked;
+                setHasVariants(checked);
+                if (checked) {
+                  setBarcode("");
+                }
+              }}
             />
             Tiene múltiples sabores/variantes
           </label>

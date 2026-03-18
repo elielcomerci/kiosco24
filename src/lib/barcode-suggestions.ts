@@ -1,3 +1,8 @@
+export interface BarcodeSuggestionVariant {
+  name: string;
+  barcode: string | null;
+}
+
 export interface BarcodeSuggestion {
   code: string;
   name: string;
@@ -5,6 +10,7 @@ export interface BarcodeSuggestion {
   description: string | null;
   presentation: string | null;
   image: string | null;
+  variants?: BarcodeSuggestionVariant[];
 }
 
 export interface BarcodeLookupResponse {

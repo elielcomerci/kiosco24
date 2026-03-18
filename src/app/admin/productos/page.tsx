@@ -9,6 +9,7 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import PlatformProductBackupManager from "@/app/admin/productos/PlatformProductBackupManager";
 import PlatformProductBulkImporter from "@/app/admin/productos/PlatformProductBulkImporter";
 import PlatformProductQuickEditor from "@/app/admin/productos/PlatformProductQuickEditor";
 
@@ -31,7 +32,7 @@ async function savePlatformProduct(formData: FormData) {
   await ensurePlatformAdmin();
 
   const id = String(formData.get("id") ?? "");
-  const barcode = String(formData.get("barcode") ?? "").trim();
+  const barcode = String(formData.get("barcode") ?? "").trim() || null;
   const name = String(formData.get("name") ?? "").trim();
   const brand = String(formData.get("brand") ?? "").trim();
   const presentation = String(formData.get("presentation") ?? "").trim();
@@ -42,7 +43,15 @@ async function savePlatformProduct(formData: FormData) {
       ? PlatformProductStatus.HIDDEN
       : PlatformProductStatus.APPROVED;
 
-  if (!barcode || !name) {
+  const existingProduct = id
+    ? await prisma.platformProduct.findUnique({
+        where: { id },
+        include: { variants: true },
+      })
+    : null;
+  const effectiveBarcode = existingProduct?.variants.length ? null : barcode;
+
+  if (!name || (!effectiveBarcode && !(existingProduct?.variants.length ?? 0))) {
     return;
   }
 
@@ -50,7 +59,7 @@ async function savePlatformProduct(formData: FormData) {
     await prisma.platformProduct.update({
       where: { id },
       data: {
-        barcode,
+        barcode: effectiveBarcode,
         name,
         brand: brand || null,
         presentation: presentation || null,
@@ -59,9 +68,9 @@ async function savePlatformProduct(formData: FormData) {
         status,
       },
     });
-  } else {
+  } else if (barcode) {
     await prisma.platformProduct.upsert({
-      where: { barcode },
+      where: { barcode: effectiveBarcode! },
       update: {
         name,
         brand: brand || null,
@@ -71,7 +80,7 @@ async function savePlatformProduct(formData: FormData) {
         status,
       },
       create: {
-        barcode,
+        barcode: effectiveBarcode,
         name,
         brand: brand || null,
         presentation: presentation || null,
@@ -99,6 +108,9 @@ async function reviewSubmission(formData: FormData) {
 
   const submission = await prisma.platformProductSubmission.findUnique({
     where: { id: submissionId },
+    include: {
+      variants: true,
+    },
   });
 
   if (!submission) {
@@ -120,39 +132,71 @@ async function reviewSubmission(formData: FormData) {
     return;
   }
 
+  const variantData = submission.variants.map((variant) => ({
+    name: variant.name,
+    barcode: variant.barcode,
+  }));
+  const effectiveBarcode = variantData.length > 0 ? null : submission.barcode;
+
   const platformProduct = submission.platformProductId
     ? await prisma.platformProduct.update({
         where: { id: submission.platformProductId },
         data: {
-          barcode: submission.barcode,
+          barcode: effectiveBarcode,
           name: submission.name,
           brand: submission.brand,
           description: submission.description,
           presentation: submission.presentation,
           image: submission.image,
           status: PlatformProductStatus.APPROVED,
+          variants: {
+            deleteMany: {},
+            create: variantData,
+          },
         },
       })
-    : await prisma.platformProduct.upsert({
-        where: { barcode: submission.barcode },
-        update: {
+    : effectiveBarcode
+      ? await prisma.platformProduct.upsert({
+          where: { barcode: effectiveBarcode },
+          update: {
+            name: submission.name,
+            brand: submission.brand,
+            description: submission.description,
+            presentation: submission.presentation,
+            image: submission.image,
+            status: PlatformProductStatus.APPROVED,
+            variants: {
+              deleteMany: {},
+              create: variantData,
+            },
+          },
+          create: {
+            barcode: effectiveBarcode,
+            name: submission.name,
+            brand: submission.brand,
+            description: submission.description,
+            presentation: submission.presentation,
+            image: submission.image,
+            status: PlatformProductStatus.APPROVED,
+            variants: {
+              create: variantData,
+            },
+          },
+        })
+      : await prisma.platformProduct.create({
+        data: {
+          barcode: effectiveBarcode,
           name: submission.name,
-          brand: submission.brand,
-          description: submission.description,
-          presentation: submission.presentation,
-          image: submission.image,
-          status: PlatformProductStatus.APPROVED,
-        },
-        create: {
-          barcode: submission.barcode,
-          name: submission.name,
-          brand: submission.brand,
-          description: submission.description,
-          presentation: submission.presentation,
-          image: submission.image,
-          status: PlatformProductStatus.APPROVED,
-        },
-      });
+            brand: submission.brand,
+            description: submission.description,
+            presentation: submission.presentation,
+            image: submission.image,
+            status: PlatformProductStatus.APPROVED,
+            variants: {
+              create: variantData,
+            },
+          },
+        });
 
   await prisma.platformProductSubmission.update({
     where: { id: submission.id },
@@ -182,6 +226,11 @@ export default async function AdminProductsPage() {
 
   const [platformProducts, pendingSubmissions] = await Promise.all([
     prisma.platformProduct.findMany({
+      include: {
+        variants: {
+          orderBy: { name: "asc" },
+        },
+      },
       orderBy: [{ updatedAt: "desc" }, { name: "asc" }],
       take: 120,
     }),
@@ -198,6 +247,9 @@ export default async function AdminProductsPage() {
           select: {
             name: true,
           },
+        },
+        variants: {
+          orderBy: { name: "asc" },
         },
       },
       orderBy: { createdAt: "desc" },
@@ -237,8 +289,9 @@ export default async function AdminProductsPage() {
             lineHeight: 1.6,
           }}
         >
-          Este catalogo se usa para precargar datos al crear productos por codigo de barras. Los productos solo aparecen
-          en la caja del kiosco cuando ese kiosco completa precio, costo unitario y stock.
+          Este catalogo se usa para precargar datos al crear productos por codigo de barras. Si un producto tiene
+          variantes, cada variante puede guardar su propio codigo. Los productos solo aparecen en la caja del kiosco
+          cuando ese kiosco completa precio, costo unitario y stock.
         </div>
 
         <section
@@ -278,7 +331,7 @@ export default async function AdminProductsPage() {
                     <div>
                       <div style={{ fontWeight: 700, fontSize: "18px" }}>{submission.name}</div>
                       <div style={{ color: "#94a3b8", fontSize: "13px" }}>
-                        {submission.barcode} · {submission.submittedFromKiosco?.name || "Kiosco desconocido"} ·{" "}
+                        {submission.barcode || "Sin barcode base"} · {submission.submittedFromKiosco?.name || "Kiosco desconocido"} ·{" "}
                         {submission.submittedByUser?.name || submission.submittedByUser?.email || "Usuario desconocido"}
                       </div>
                     </div>
@@ -301,6 +354,30 @@ export default async function AdminProductsPage() {
                       <div>{submission.description || "Sin descripcion"}</div>
                     </div>
                   </div>
+
+                  {submission.variants.length > 0 && (
+                    <div style={{ display: "grid", gap: "6px" }}>
+                      <div style={{ fontSize: "12px", color: "#94a3b8" }}>Variantes</div>
+                      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                        {submission.variants.map((variant) => (
+                          <span
+                            key={variant.id}
+                            style={{
+                              borderRadius: "999px",
+                              border: "1px solid rgba(148,163,184,.16)",
+                              padding: "6px 10px",
+                              fontSize: "12px",
+                              color: "#cbd5e1",
+                              background: "rgba(2,6,23,.5)",
+                            }}
+                          >
+                            {variant.name}
+                            {variant.barcode ? ` · ${variant.barcode}` : ""}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   <textarea
                     name="reviewNote"
@@ -333,8 +410,15 @@ export default async function AdminProductsPage() {
             description: product.description,
             image: product.image,
             status: product.status,
+            variants: product.variants.map((variant) => ({
+              id: variant.id,
+              name: variant.name,
+              barcode: variant.barcode,
+            })),
           }))}
         />
+
+        <PlatformProductBackupManager />
 
         <PlatformProductBulkImporter />
 
@@ -369,7 +453,7 @@ export default async function AdminProductsPage() {
               >
                 <input type="hidden" name="id" value={product.id} />
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "10px" }}>
-                  <input name="barcode" className="input" defaultValue={product.barcode} />
+                  <input name="barcode" className="input" defaultValue={product.barcode ?? ""} />
                   <input name="name" className="input" defaultValue={product.name} />
                   <input name="brand" className="input" defaultValue={product.brand ?? ""} />
                   <input name="presentation" className="input" defaultValue={product.presentation ?? ""} />
@@ -386,6 +470,26 @@ export default async function AdminProductsPage() {
                   rows={2}
                   style={{ resize: "vertical" }}
                 />
+                {product.variants.length > 0 && (
+                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                    {product.variants.map((variant) => (
+                      <span
+                        key={variant.id}
+                        style={{
+                          borderRadius: "999px",
+                          border: "1px solid rgba(148,163,184,.16)",
+                          padding: "6px 10px",
+                          fontSize: "12px",
+                          color: "#cbd5e1",
+                          background: "rgba(2,6,23,.5)",
+                        }}
+                      >
+                        {variant.name}
+                        {variant.barcode ? ` · ${variant.barcode}` : ""}
+                      </span>
+                    ))}
+                  </div>
+                )}
                 <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
                   <div style={{ color: "#94a3b8", fontSize: "13px" }}>
                     Actualizado: {new Date(product.updatedAt).toLocaleString("es-AR")}

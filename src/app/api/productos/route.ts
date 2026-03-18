@@ -8,6 +8,18 @@ import {
   queuePlatformProductSubmission,
 } from "@/lib/platform-catalog";
 
+function normalizeVariantPayload(variants: any[] | undefined) {
+  return (variants ?? [])
+    .map((variant) => ({
+      id: typeof variant?.id === "string" ? variant.id : undefined,
+      name: typeof variant?.name === "string" ? variant.name.trim() : "",
+      barcode: typeof variant?.barcode === "string" && variant.barcode.trim() ? variant.barcode.trim() : null,
+      stock: typeof variant?.stock === "number" ? variant.stock : 0,
+      minStock: typeof variant?.minStock === "number" ? variant.minStock : 0,
+    }))
+    .filter((variant) => variant.name);
+}
+
 // GET /api/productos — list all active products for the branch
 export async function GET(req: Request) {
   const session = await auth();
@@ -106,9 +118,12 @@ export async function POST(req: Request) {
   } = body;
 
   try {
-    const normalizedBarcode = barcode?.trim() || null;
-    const platformProduct = normalizedBarcode
-      ? await findApprovedPlatformProductByBarcode(normalizedBarcode)
+    const normalizedVariants = normalizeVariantPayload(variants);
+    const normalizedBarcode = normalizedVariants.length > 0 ? null : barcode?.trim() || null;
+    const lookupBarcode =
+      normalizedBarcode ?? normalizedVariants.find((variant) => variant.barcode)?.barcode ?? null;
+    const platformProduct = lookupBarcode
+      ? await findApprovedPlatformProductByBarcode(lookupBarcode)
       : null;
 
     // Create global product
@@ -124,8 +139,8 @@ export async function POST(req: Request) {
         categoryId,
         platformProductId: platformProduct?.id ?? null,
         kioscoId,
-        variants: variants?.length ? {
-          create: variants.map((v: any) => ({
+        variants: normalizedVariants.length ? {
+          create: normalizedVariants.map((v: any) => ({
             name: v.name,
             barcode: v.barcode || null,
           })),
@@ -153,11 +168,11 @@ export async function POST(req: Request) {
       });
 
       // Propagar VariantInventory
-      if (product.variants?.length > 0 && variants?.length > 0) {
+      if (product.variants?.length > 0 && normalizedVariants.length > 0) {
         const variantStockData: any[] = [];
         branches.forEach((b: any) => {
           product.variants.forEach((pv: any) => {
-            const reqVar = variants.find((v: any) => v.name === pv.name);
+            const reqVar = normalizedVariants.find((v: any) => v.name === pv.name);
             variantStockData.push({
               variantId: pv.id,
               branchId: b.id,
@@ -173,7 +188,7 @@ export async function POST(req: Request) {
     }
 
     if (
-      normalizedBarcode &&
+      (normalizedBarcode || normalizedVariants.some((variant) => variant.barcode)) &&
       platformDraftDiffers(platformProduct, {
         barcode: normalizedBarcode,
         name: name?.trim(),
@@ -181,6 +196,10 @@ export async function POST(req: Request) {
         description,
         presentation,
         image,
+        variants: normalizedVariants.map((variant) => ({
+          name: variant.name,
+          barcode: variant.barcode,
+        })),
       })
     ) {
       await queuePlatformProductSubmission({
@@ -193,6 +212,10 @@ export async function POST(req: Request) {
         description,
         presentation,
         image,
+        variants: normalizedVariants.map((variant) => ({
+          name: variant.name,
+          barcode: variant.barcode,
+        })),
       });
     }
 

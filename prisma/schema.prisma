@@ -153,7 +153,7 @@ model Product {
 
 model PlatformProduct {
   id           String                     @id @default(cuid())
-  barcode      String                     @unique
+  barcode      String?                    @unique
   name         String
   brand        String?
   description  String?
@@ -161,6 +161,7 @@ model PlatformProduct {
   image        String?
   status       PlatformProductStatus      @default(APPROVED)
   products     Product[]
+  variants     PlatformProductVariant[]
   submissions  PlatformProductSubmission[]
   createdAt    DateTime                   @default(now())
   updatedAt    DateTime                   @updatedAt
@@ -168,9 +169,21 @@ model PlatformProduct {
   @@index([status])
 }
 
+model PlatformProductVariant {
+  id                String          @id @default(cuid())
+  name              String
+  barcode           String?         @unique
+  platformProductId String
+  platformProduct   PlatformProduct @relation(fields: [platformProductId], references: [id], onDelete: Cascade)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@index([platformProductId])
+}
+
 model PlatformProductSubmission {
   id                   String                          @id @default(cuid())
-  barcode              String
+  barcode              String?
   name                 String
   brand                String?
   description          String?
@@ -187,6 +200,7 @@ model PlatformProductSubmission {
   reviewedById         String?
   reviewedBy           User?                           @relation("PlatformProductSubmissionReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
   reviewedAt           DateTime?
+  variants             PlatformProductSubmissionVariant[]
   createdAt            DateTime                        @default(now())
   updatedAt            DateTime                        @updatedAt
 
@@ -194,6 +208,18 @@ model PlatformProductSubmission {
   @@index([submittedByUserId])
   @@index([submittedFromKioscoId])
   @@index([platformProductId])
+}
+
+model PlatformProductSubmissionVariant {
+  id           String                    @id @default(cuid())
+  name         String
+  barcode      String?
+  submissionId String
+  submission   PlatformProductSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  createdAt    DateTime                  @default(now())
+  updatedAt    DateTime                  @updatedAt
+
+  @@index([submissionId])
 }
 
 model InventoryRecord {

@@ -1,4 +1,5 @@
-import NextAuth from "next-auth";
+import NextAuth, { type DefaultSession } from "next-auth";
+import { type JWT } from "next-auth/jwt";
 import Google from "next-auth/providers/google";
 import Credentials from "next-auth/providers/credentials";
 import { PrismaAdapter } from "@auth/prisma-adapter";
@@ -10,13 +11,10 @@ declare module "next-auth" {
   interface Session {
     user: {
       id: string;
-      email?: string | null;
-      name?: string | null;
-      image?: string | null;
       role: UserRole;
       employeeId?: string;
       branchId?: string;
-    }
+    } & DefaultSession["user"]
   }
 
   interface User {
@@ -28,8 +26,8 @@ declare module "next-auth" {
 
 declare module "next-auth/jwt" {
   interface JWT {
-    id: string;
-    role: UserRole;
+    id?: string;
+    role?: UserRole;
     employeeId?: string;
     branchId?: string;
   }
@@ -83,7 +81,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         // 1. Validar acceso a la sucursal
         const branch = await prisma.branch.findUnique({
-          where: { accessKey: credentials.accessKey as string },
+          where: { accessKey: credentials.accessKey as string } as any,
         });
         if (!branch) return null;
 
@@ -94,7 +92,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (!employee || !employee.active || employee.branchId !== branch.id) return null;
 
         // 3. Validar Suspensión
-        if (employee.suspendedUntil && employee.suspendedUntil > new Date()) return null;
+        const suspendedUntil = (employee as any).suspendedUntil as Date | null;
+        if (suspendedUntil && suspendedUntil > new Date()) return null;
 
         // 4. Validar PIN
         if (employee.pin !== (credentials.pin as string)) return null;
@@ -122,10 +121,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
     session({ session, token }) {
       if (token?.id) {
-        session.user.id = token.id;
-        session.user.role = token.role;
-        session.user.employeeId = token.employeeId;
-        session.user.branchId = token.branchId;
+        session.user.id = token.id as string;
+        session.user.role = (token.role as UserRole) || UserRole.OWNER;
+        session.user.employeeId = token.employeeId as string | undefined;
+        session.user.branchId = token.branchId as string | undefined;
       }
       return session;
     },

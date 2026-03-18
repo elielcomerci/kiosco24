@@ -395,12 +395,82 @@ body {
 
 /* ─── Layout ─────────────────────────────────────────────────────────────── */
 .app-layout {
-  display: flex;
-  flex-direction: column;
-  min-height: 100dvh;
-  min-height: 100svh;
+  width: 100vw;
+  max-width: 480px;
+  margin: 0 auto;
+  min-height: 100vh;
+  position: relative;
   background: var(--bg);
   color: var(--text);
+  box-shadow: 0 0 40px rgba(0,0,0,0.5);
+  transition: max-width 0.3s ease;
+}
+
+@media (min-width: 1024px) {
+  .app-layout {
+    max-width: 100vw;
+    box-shadow: none;
+    display: flex; /* Ready for split view in Caja */
+    flex-direction: column;
+  }
+}
+
+/* ─── POS Split Screen Layout ────────────────────────────────────────────── */
+.pos-layout {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+.pos-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+}
+
+.pos-main {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.pos-sidebar {
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  z-index: 10;
+}
+
+@media (min-width: 1024px) {
+  .pos-body {
+    flex-direction: row;
+  }
+  .pos-main {
+    border-right: 1px solid var(--border);
+  }
+  .pos-sidebar {
+    width: 380px;
+    border-top: none;
+    height: 100%;
+  }
+
+  /* El panel de tickets expandible se vuelve flexible y libre en PC */
+  .desktop-ticket-scroll {
+    flex: 1 !important;
+    max-height: none !important;
+    overflow-y: auto !important;
+    border-top: none !important;
+  }
+  
+  .desktop-hide-toggle {
+    display: none !important;
+  }
 }
 
 .app-content {

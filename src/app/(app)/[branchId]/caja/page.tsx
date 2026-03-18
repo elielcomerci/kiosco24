@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { formatARS, getCashSuggestions } from "@/lib/utils";
 import NumPad from "@/components/ui/NumPad";
 import ConfirmationScreen from "@/components/caja/ConfirmationScreen";
@@ -14,6 +14,7 @@ import BarcodeScanner from "@/components/caja/BarcodeScanner";
 import QuickRestockModal from "@/components/caja/QuickRestockModal";
 import { savePendingSale } from "@/lib/offline/db";
 import { useOnlineStatus } from "@/lib/offline/sync";
+import { useIsDesktop } from "@/lib/hooks";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -72,6 +73,7 @@ import { useParams } from "next/navigation";
 export default function CajaPage() {
   const params = useParams();
   const branchId = params.branchId as string;
+  const isDesktop = useIsDesktop();
   
   const [products, setProducts] = useState<Product[]>([]);
   const [ticket, setTicket] = useState<TicketItem[]>([]);
@@ -96,6 +98,8 @@ export default function CajaPage() {
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [variantSelector, setVariantSelector] = useState<{ product: Product } | null>(null);
   const [isTicketExpanded, setIsTicketExpanded] = useState(false);
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const isOnline = useOnlineStatus();
   const total = ticket.reduce((sum, item) => sum + item.price * item.quantity, 0);
@@ -117,6 +121,34 @@ export default function CajaPage() {
       });
     }
   }, [activeShift]);
+
+  // ─── Keyboard Shortcuts ───────────────────────────────────────────────────
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      // Ignore if any overlay modal is open
+      if (showGasto || showOtro || showRetiro || showCredit || showOpenShift || showCloseShift || showScanner || showRestockModal || variantSelector || showCashNumpad || confirmedSale) {
+        return;
+      }
+      
+      const activeEl = document.activeElement;
+      const isInputFocused = activeEl?.tagName === "INPUT" || activeEl?.tagName === "TEXTAREA" || activeEl?.tagName === "SELECT";
+      
+      // Auto-focus search on alphanumeric typing
+      if (!isInputFocused && e.key.length === 1 && /[a-zA-Z0-9]/.test(e.key)) {
+        if (searchInputRef.current) {
+          e.preventDefault(); // Prevent default browser search/scroll
+          searchInputRef.current.focus();
+          setCajaSearch((prev) => prev + e.key);
+        }
+      }
+    };
+    
+    window.addEventListener("keydown", handleGlobalKeyDown);
+    return () => window.removeEventListener("keydown", handleGlobalKeyDown);
+  }, [
+    showGasto, showOtro, showRetiro, showCredit, showOpenShift, showCloseShift, 
+    showScanner, showRestockModal, variantSelector, showCashNumpad, confirmedSale
+  ]);
 
   // ─── Startup Logic: Onboarding & Shift ──────────────────────────────────
   useEffect(() => {
@@ -530,14 +562,42 @@ export default function CajaPage() {
     );
   }
 
+  const filteredProducts = useMemo(() => {
+    let res = products;
+    if (activeCategory) res = res.filter(p => p.categoryId === activeCategory);
+    if (cajaSearch) {
+      const q = cajaSearch.toLowerCase();
+      res = res.filter(p => p.name.toLowerCase().includes(q) || p.barcode === q);
+    }
+    return res;
+  }, [products, activeCategory, cajaSearch]);
+
+  useEffect(() => {
+    setSelectedIndex(0);
+  }, [cajaSearch, activeCategory]);
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setSelectedIndex((prev) => Math.min(prev + 1, filteredProducts.length - 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setSelectedIndex((prev) => Math.max(prev - 1, 0));
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (cajaSearch && filteredProducts.length > 0) {
+        handleProductTap(filteredProducts[selectedIndex]);
+        setCajaSearch("");
+        setSelectedIndex(0);
+      } else if (!cajaSearch && ticket.length > 0) {
+        handleCashButton(); // Quick checkout shortcut!
+      }
+    }
+  };
+
   // ─── Main caja screen ─────────────────────────────────────────────────────
   return (
-    <div style={{ 
-      display: "flex", 
-      flexDirection: "column", 
-      flex: 1, // Inherit height from .app-content flex container
-      overflow: "hidden"
-    }}>
+    <div className="pos-layout">
 
       {/* Status Bar */}
       <div className="status-bar">
@@ -556,6 +616,7 @@ export default function CajaPage() {
         </div>
       </div>
       
+      {/* Header */}
       <div style={{ padding: "8px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", background: "var(--surface-2)", borderBottom: "1px solid var(--border)", flexShrink: 0 }}>
         {activeShift ? (
           <span style={{ fontSize: "13px", color: "var(--text-3)", fontWeight: 600, display: "flex", gap: "8px", alignItems: "center" }}>
@@ -590,28 +651,45 @@ export default function CajaPage() {
       </div>
 
 
-      {/* Main Content Area (Scrollable) */}
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", overflowY: "auto" }}>
+      {/* POS BODY (Row on Desktop, Column on Mobile) */}
+      <div className="pos-body">
+        
+        {/* Main Content Area (Scrollable) */}
+        <div className="pos-main no-print">
         
         {/* Search bar */}
         <div style={{ padding: "12px 16px 0", display: "flex", gap: "8px", flexShrink: 0 }}>
-        <input
-          className="input"
-          placeholder="🔍 Buscar producto..."
-          value={cajaSearch}
-          onChange={(e) => setCajaSearch(e.target.value)}
-          style={{ fontSize: "14px", height: "36px" }}
-        />
-        {cajaSearch && (
-          <button
-            className="btn btn-sm btn-ghost"
-            onClick={() => setCajaSearch("")}
-            style={{ flexShrink: 0, padding: "0 10px", height: "36px" }}
-          >
-            ✕
-          </button>
-        )}
-      </div>
+          <div style={{ position: "relative", flex: 1 }}>
+            <span style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", fontSize: "14px" }}>🔍</span>
+            <input
+              ref={searchInputRef}
+              type="text"
+              placeholder="Buscar producto o código de barras..."
+              value={cajaSearch}
+              onChange={(e) => setCajaSearch(e.target.value)}
+              onKeyDown={handleSearchKeyDown}
+              style={{
+                width: "100%",
+                padding: "12px 12px 12px 36px",
+                background: "var(--surface)",
+                border: "1px solid var(--border)",
+                borderRadius: "var(--radius)",
+                color: "var(--text)",
+                fontSize: "14px",
+                outline: "none"
+              }}
+            />
+            {cajaSearch && (
+              <button
+                className="btn btn-sm btn-ghost"
+                onClick={() => setCajaSearch("")}
+                style={{ flexShrink: 0, padding: "0 10px", height: "36px", position: "absolute", right: "0", top: "50%", transform: "translateY(-50%)" }}
+              >
+                ✕
+              </button>
+            )}
+          </div>
+        </div>
 
       {/* Category Filter Pills (Scrollable Horizontal) */}
       {categories.length > 0 && (
@@ -666,78 +744,66 @@ export default function CajaPage() {
         </div>
       )}
 
-      {/* Products grid */}
-      <div style={{ padding: "12px 16px", flex: 1 }}>
-        {loading ? (
-          <div style={{ textAlign: "center", padding: "40px", color: "var(--text-3)" }}>Cargando...</div>
-        ) : (
-          <div className="product-grid">
-            {products
-              .filter((p) => {
-                const matchSearch = p.name.toLowerCase().includes(cajaSearch.toLowerCase()) || 
-                                   p.barcode?.includes(cajaSearch) ||
-                                   (p.variants?.some(v => v.name.toLowerCase().includes(cajaSearch.toLowerCase()) || v.barcode?.includes(cajaSearch)));
-                const matchCategory = activeCategory === null || p.categoryId === activeCategory;
-                const isVisible = p.showInGrid !== false && p.categoryShowInGrid !== false;
-                
-                // Filtrar stock 0: Si no tiene variantes, chequear p.stock. 
-                // Si tiene, chequear si AL MENOS una variante tiene stock > 0.
-                let hasStock = true;
-                if (p.variants && p.variants.length > 0) {
-                  hasStock = p.variants.some(v => v.stock > 0);
-                } else {
-                  hasStock = (p.stock ?? 0) > 0;
+      {/* Product Grid */}
+      {filteredProducts.length === 0 ? (
+        <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-3)", fontSize: "14px", padding: "40px 0" }}>
+          No hay productos
+        </div>
+      ) : (
+        <div className="product-grid" style={{ padding: "0 16px 16px", paddingBottom: "100px", alignContent: "start" }}>
+          {filteredProducts.map((product, i) => {
+            const inTicket = ticket.find((t) => t.productId === product.id && !t.variantId);
+            const isSelected = i === selectedIndex && cajaSearch.length > 0;
+            
+            return (
+              <button
+                key={product.id}
+                className="product-btn"
+                ref={(el) => { if (isSelected && el) el.scrollIntoView({ block: 'nearest' }); }}
+                onClick={() => handleProductTap(product)}
+                onMouseDown={() => handleLongPressStart(product)}
+                onMouseUp={handleLongPressEnd}
+                onTouchStart={() => handleLongPressStart(product)}
+                onTouchEnd={handleLongPressEnd}
+                style={
+                  inTicket 
+                  ? { borderColor: "var(--primary)", background: "rgba(var(--primary-rgb, 34, 197, 94), 0.08)", fontSize: "13px", ...(isSelected ? { outline: "2px solid var(--primary)", transform: "scale(1.02)" } : {}) } 
+                  : { fontSize: "13px", ...(isSelected ? { outline: "2px solid var(--text)", transform: "scale(1.02)" } : {}) }
                 }
+              >
+                <span className="product-btn-name">{product.name}</span>
+                <span className="product-btn-price">{formatARS(product.price)}</span>
+                {inTicket && (
+                  <span
+                    style={{
+                      position: "absolute",
+                      top: "6px",
+                      right: "6px",
+                      background: "var(--primary)",
+                      color: "#000",
+                      borderRadius: "99px",
+                      width: "20px",
+                      height: "20px",
+                      fontSize: "11px",
+                      fontWeight: 700,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    {inTicket.quantity}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+      </div> {/* End of HTML Main Content Area */}
 
-                return matchSearch && matchCategory && hasStock && isVisible;
-              })
-              .map((product) => {
-              const inTicket = ticket.find((i) => i.productId === product.id);
-              return (
-                <button
-                  key={product.id}
-                  className="product-btn"
-                  onClick={() => handleProductTap(product)}
-                  onMouseDown={() => handleLongPressStart(product)}
-                  onMouseUp={handleLongPressEnd}
-                  onTouchStart={() => handleLongPressStart(product)}
-                  onTouchEnd={handleLongPressEnd}
-                  style={inTicket ? { borderColor: "var(--primary)", background: "rgba(var(--primary-rgb, 34, 197, 94), 0.08)", fontSize: "13px" } : { fontSize: "13px" }}
-                >
 
-                  <span className="product-btn-name">{product.name}</span>
-                  <span className="product-btn-price">{formatARS(product.price)}</span>
-                  {inTicket && (
-                    <span
-                      style={{
-                        position: "absolute",
-                        top: "6px",
-                        right: "6px",
-                        background: "var(--primary)",
-                        color: "#000",
-                        borderRadius: "99px",
-                        width: "20px",
-                        height: "20px",
-                        fontSize: "11px",
-                        fontWeight: 700,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                      }}
-                    >
-                      {inTicket.quantity}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </div> 
-      </div> {/* End of Main Content Area (Scrollable) */}
-
-      {/* Bottom Block (Fixed) */}
-      <div style={{ background: "var(--surface)", borderTop: "1px solid var(--border)", flexShrink: 0 }} className="no-print">
+      {/* Sidebar / Bottom Block (Fixed) */}
+      <div className="pos-sidebar no-print">
         
         {/* Ticket Header / Summary */}
         {ticket.length > 0 ? (
@@ -766,8 +832,8 @@ export default function CajaPage() {
         )}
 
         {/* Collapsible Ticket Detail */}
-        {ticket.length > 0 && isTicketExpanded && (
-          <div style={{ padding: "0 16px", maxHeight: "40vh", overflowY: "auto", borderTop: "1px solid var(--border)" }}>
+        {ticket.length > 0 && (isTicketExpanded || isDesktop) && (
+          <div className="desktop-ticket-scroll" style={{ padding: "0 16px", maxHeight: "40vh", overflowY: "auto", borderTop: "1px solid var(--border)" }}>
             {ticket.map((item, idx) => (
               <div key={idx} className="ticket-item">
                 <div style={{ flex: 1 }}>
@@ -903,7 +969,9 @@ export default function CajaPage() {
             <span style={{ fontSize: "10px", fontWeight: 700 }}>FIADO</span>
           </button>
         </div>
-      </div>
+      </div> {/* End of POS Sidebar */}
+
+      </div> {/* End of POS BODY */}
 
       {/* Modals */}
       {showGasto && (

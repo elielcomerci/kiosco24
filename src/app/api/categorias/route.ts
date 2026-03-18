@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
+import { getBranchContext } from "@/lib/branch";
 
 // GET /api/categorias
 export async function GET(req: Request) {
@@ -9,17 +10,13 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
-  // Categories belong to a Kiosco, not a Branch
-  const kiosco = await prisma.kiosco.findUnique({
-    where: { ownerId: session.user.id },
-  });
-
-  if (!kiosco) {
+  const { kioscoId } = await getBranchContext(req, session.user.id);
+  if (!kioscoId) {
     return NextResponse.json({ error: "No kiosco found" }, { status: 404 });
   }
 
   const categories = await prisma.category.findMany({
-    where: { kioscoId: kiosco.id },
+    where: { kioscoId },
     orderBy: { name: "asc" },
   });
 

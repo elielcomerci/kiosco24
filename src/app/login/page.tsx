@@ -2,7 +2,6 @@
 
 import { signIn } from "next-auth/react";
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
   const [loading, setLoading] = useState(false);
@@ -16,6 +15,7 @@ export default function LoginPage() {
   const [isEmployeeFlow, setIsEmployeeFlow] = useState(false);
   const [employeeStep, setEmployeeStep] = useState(1); // 1: Key, 2: Selection, 3: PIN
   const [branchKey, setBranchKey] = useState("");
+  const [selectedBranchId, setSelectedBranchId] = useState("");
   const [selectedEmployee, setSelectedEmployee] = useState<any>(null);
   const [pin, setPin] = useState("");
   const [branchEmployees, setBranchEmployees] = useState<any[]>([]);
@@ -86,8 +86,11 @@ export default function LoginPage() {
         return;
       }
       const data = await res.json();
+      setSelectedBranchId(data.branchId || "");
       setBranchEmployees(data.employees);
       setBranchName(data.branchName);
+      setSelectedEmployee(null);
+      setPin("");
       setEmployeeStep(2);
     } catch (err) {
       setError("Error al conectar con la sucursal");
@@ -110,9 +113,7 @@ export default function LoginPage() {
       setError("PIN incorrecto o empleado no autorizado");
       setLoading(false);
     } else {
-      window.location.href = `/${branchKey}/caja`; // Redirect using accessKey could be tricky, better use result URL if possible or just "/"
-      // Wait, let's just go to "/" and let the layout redirect
-      window.location.href = "/";
+      window.location.href = selectedBranchId ? `/${selectedBranchId}/caja` : "/";
     }
   };
 
@@ -386,6 +387,10 @@ export default function LoginPage() {
           onClick={() => {
             setIsEmployeeFlow(!isEmployeeFlow);
             setError("");
+            setEmployeeStep(1);
+            setSelectedBranchId("");
+            setSelectedEmployee(null);
+            setPin("");
           }}
           style={{ fontSize: "14px", fontWeight: 700, color: "var(--primary)", marginTop: "10px" }}
         >

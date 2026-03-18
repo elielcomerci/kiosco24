@@ -18,14 +18,34 @@ export default async function BranchLayout({
   }
 
   const { branchId } = await params;
+  const isEmployee = session.user.role === "EMPLOYEE";
+  let effectiveBranchId = isEmployee ? (session.user.branchId ?? null) : branchId;
 
-  // Cargar datos de la sucursal actual
+  if (isEmployee && !effectiveBranchId && session.user.employeeId) {
+    const employee = await prisma.employee.findUnique({
+      where: { id: session.user.employeeId },
+      select: { branchId: true },
+    });
+    effectiveBranchId = employee?.branchId ?? null;
+  }
+
+  if (!effectiveBranchId) {
+    redirect("/");
+  }
+
+  if (isEmployee && branchId !== effectiveBranchId) {
+    redirect(`/${effectiveBranchId}/caja`);
+  }
+
   const currentBranch = await prisma.branch.findUnique({
-    where: { id: branchId },
-    select: { 
-      id: true, name: true, logoUrl: true, 
-      primaryColor: true, bgColor: true,
-      kioscoId: true 
+    where: { id: effectiveBranchId },
+    select: {
+      id: true,
+      name: true,
+      logoUrl: true,
+      primaryColor: true,
+      bgColor: true,
+      kioscoId: true,
     },
   });
 
@@ -33,9 +53,8 @@ export default async function BranchLayout({
     notFound();
   }
 
-  // Cargar todas las sucursales del mismo Kiosco (para el selector)
   const branches = await prisma.branch.findMany({
-    where: { kioscoId: currentBranch.kioscoId },
+    where: isEmployee ? { id: effectiveBranchId } : { kioscoId: currentBranch.kioscoId },
     select: { id: true, name: true, logoUrl: true, primaryColor: true, bgColor: true },
     orderBy: { createdAt: "asc" },
   });
@@ -45,55 +64,64 @@ export default async function BranchLayout({
   const primaryRgb = hexToRgb(primaryColor);
 
   return (
-    <div 
+    <div
       className="app-layout branch-context"
-      style={{ 
+      style={{
         "--primary": primaryColor,
         "--primary-rgb": primaryRgb,
         "--primary-dim": `${primaryColor}CC`,
         "--bg": bgColor,
       } as React.CSSProperties}
     >
-      <header className="no-print" style={{ 
-        flexShrink: 0,
-        padding: "8px 16px", 
-        background: "var(--surface)", 
-        borderBottom: "1px solid var(--border)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        minHeight: "56px"
-      }}>
+      <header
+        className="no-print"
+        style={{
+          flexShrink: 0,
+          padding: "8px 16px",
+          background: "var(--surface)",
+          borderBottom: "1px solid var(--border)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          minHeight: "56px",
+        }}
+      >
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          {currentBranch?.logoUrl && (
-            <img 
-              src={currentBranch.logoUrl} 
-              alt="Logo" 
-              style={{ width: "32px", height: "32px", borderRadius: "6px", objectFit: "cover" }} 
+          {currentBranch.logoUrl && (
+            <img
+              src={currentBranch.logoUrl}
+              alt="Logo"
+              style={{ width: "32px", height: "32px", borderRadius: "6px", objectFit: "cover" }}
             />
           )}
-          <BranchSelector branches={branches} currentBranchId={branchId} />
+          <BranchSelector branches={branches} currentBranchId={effectiveBranchId} />
         </div>
-        <a href={`/${branchId}/configuracion`} style={{ fontSize: "20px", textDecoration: "none", color: "var(--text)" }} title="Configuración">
-          ⚙️
-        </a>
+        {!isEmployee && (
+          <a
+            href={`/${effectiveBranchId}/configuracion`}
+            style={{ fontSize: "20px", textDecoration: "none", color: "var(--text)" }}
+            title="Configuracion"
+          >
+            {"\u2699\uFE0F"}
+          </a>
+        )}
       </header>
-      
-      <main className="app-content">
-        {children}
-      </main>
-      
+
+      <main className="app-content">{children}</main>
+
       <BottomNav />
-      
-      <script dangerouslySetInnerHTML={{
-        __html: `
-          window.addEventListener('keydown', (e) => {
-            if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
-              // El CSS @media print ya maneja el resto
-            }
-          });
-        `
-      }} />
+
+      <script
+        dangerouslySetInnerHTML={{
+          __html: `
+            window.addEventListener('keydown', (e) => {
+              if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
+                // The print styles already handle the rest.
+              }
+            });
+          `,
+        }}
+      />
     </div>
   );
 }

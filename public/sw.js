@@ -1,22 +1,32 @@
-const CACHE_NAME = 'kiosco24-cash-v1';
+const CACHE_NAME = "kiosco24-static-v2";
 
-const STATIC_ASSETS = [
-  '/',
-  '/caja',
-  '/productos',
-  '/fiados',
-  '/resumen',
-  '/manifest.json'
-];
+const STATIC_ASSETS = ["/manifest.json"];
 
-self.addEventListener('install', (event) => {
+function shouldHandleAsStatic(request) {
+  if (request.method !== "GET") return false;
+  if (request.mode === "navigate") return false;
+
+  const url = new URL(request.url);
+  if (url.origin !== self.location.origin) return false;
+  if (url.pathname.startsWith("/api/")) return false;
+
+  return (
+    url.pathname === "/manifest.json" ||
+    url.pathname === "/favicon.ico" ||
+    url.pathname.startsWith("/_next/static/") ||
+    url.pathname.startsWith("/_next/image") ||
+    url.pathname.startsWith("/icons/")
+  );
+}
+
+self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS))
   );
   self.skipWaiting();
 });
 
-self.addEventListener('activate', (event) => {
+self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys().then((keys) => {
       return Promise.all(
@@ -27,36 +37,23 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-self.addEventListener('fetch', (event) => {
-  if (event.request.method !== 'GET') return;
-
-  const url = new URL(event.request.url);
-  
-  // API requests
-  if (url.pathname.includes('/api/')) {
-    event.respondWith(
-      fetch(event.request).catch(() => caches.match(event.request))
-    );
+self.addEventListener("fetch", (event) => {
+  if (!shouldHandleAsStatic(event.request)) {
     return;
   }
 
-  // Static assets: Stale-While-Revalidate
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       const fetchPromise = fetch(event.request).then((networkResponse) => {
         if (networkResponse && networkResponse.status === 200) {
-          try {
-            const responseToCache = networkResponse.clone();
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put(event.request, responseToCache);
-            });
-          } catch (e) {
-            // Ignore clone errors (opaque or consumed)
-          }
+          const responseToCache = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(event.request, responseToCache);
+          });
         }
         return networkResponse;
-      }).catch(() => {});
-      
+      });
+
       return cachedResponse || fetchPromise;
     })
   );

@@ -9,8 +9,16 @@ export default async function LandingPage() {
   const session = await auth();
 
   // Obtenemos los datos mínimamente necesarios para el botón dinámico si hay sesión
-  let branchId = null;
-  if (session?.user?.id) {
+  let branchId = session?.user?.branchId ?? null;
+  if (!branchId && session?.user?.role === "EMPLOYEE" && session.user.employeeId) {
+    const employee = await prisma.employee.findUnique({
+      where: { id: session.user.employeeId },
+      select: { branchId: true },
+    });
+    branchId = employee?.branchId ?? null;
+  }
+
+  if (session?.user?.id && !branchId) {
     const user = await prisma.user.findUnique({
       where: { id: session.user.id },
       include: {
@@ -19,7 +27,7 @@ export default async function LandingPage() {
         }
       }
     });
-    branchId = user?.kiosco?.branches[0]?.id;
+    branchId = user?.kiosco?.branches[0]?.id ?? null;
   }
 
   // Landing Page Premium — Visible para todos

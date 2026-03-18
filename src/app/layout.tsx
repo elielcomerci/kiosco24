@@ -26,6 +26,6 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="es" suppressHydrationWarning={true}><body className={openSans.className}>{children}<Script id="sw-register" strategy="afterInteractive" dangerouslySetInnerHTML={{ __html: `if ('serviceWorker' in navigator) { window.addEventListener('load', function() { navigator.serviceWorker.register('/sw.js').then(function(reg) { console.log('SW registration successful'); }, function(err) { console.log('SW registration failed: ', err); }); }); }` }} /></body></html>
+    <html lang="es" suppressHydrationWarning={true}><body className={openSans.className}>{children}<Script id="sw-register" strategy="afterInteractive" dangerouslySetInnerHTML={{ __html: `if ('serviceWorker' in navigator) { window.addEventListener('load', function() { navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).then(function(reg) { reg.update(); console.log('SW registration successful'); }, function(err) { console.log('SW registration failed: ', err); }); }); }` }} /></body></html>
   );
 }

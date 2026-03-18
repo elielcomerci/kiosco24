@@ -75,7 +75,7 @@ export default function CajaPage() {
   const params = useParams();
   const branchId = params.branchId as string;
   const isDesktop = useIsDesktop();
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
   const userRole = (session?.user as any)?.role;
   const employeeId = (session?.user as any)?.employeeId;
   
@@ -156,22 +156,25 @@ export default function CajaPage() {
 
   // ─── Startup Logic: Onboarding & Shift ──────────────────────────────────
   useEffect(() => {
+    if (status === "loading") return;
     checkOnboardingAndShift();
-  }, []);
+  }, [status, branchId]);
 
   const checkOnboardingAndShift = async () => {
     try {
-      // 1. Check Onboarding
-      let res = await fetch("/api/onboarding");
-      let data = await res.json();
-      if (!data.setup) {
-        // Auto-setup with suggested products
-        const setupRes = await fetch("/api/onboarding", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ kioscoName: "Mi Kiosco" })
-        });
-        await setupRes.json();
+      if (userRole !== "EMPLOYEE") {
+        // 1. Check Onboarding
+        const res = await fetch("/api/onboarding");
+        const data = await res.json();
+        if (!data.setup) {
+          // Auto-setup with suggested products
+          const setupRes = await fetch("/api/onboarding", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ kioscoName: "Mi Kiosco" })
+          });
+          await setupRes.json();
+        }
       }
 
       // 2. Fetch dependencies

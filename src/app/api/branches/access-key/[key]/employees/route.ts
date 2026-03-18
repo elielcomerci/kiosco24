@@ -34,6 +34,7 @@ export async function GET(
     });
 
     return NextResponse.json({
+      branchId: branch.id,
       branchName: branch.name,
       employees: activeEmployees,
     });

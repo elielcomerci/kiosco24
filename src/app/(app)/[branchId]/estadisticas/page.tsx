@@ -5,6 +5,8 @@ import { useParams } from "next/navigation";
 import { formatARS, todayART } from "@/lib/utils";
 import TurnosHistorial from "@/components/turnos/TurnosHistorial";
 import BackButton from "@/components/ui/BackButton";
+import PrintablePage from "@/components/print/PrintablePage";
+import { useRegisterShortcuts } from "@/components/ui/BranchWorkspace";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -336,8 +338,54 @@ export default function EstadisticasPage() {
     return nextOffset > today;
   })();
 
+  useRegisterShortcuts([
+    {
+      key: "[",
+      combo: "[",
+      label: "Periodo anterior",
+      description: "Retrocede en el periodo que estas viendo.",
+      group: "Estadisticas",
+      action: () => handleNav(-1),
+    },
+    {
+      key: "]",
+      combo: "]",
+      label: "Periodo siguiente",
+      description: "Avanza al siguiente periodo disponible.",
+      group: "Estadisticas",
+      action: () => {
+        if (!isCurrentPeriod) handleNav(1);
+      },
+    },
+    {
+      key: "d",
+      combo: "D",
+      label: "Ver dia",
+      description: "Cambia la vista al dia actual.",
+      group: "Estadisticas",
+      action: () => handlePeriodoChange("dia"),
+    },
+    {
+      key: "s",
+      combo: "S",
+      label: "Ver semana",
+      description: "Cambia la vista a esta semana.",
+      group: "Estadisticas",
+      action: () => handlePeriodoChange("semana"),
+    },
+    {
+      key: "m",
+      combo: "M",
+      label: "Ver mes",
+      description: "Cambia la vista a este mes.",
+      group: "Estadisticas",
+      action: () => handlePeriodoChange("mes"),
+    },
+  ]);
+
   return (
-    <div style={{ padding: "20px 16px", display: "flex", flexDirection: "column", gap: 20, paddingBottom: 100 }}>
+    <>
+    <div className="screen-only" style={{ padding: "20px 16px", display: "flex", flexDirection: "column", gap: 20, paddingBottom: 100 }}>
 
       {/* Header */}
       <div>
@@ -646,6 +694,163 @@ export default function EstadisticasPage() {
         </>
       )}
     </div>
+
+    {!loading && data && (
+      <PrintablePage
+        title="Estadisticas"
+        subtitle={`${PERIODO_LABEL[periodo]} · ${getNavLabel(periodo, currentDate)}`}
+        meta={[
+          { label: "Ventas", value: formatARS(data.totalVentas) },
+          {
+            label: "Ganancia neta",
+            value:
+              data.hasCosts && data.gananciasNetas !== null
+                ? formatARS(data.gananciasNetas)
+                : "Sin costos",
+          },
+        ]}
+      >
+        <section className="print-section">
+          <div className="print-section__title">Indicadores clave</div>
+          <div className="print-kpis">
+            <div className="print-kpi">
+              <div className="print-kpi__label">Total ventas</div>
+              <div className="print-kpi__value">{formatARS(data.totalVentas)}</div>
+              <div className="print-kpi__sub">
+                Promedio diario: {formatARS(data.promedioVentasDia)}
+              </div>
+            </div>
+            <div className="print-kpi">
+              <div className="print-kpi__label">Ganancia neta</div>
+              <div className="print-kpi__value">
+                {data.hasCosts && data.gananciasNetas !== null
+                  ? formatARS(data.gananciasNetas)
+                  : "Sin costos"}
+              </div>
+              <div className="print-kpi__sub">
+                {data.margenPorcentaje !== null ? `Margen: ${data.margenPorcentaje}%` : "Margen no disponible"}
+              </div>
+            </div>
+            <div className="print-kpi">
+              <div className="print-kpi__label">Gastos</div>
+              <div className="print-kpi__value">{formatARS(data.totalGastos)}</div>
+              <div className="print-kpi__sub">Retiros: {formatARS(data.totalRetiros)}</div>
+            </div>
+            <div className="print-kpi">
+              <div className="print-kpi__label">Comparativo</div>
+              <div className="print-kpi__value">
+                {data.prev ? formatARS(data.prev.totalVentas) : "Sin base"}
+              </div>
+              <div className="print-kpi__sub">Periodo anterior</div>
+            </div>
+          </div>
+        </section>
+
+        <section className="print-section">
+          <div className="print-section__title">Ventas por periodo</div>
+          <table className="print-table">
+            <thead>
+              <tr>
+                <th>Periodo</th>
+                <th>Ventas</th>
+                <th>Ganancia</th>
+              </tr>
+            </thead>
+            <tbody>
+              {chartData.map((item) => (
+                <tr key={item.label}>
+                  <td>{item.label}</td>
+                  <td>{formatARS(item.ventas)}</td>
+                  <td>{data.hasCosts ? formatARS(item.ganancia) : "Sin costos"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+
+        <section className="print-section">
+          <div className="print-section__title">Metodos y productos</div>
+          <div className="print-grid-two">
+            <div>
+              <div style={{ fontWeight: 700, marginBottom: "8px" }}>Metodos de cobro</div>
+              {Object.keys(data.ventasPorMetodo).length === 0 ? (
+                <div className="print-note">Sin ventas registradas.</div>
+              ) : (
+                <table className="print-table">
+                  <thead>
+                    <tr>
+                      <th>Metodo</th>
+                      <th>Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Object.entries(data.ventasPorMetodo)
+                      .sort((a, b) => b[1] - a[1])
+                      .map(([method, amount]) => (
+                        <tr key={method}>
+                          <td>{METODO_LABEL[method] ?? method}</td>
+                          <td>{formatARS(amount)}</td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            <div>
+              <div style={{ fontWeight: 700, marginBottom: "8px" }}>Top productos</div>
+              {data.topProductos.length === 0 ? (
+                <div className="print-note">Sin datos de productos para este periodo.</div>
+              ) : (
+                <table className="print-table">
+                  <thead>
+                    <tr>
+                      <th>Producto</th>
+                      <th>Unid.</th>
+                      <th>Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.topProductos.map((product) => (
+                      <tr key={product.name}>
+                        <td>{product.name}</td>
+                        <td>{product.cantidad}</td>
+                        <td>{formatARS(product.total)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </section>
+
+        {data.totalGastos > 0 && (
+          <section className="print-section">
+            <div className="print-section__title">Gastos por categoria</div>
+            <table className="print-table">
+              <thead>
+                <tr>
+                  <th>Categoria</th>
+                  <th>Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {Object.entries(data.gastosPorCategoria)
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([category, amount]) => (
+                    <tr key={category}>
+                      <td>{GASTO_LABEL[category] ?? category}</td>
+                      <td>{formatARS(amount)}</td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </section>
+        )}
+      </PrintablePage>
+    )}
+    </>
   );
 }
 

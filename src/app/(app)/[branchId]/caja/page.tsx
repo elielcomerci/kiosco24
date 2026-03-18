@@ -1071,12 +1071,13 @@ export default function CajaPage() {
           </div>
         </div>
       )}
-      {showRestockModal && (
-        <QuickRestockModal
-          products={products}
-          employeeId={employeeId}
-          onClose={() => setShowRestockModal(false)}
-          onSuccess={() => {
+        {showRestockModal && (
+          <QuickRestockModal
+            products={products}
+            branchId={branchId}
+            employeeId={employeeId}
+            onClose={() => setShowRestockModal(false)}
+            onSuccess={() => {
             setShowRestockModal(false);
             fetchProducts(); // Refresh stock immediately
           }}

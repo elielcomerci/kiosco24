@@ -119,6 +119,9 @@ model Product {
   barcode    String?
   emoji      String?
   image      String? // Cloudinary URL
+  brand      String?
+  description String?
+  presentation String?
   categoryId String?
   category   Category?         @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   kioscoId   String

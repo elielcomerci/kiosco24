@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import BackButton from "@/components/ui/BackButton";
 import TurnosHistorial from "@/components/turnos/TurnosHistorial";
+import PrintablePage from "@/components/print/PrintablePage";
+import { useRegisterShortcuts } from "@/components/ui/BranchWorkspace";
 import { formatARS } from "@/lib/utils";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -263,11 +265,35 @@ export default function ResumenPage() {
   const [loading, setLoading] = useState(true);
   const { branchId } = useParams();
 
+  const refreshData = async () => {
+    setLoading(true);
+    const res = await fetch("/api/resumen/hoy");
+    const json = await res.json();
+    setData(json);
+    setLoading(false);
+  };
+
+  const shortcuts = useMemo(
+    () => [
+      {
+        key: "r",
+        combo: "Alt+R",
+        label: "Actualizar resumen",
+        description: "Vuelve a consultar el cierre diario.",
+        group: "Resumen",
+        alt: true,
+        action: () => {
+          void refreshData();
+        },
+      },
+    ],
+    []
+  );
+
+  useRegisterShortcuts(shortcuts);
+
   useEffect(() => {
-    fetch("/api/resumen/hoy")
-      .then((r) => r.json())
-      .then(setData)
-      .finally(() => setLoading(false));
+    void refreshData();
   }, []);
 
   if (loading) {
@@ -318,7 +344,9 @@ export default function ResumenPage() {
 
 
   return (
+    <>
     <div
+      className="screen-only"
       style={{
         padding: "24px 16px",
         display: "flex",
@@ -831,6 +859,187 @@ export default function ResumenPage() {
       <div className="separator" />
       <VentasDetail />
     </div>
+
+    <PrintablePage
+      title="Cierre de caja"
+      subtitle={fechaFormateada}
+      meta={[
+        { label: "Ventas", value: formatARS(totalVentas) },
+        { label: "Caja esperada", value: formatARS(enCaja) },
+      ]}
+    >
+      <section className="print-section">
+        <div className="print-section__title">Resumen ejecutivo</div>
+        <div className="print-kpis">
+          <div className="print-kpi">
+            <div className="print-kpi__label">Total ventas</div>
+            <div className="print-kpi__value">{formatARS(totalVentas)}</div>
+            <div className="print-kpi__sub">
+              Apertura {openingTime} · {horasHoy} h trabajadas
+            </div>
+          </div>
+          <div className="print-kpi">
+            <div className="print-kpi__label">Resultado del dia</div>
+            <div className="print-kpi__value">
+              {hasCosts && ganancia !== null ? formatARS(ganancia) : formatARS(totalVentas)}
+            </div>
+            <div className="print-kpi__sub">
+              {hasCosts && ganancia !== null ? "Ganancia neta" : "Costos aun no cargados"}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="print-section">
+        <div className="print-section__title">Caja fisica y medios de cobro</div>
+        <div className="print-grid-two">
+          <div className="print-list">
+            <div className="print-list__row">
+              <span className="print-list__label">Apertura</span>
+              <span className="print-list__value">{formatARS(apertura)}</span>
+            </div>
+            <div className="print-list__row">
+              <span className="print-list__label">Ventas en efectivo</span>
+              <span className="print-list__value">{formatARS(ventasEfectivo)}</span>
+            </div>
+            <div className="print-list__row">
+              <span className="print-list__label">Gastos</span>
+              <span className="print-list__value">{formatARS(totalGastos)}</span>
+            </div>
+            <div className="print-list__row">
+              <span className="print-list__label">Retiros</span>
+              <span className="print-list__value">{formatARS(totalRetiros)}</span>
+            </div>
+            <div className="print-list__row">
+              <span className="print-list__label">Esperado en caja</span>
+              <span className="print-list__value">{formatARS(enCaja)}</span>
+            </div>
+          </div>
+
+          <div className="print-list">
+            <div className="print-list__row">
+              <span className="print-list__label">MercadoPago</span>
+              <span className="print-list__value">{formatARS(ventasMp)}</span>
+            </div>
+            <div className="print-list__row">
+              <span className="print-list__label">Debito</span>
+              <span className="print-list__value">{formatARS(ventasDebito)}</span>
+            </div>
+            <div className="print-list__row">
+              <span className="print-list__label">Transferencia</span>
+              <span className="print-list__value">{formatARS(ventasTransferencia)}</span>
+            </div>
+            <div className="print-list__row">
+              <span className="print-list__label">Tarjeta</span>
+              <span className="print-list__value">{formatARS(ventasTarjeta)}</span>
+            </div>
+            <div className="print-list__row">
+              <span className="print-list__label">Fiado</span>
+              <span className="print-list__value">{formatARS(ventasFiado)}</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {shifts.length > 0 && (
+        <section className="print-section">
+          <div className="print-section__title">Turnos del dia</div>
+          <table className="print-table">
+            <thead>
+              <tr>
+                <th>Empleado</th>
+                <th>Horario</th>
+                <th>Ventas</th>
+                <th>Diferencia</th>
+              </tr>
+            </thead>
+            <tbody>
+              {shifts.map((shift) => (
+                <tr key={shift.id}>
+                  <td>{shift.employeeName}</td>
+                  <td>
+                    {new Date(shift.openedAt).toLocaleTimeString("es-AR", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                    {shift.closedAt
+                      ? ` - ${new Date(shift.closedAt).toLocaleTimeString("es-AR", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}`
+                      : " - En curso"}
+                  </td>
+                  <td>{formatARS(shift.ventas)}</td>
+                  <td>
+                    {shift.difference === null
+                      ? "Pendiente"
+                      : `${shift.difference > 0 ? "+" : ""}${formatARS(shift.difference)}`}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      )}
+
+      {(data.lowStockItems.length > 0 || fiados.length > 0) && (
+        <section className="print-section">
+          <div className="print-section__title">Alertas y pendientes</div>
+          <div className="print-grid-two">
+            <div>
+              <div style={{ fontWeight: 700, marginBottom: "8px" }}>Bajo stock</div>
+              {data.lowStockItems.length === 0 ? (
+                <div className="print-note">Sin alertas de stock.</div>
+              ) : (
+                <table className="print-table">
+                  <thead>
+                    <tr>
+                      <th>Producto</th>
+                      <th>Stock</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.lowStockItems.map((item) => (
+                      <tr key={`${item.name}-${item.stock}`}>
+                        <td>{item.name}</td>
+                        <td>
+                          {item.stock} / {item.minStock}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            <div>
+              <div style={{ fontWeight: 700, marginBottom: "8px" }}>Fiados del dia</div>
+              {fiados.length === 0 ? (
+                <div className="print-note">Sin fiados registrados hoy.</div>
+              ) : (
+                <table className="print-table">
+                  <thead>
+                    <tr>
+                      <th>Cliente</th>
+                      <th>Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {fiados.map((item) => (
+                      <tr key={item.name}>
+                        <td>{item.name}</td>
+                        <td>{formatARS(item.total)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </section>
+      )}
+    </PrintablePage>
+    </>
   );
 }
 

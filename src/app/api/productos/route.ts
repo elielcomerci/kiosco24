@@ -37,6 +37,9 @@ export async function GET(req: Request) {
     emoji: inv.product.emoji,
     barcode: inv.product.barcode,
     image: inv.product.image,
+    brand: inv.product.brand,
+    description: inv.product.description,
+    presentation: inv.product.presentation,
     categoryId: inv.product.categoryId,
     price: inv.price,
     cost: inv.cost,
@@ -65,16 +68,34 @@ export async function POST(req: Request) {
   if (!kioscoId || !branchId) return NextResponse.json({ error: "No kiosco/branch" }, { status: 404 });
 
   const body = await req.json();
-  const { name, barcode, emoji, image, categoryId, price, cost, stock, minStock, variants } = body;
+  const {
+    name,
+    barcode,
+    emoji,
+    image,
+    brand,
+    description,
+    presentation,
+    categoryId,
+    price,
+    cost,
+    stock,
+    minStock,
+    showInGrid,
+    variants,
+  } = body;
 
   try {
     // Create global product
     const product = await prisma.product.create({
       data: {
-        name,
-        barcode,
+        name: name?.trim(),
+        barcode: barcode?.trim() || null,
         emoji,
         image,
+        brand: brand?.trim() || null,
+        description: description?.trim() || null,
+        presentation: presentation?.trim() || null,
         categoryId,
         kioscoId,
         variants: variants?.length ? {
@@ -97,10 +118,11 @@ export async function POST(req: Request) {
         data: branches.map((b: any) => ({
           productId: product.id,
           branchId: b.id,
-          price: price || 0,
-          cost: cost || 0,
-          stock: b.id === branchId ? (stock || 0) : 0,
-          minStock: b.id === branchId ? (minStock || 0) : 0,
+          price: price ?? 0,
+          cost: cost ?? null,
+          stock: b.id === branchId ? (stock ?? 0) : 0,
+          minStock: b.id === branchId ? (minStock ?? 0) : 0,
+          showInGrid: showInGrid ?? true,
         }))
       });
 

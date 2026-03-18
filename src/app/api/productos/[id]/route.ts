@@ -40,6 +40,10 @@ export async function GET(
     name: inventory.product.name,
     emoji: inventory.product.emoji,
     barcode: inventory.product.barcode,
+    image: inventory.product.image,
+    brand: inventory.product.brand,
+    description: inventory.product.description,
+    presentation: inventory.product.presentation,
     price: inventory.price,
     cost: inventory.cost,
     stock: inventory.stock,
@@ -68,7 +72,22 @@ export async function PATCH(
   const { id } = await params;
 
   const body = await req.json();
-  const { name, emoji, barcode, image, categoryId, price, cost, stock, minStock, showInGrid, variants } = body;
+  const {
+    name,
+    emoji,
+    barcode,
+    image,
+    brand,
+    description,
+    presentation,
+    categoryId,
+    price,
+    cost,
+    stock,
+    minStock,
+    showInGrid,
+    variants,
+  } = body;
 
   // Verify product belongs to this kiosco
   const product = await prisma.product.findFirst({
@@ -85,6 +104,9 @@ export async function PATCH(
       ...(emoji !== undefined && { emoji }),
       ...(barcode !== undefined && { barcode: barcode?.trim() || null }),
       ...(image !== undefined && { image }),
+      ...(brand !== undefined && { brand: brand?.trim() || null }),
+      ...(description !== undefined && { description: description?.trim() || null }),
+      ...(presentation !== undefined && { presentation: presentation?.trim() || null }),
       ...(categoryId !== undefined && { categoryId }),
       ...(variants !== undefined && {
         variants: {

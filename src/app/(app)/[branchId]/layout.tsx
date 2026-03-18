@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { notFound, redirect } from "next/navigation";
 import BottomNav from "@/components/ui/BottomNav";
 import BranchSelector from "@/components/ui/BranchSelector";
+import { BranchWorkspaceProvider } from "@/components/ui/BranchWorkspace";
 import { hexToRgb } from "@/lib/utils";
 
 export default async function BranchLayout({
@@ -124,21 +125,19 @@ export default async function BranchLayout({
         </div>
       </header>
 
-      <main className="app-content">{children}</main>
-
-      <BottomNav />
-
-      <script
-        dangerouslySetInnerHTML={{
-          __html: `
-            window.addEventListener('keydown', (e) => {
-              if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
-                // The print styles already handle the rest.
-              }
-            });
-          `,
+      <BranchWorkspaceProvider
+        branch={{
+          id: currentBranch.id,
+          name: currentBranch.name,
+          logoUrl: currentBranch.logoUrl,
+          primaryColor: currentBranch.primaryColor,
+          bgColor: currentBranch.bgColor,
         }}
-      />
+        isEmployee={isEmployee}
+      >
+        <main className="app-content">{children}</main>
+        <BottomNav />
+      </BranchWorkspaceProvider>
     </div>
   );
 }

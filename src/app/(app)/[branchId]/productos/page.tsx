@@ -1,9 +1,17 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { formatARS, applyPercentage } from "@/lib/utils";
+import {
+  BarcodeLookupResponse,
+  BarcodeSuggestion,
+  canLookupBarcode,
+  normalizeBarcodeCode,
+} from "@/lib/barcode-suggestions";
 import BarcodeScanner from "@/components/caja/BarcodeScanner";
 import BackButton from "@/components/ui/BackButton";
+import PrintablePage from "@/components/print/PrintablePage";
+import { useRegisterShortcuts } from "@/components/ui/BranchWorkspace";
 
 interface Variant {
   id?: string;
@@ -21,6 +29,9 @@ interface Product {
   emoji: string | null;
   barcode: string | null;
   image: string | null;
+  brand: string | null;
+  description: string | null;
+  presentation: string | null;
   categoryId: string | null;
   stock: number | null;
   minStock: number | null;
@@ -53,6 +64,9 @@ function ProductModal({
   const [emoji, setEmoji] = useState(product?.emoji || "");
   const [barcode, setBarcode] = useState(product?.barcode || "");
   const [image, setImage] = useState(product?.image || "");
+  const [brand, setBrand] = useState(product?.brand || "");
+  const [description, setDescription] = useState(product?.description || "");
+  const [presentation, setPresentation] = useState(product?.presentation || "");
   const [categoryId, setCategoryId] = useState(product?.categoryId || "");
   const [price, setPrice] = useState(product?.price?.toString() || "");
   const [cost, setCost] = useState(product?.cost?.toString() || "");
@@ -66,12 +80,78 @@ function ProductModal({
   const [showScanner, setShowScanner] = useState(false);
   const [variants, setVariants] = useState<Variant[]>(product?.variants || []);
   const [hasVariants, setHasVariants] = useState((product?.variants?.length ?? 0) > 0);
+  const [suggestion, setSuggestion] = useState<BarcodeSuggestion | null>(null);
+  const [lookupState, setLookupState] = useState<"idle" | "loading" | "ready" | "not-found">("idle");
+  const [dismissedSuggestionCode, setDismissedSuggestionCode] = useState<string | null>(null);
   const barcodeRef = useRef<HTMLInputElement>(null);
 
   const toNum = (v: string) => {
     const n = parseFloat(v);
     return isNaN(n) ? null : n;
   };
+
+  const applySuggestion = (nextSuggestion: BarcodeSuggestion) => {
+    setName(nextSuggestion.name);
+    setBrand(nextSuggestion.brand || "");
+    setDescription(nextSuggestion.description || "");
+    setPresentation(nextSuggestion.presentation || "");
+    if (nextSuggestion.image) {
+      setImage(nextSuggestion.image);
+    }
+    setSuggestion(nextSuggestion);
+    setLookupState("ready");
+    setDismissedSuggestionCode(null);
+  };
+
+  useEffect(() => {
+    const code = normalizeBarcodeCode(barcode);
+
+    if (hasVariants || !canLookupBarcode(code)) {
+      setSuggestion(null);
+      setLookupState("idle");
+      return;
+    }
+
+    if (dismissedSuggestionCode === code) {
+      setSuggestion(null);
+      setLookupState("idle");
+      return;
+    }
+
+    setSuggestion(null);
+    setLookupState("idle");
+
+    let cancelled = false;
+    const timeoutId = window.setTimeout(async () => {
+      setLookupState("loading");
+
+      try {
+        const res = await fetch(`/api/barcodes/lookup?code=${encodeURIComponent(code)}`);
+        const data = (await res.json()) as BarcodeLookupResponse;
+
+        if (cancelled) return;
+
+        if (data.found && data.suggestion) {
+          setSuggestion(data.suggestion);
+          setLookupState("ready");
+        } else {
+          setSuggestion(null);
+          setLookupState("not-found");
+        }
+      } catch (error) {
+        console.error(error);
+        if (!cancelled) {
+          setSuggestion(null);
+          setLookupState("idle");
+        }
+      }
+    }, 450);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeoutId);
+    };
+  }, [barcode, dismissedSuggestionCode, hasVariants]);
 
   const handleSave = async () => {
     if (!name.trim() || !price) return;
@@ -82,6 +162,9 @@ function ProductModal({
       emoji: emoji || null,
       barcode: hasVariants ? null : (barcode.trim() || null),
       image: image || null,
+      brand: brand.trim() || null,
+      description: description.trim() || null,
+      presentation: presentation.trim() || null,
       categoryId: categoryId || null,
       price: toNum(price),
       cost: toNum(cost),
@@ -266,6 +349,45 @@ function ProductModal({
           </div>
         </div>
 
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "12px" }}>
+          <div>
+            <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase" }}>
+              Marca
+            </label>
+            <input
+              className="input"
+              placeholder="Opcional"
+              value={brand}
+              onChange={(e) => setBrand(e.target.value)}
+            />
+          </div>
+          <div>
+            <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase" }}>
+              Presentacion
+            </label>
+            <input
+              className="input"
+              placeholder="Ej: 500 ml"
+              value={presentation}
+              onChange={(e) => setPresentation(e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div style={{ marginBottom: "12px" }}>
+          <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase" }}>
+            Descripcion
+          </label>
+          <textarea
+            className="input"
+            placeholder="Opcional"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            rows={3}
+            style={{ width: "100%", resize: "vertical" }}
+          />
+        </div>
+
         {/* Price & Cost */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "12px" }}>
           <div>
@@ -424,6 +546,79 @@ function ProductModal({
                   📷
                 </button>
               </div>
+              {lookupState === "loading" && (
+                <div style={{ marginTop: "8px", fontSize: "12px", color: "var(--text-3)" }}>
+                  Buscando datos sugeridos...
+                </div>
+              )}
+              {lookupState === "ready" && suggestion && (
+                <div
+                  style={{
+                    marginTop: "10px",
+                    padding: "12px",
+                    borderRadius: "var(--radius)",
+                    border: "1px solid var(--border)",
+                    background: "var(--surface-2)",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "10px",
+                  }}
+                >
+                  <div style={{ fontSize: "12px", fontWeight: 700, textTransform: "uppercase", color: "var(--text-3)" }}>
+                    Datos sugeridos
+                  </div>
+                  <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+                    {suggestion.image ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={suggestion.image}
+                        alt={suggestion.name}
+                        style={{ width: "56px", height: "56px", objectFit: "cover", borderRadius: "10px", flexShrink: 0 }}
+                      />
+                    ) : (
+                      <div
+                        style={{
+                          width: "56px",
+                          height: "56px",
+                          borderRadius: "10px",
+                          background: "var(--surface)",
+                          border: "1px dashed var(--border)",
+                          flexShrink: 0,
+                        }}
+                      />
+                    )}
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ fontWeight: 700 }}>{suggestion.name}</div>
+                      {(suggestion.brand || suggestion.presentation || suggestion.description) && (
+                        <div style={{ fontSize: "12px", color: "var(--text-3)", marginTop: "4px" }}>
+                          {[suggestion.brand, suggestion.presentation, suggestion.description].filter(Boolean).join(" · ")}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    <button
+                      className="btn btn-ghost"
+                      style={{ flex: 1 }}
+                      onClick={() => {
+                        setDismissedSuggestionCode(normalizeBarcodeCode(barcode));
+                        setSuggestion(null);
+                        setLookupState("idle");
+                      }}
+                    >
+                      Ocultar
+                    </button>
+                    <button className="btn btn-green" style={{ flex: 1 }} onClick={() => applySuggestion(suggestion)}>
+                      Usar
+                    </button>
+                  </div>
+                </div>
+              )}
+              {lookupState === "not-found" && (
+                <div style={{ marginTop: "8px", fontSize: "12px", color: "var(--text-3)" }}>
+                  No encontramos datos sugeridos para este codigo.
+                </div>
+              )}
             </div>
           </>
         )}
@@ -533,6 +728,7 @@ export default function ProductosPage() {
   const [bulkCategoryId, setBulkCategoryId] = useState("");
   const [bulking, setBulking] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const pctMatch = parseInt(percentStr, 10);
   const percent = isNaN(pctMatch) ? 0 : pctMatch;
@@ -578,6 +774,40 @@ export default function ProductosPage() {
   };
 
   const hiddenCount = products.filter((p) => !p.showInGrid).length;
+
+  const shortcuts = useMemo(
+    () => [
+      {
+        key: "/",
+        combo: "/",
+        label: "Buscar producto",
+        description: "Lleva el foco al buscador del catalogo.",
+        group: "Productos",
+        action: () => searchInputRef.current?.focus(),
+      },
+      {
+        key: "n",
+        combo: "Alt+N",
+        label: "Nuevo producto",
+        description: "Abre el formulario para crear un producto.",
+        group: "Productos",
+        alt: true,
+        action: () => setModal("new"),
+      },
+      {
+        key: "h",
+        combo: "Alt+H",
+        label: "Mostrar ocultos",
+        description: "Alterna la vista de productos ocultos.",
+        group: "Productos",
+        alt: true,
+        action: () => setShowHidden((prev) => !prev),
+      },
+    ],
+    []
+  );
+
+  useRegisterShortcuts(shortcuts);
 
   // ─── Bulk selection helpers
   const toggleSelectionMode = () => {
@@ -643,7 +873,8 @@ export default function ProductosPage() {
   };
 
   return (
-    <div style={{ padding: "24px 16px", minHeight: "100dvh", display: "flex", flexDirection: "column" }}>
+    <>
+    <div className="screen-only" style={{ padding: "24px 16px", minHeight: "100dvh", display: "flex", flexDirection: "column" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
         {selectionMode ? (
           <button className="btn btn-sm btn-ghost" onClick={toggleSelectionMode} style={{ fontWeight: 600 }}>Cancelar</button>
@@ -663,13 +894,14 @@ export default function ProductosPage() {
       </div>
 
       {/* Search & filters */}
-      <div style={{ display: "flex", gap: "8px", marginBottom: "16px", alignItems: "center" }}>
-        <input
-          className="input"
-          placeholder="🔍 Buscar producto..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          style={{ flex: 1 }}
+        <div style={{ display: "flex", gap: "8px", marginBottom: "16px", alignItems: "center" }}>
+          <input
+            ref={searchInputRef}
+            className="input"
+            placeholder="🔍 Buscar producto..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            style={{ flex: 1 }}
         />
         {hiddenCount > 0 && (
           <button
@@ -974,5 +1206,77 @@ export default function ProductosPage() {
         />
       )}
     </div>
+    <PrintablePage
+      title="Catalogo de productos"
+      subtitle={new Date().toLocaleDateString("es-AR")}
+      meta={[
+        { label: "Items", value: String(filtered.length) },
+        { label: "Ocultos", value: String(products.filter((p) => !p.showInGrid).length) },
+      ]}
+    >
+      <section className="print-section">
+        <div className="print-section__title">Resumen</div>
+        <div className="print-kpis">
+          <div className="print-kpi">
+            <div className="print-kpi__label">Productos visibles</div>
+            <div className="print-kpi__value">
+              {products.filter((product) => product.showInGrid).length}
+            </div>
+            <div className="print-kpi__sub">Disponibles para vender</div>
+          </div>
+          <div className="print-kpi">
+            <div className="print-kpi__label">Filtro actual</div>
+            <div className="print-kpi__value">{filtered.length}</div>
+            <div className="print-kpi__sub">
+              {search ? `Busqueda: "${search}"` : showHidden ? "Incluye ocultos" : "Solo visibles"}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="print-section">
+        <div className="print-section__title">Detalle de inventario</div>
+        {filtered.length === 0 ? (
+          <div className="print-note">No hay productos para imprimir con los filtros actuales.</div>
+        ) : (
+          <table className="print-table">
+            <thead>
+              <tr>
+                <th>Producto</th>
+                <th>Codigo / Presentacion</th>
+                <th>Precio</th>
+                <th>Stock</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((product) => {
+                const totalStock =
+                  product.variants && product.variants.length > 0
+                    ? product.variants.reduce((acc, variant) => acc + (variant.stock || 0), 0)
+                    : product.stock ?? 0;
+
+                return (
+                  <tr key={product.id}>
+                    <td>
+                      <div style={{ fontWeight: 700 }}>{product.name}</div>
+                      <div style={{ fontSize: "8.5pt", color: "#6b7280" }}>
+                        {[product.brand, product.description].filter(Boolean).join(" · ") ||
+                          (product.showInGrid ? "Visible" : "Oculto")}
+                      </div>
+                    </td>
+                    <td>
+                      {[product.barcode, product.presentation].filter(Boolean).join(" · ") || "Sin dato"}
+                    </td>
+                    <td>{formatARS(product.price)}</td>
+                    <td>{totalStock}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </section>
+    </PrintablePage>
+    </>
   );
 }

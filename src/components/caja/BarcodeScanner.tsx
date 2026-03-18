@@ -33,6 +33,10 @@ function pickPreferredCamera(cameras: CameraOption[]) {
   );
 }
 
+function hasExplicitRearLabel(camera: CameraOption | null) {
+  return Boolean(camera && /(back|rear|environment|trasera|externa)/i.test(camera.label));
+}
+
 function getFocusModes(capabilities: MediaTrackCapabilities) {
   const focusMode = (capabilities as any).focusMode;
   return Array.isArray(focusMode) ? (focusMode as string[]) : [];
@@ -92,6 +96,7 @@ export default function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps)
   const [status, setStatus] = useState<string>("Preparando camara...");
   const [cameras, setCameras] = useState<CameraOption[]>([]);
   const [selectedCameraId, setSelectedCameraId] = useState<string | null>(null);
+  const [activeCameraId, setActiveCameraId] = useState<string | null>(null);
   const [preferNearFocus, setPreferNearFocus] = useState(true);
   const [torchEnabled, setTorchEnabled] = useState(false);
   const [tuningSupport, setTuningSupport] = useState<ScannerTuningSupport>({
@@ -101,11 +106,22 @@ export default function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps)
   });
 
   const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
+  const onScanRef = useRef(onScan);
+  const preferNearFocusRef = useRef(preferNearFocus);
   const hasMultipleCameras = cameras.length > 1;
+  const displayedCameraId = selectedCameraId ?? activeCameraId;
   const selectedCameraLabel = useMemo(
-    () => cameras.find((camera) => camera.id === selectedCameraId)?.label ?? null,
-    [cameras, selectedCameraId],
+    () => cameras.find((camera) => camera.id === displayedCameraId)?.label ?? null,
+    [cameras, displayedCameraId],
   );
+
+  useEffect(() => {
+    onScanRef.current = onScan;
+  }, [onScan]);
+
+  useEffect(() => {
+    preferNearFocusRef.current = preferNearFocus;
+  }, [preferNearFocus]);
 
   const applyPreferredTuning = useCallback(
     async (scanner: Html5Qrcode) => {
@@ -118,6 +134,7 @@ export default function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps)
           typeof navigator !== "undefined" &&
           !/android|iphone|ipad|ipod/i.test(navigator.userAgent || "");
         const support = buildSupport(capabilities);
+        const useNearFocus = preferNearFocusRef.current;
 
         setTuningSupport(support);
         if (!support.canUseTorch) {
@@ -126,7 +143,7 @@ export default function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps)
 
         const messages: string[] = [];
 
-        if (preferNearFocus) {
+        if (useNearFocus) {
           let focusApplied = false;
 
           if (focusModes.includes("manual") && focusDistanceRange) {
@@ -225,7 +242,7 @@ export default function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps)
         setStatus("Lectura normal activa");
       }
     },
-    [preferNearFocus],
+    [],
   );
 
   useEffect(() => {
@@ -247,15 +264,11 @@ export default function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps)
 
         if (normalizedCameras.length > 0) {
           setCameras(normalizedCameras);
-
-          if (!selectedCameraId) {
-            const preferredCamera = pickPreferredCamera(normalizedCameras);
-            if (preferredCamera) {
-              setSelectedCameraId(preferredCamera.id);
-              return;
-            }
-          }
         }
+
+        const preferredCamera = pickPreferredCamera(normalizedCameras);
+        const resolvedCameraId =
+          selectedCameraId ?? (hasExplicitRearLabel(preferredCamera) ? preferredCamera?.id ?? null : null);
 
         html5QrCode = new Html5Qrcode("reader", {
           verbose: false,
@@ -281,9 +294,9 @@ export default function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps)
         });
         html5QrCodeRef.current = html5QrCode;
 
-        const cameraConfig = selectedCameraId
-          ? { deviceId: { exact: selectedCameraId } }
-          : { facingMode: "environment" };
+        const cameraConfig = resolvedCameraId
+          ? { deviceId: { exact: resolvedCameraId } }
+          : { facingMode: { ideal: "environment" } };
 
         await html5QrCode.start(
           cameraConfig as any,
@@ -296,7 +309,7 @@ export default function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps)
             },
             aspectRatio: 1.777,
             disableFlip: false,
-            rememberLastUsedCamera: true,
+            rememberLastUsedCamera: false,
             videoConstraints: {
               width: { ideal: 1920 },
               height: { ideal: 1080 },
@@ -307,7 +320,7 @@ export default function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps)
           } as any,
           (decodedText) => {
             if (!active) return;
-            onScan(decodedText);
+            onScanRef.current(decodedText);
             active = false;
             html5QrCode?.stop().catch(console.error);
           },
@@ -317,6 +330,10 @@ export default function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps)
         );
 
         if (!active) return;
+        const runningSettings = (html5QrCode as any).getRunningTrackSettings?.();
+        const runningCameraId =
+          typeof runningSettings?.deviceId === "string" ? runningSettings.deviceId : resolvedCameraId;
+        setActiveCameraId(runningCameraId ?? null);
         await applyPreferredTuning(html5QrCode);
       } catch (err: any) {
         if (!active) return;
@@ -333,6 +350,7 @@ export default function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps)
     return () => {
       active = false;
       window.clearTimeout(timer);
+      setActiveCameraId(null);
       html5QrCodeRef.current = null;
       if (html5QrCode?.isScanning) {
         html5QrCode
@@ -343,7 +361,7 @@ export default function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps)
           });
       }
     };
-  }, [applyPreferredTuning, onScan, selectedCameraId]);
+  }, [applyPreferredTuning, selectedCameraId]);
 
   useEffect(() => {
     const scanner = html5QrCodeRef.current;
@@ -509,7 +527,7 @@ export default function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps)
               Camara
             </span>
             <select
-              value={selectedCameraId ?? ""}
+              value={displayedCameraId ?? ""}
               onChange={(e) => {
                 setError(null);
                 setStatus("Cambiando camara...");
@@ -526,6 +544,11 @@ export default function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps)
                 outline: "none",
               }}
             >
+              {!displayedCameraId && (
+                <option value="" style={{ color: "#111" }}>
+                  Elegir camara...
+                </option>
+              )}
               {cameras.map((camera) => (
                 <option key={camera.id} value={camera.id} style={{ color: "#111" }}>
                   {camera.label}

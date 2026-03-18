@@ -2,10 +2,10 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 
-// PATCH /api/branches/[id] — Actualizar logoUrl y primaryColor de la sucursal
+// PATCH /api/branches/[branchId] - Actualizar datos visuales de la sucursal
 export async function PATCH(
   req: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ branchId: string }> }
 ) {
   const session = await auth();
   if (!session?.user?.id) {
@@ -13,13 +13,12 @@ export async function PATCH(
   }
 
   try {
-    const { id } = await params;
+    const { branchId } = await params;
     const { logoUrl, primaryColor, bgColor, name } = await req.json();
 
-    // Verificar que la sucursal pertenezca al Kiosco del usuario
     const branch = await prisma.branch.findFirst({
       where: {
-        id,
+        id: branchId,
         kiosco: {
           ownerId: session.user.id,
         },
@@ -31,7 +30,7 @@ export async function PATCH(
     }
 
     const updatedBranch = await prisma.branch.update({
-      where: { id },
+      where: { id: branchId },
       data: {
         ...(name !== undefined && { name }),
         ...(logoUrl !== undefined && { logoUrl }),

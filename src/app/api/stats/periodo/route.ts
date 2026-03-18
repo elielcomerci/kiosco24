@@ -21,9 +21,11 @@ export async function GET(req: Request) {
 
   let start: Date;
   let end: Date;
+  let prevStart: Date;
+  let prevEnd: Date;
 
   if (periodo === "semana") {
-    // Monday of the week containing isoDate (ART)
+    // Current week: Monday to Sunday containing isoDate
     const d = new Date(dayStart);
     const dow = d.getUTCDay(); // 0=Sun, 1=Mon
     const daysFromMonday = dow === 0 ? 6 : dow - 1;
@@ -32,22 +34,40 @@ export async function GET(req: Request) {
     end = new Date(start);
     end.setUTCDate(start.getUTCDate() + 6);
     end.setUTCHours(23, 59, 59, 999);
+
+    // Prev week: exactly 7 days before
+    prevStart = new Date(start);
+    prevStart.setUTCDate(prevStart.getUTCDate() - 7);
+    prevEnd = new Date(end);
+    prevEnd.setUTCDate(prevEnd.getUTCDate() - 7);
   } else if (periodo === "mes") {
-    // First and last day of the month in isoDate (ART)
+    // Current month: First to last day of the calendar month
     const [y, m] = isoDate.split("-").map(Number);
     start = new Date(`${y}-${String(m).padStart(2, "0")}-01T00:00:00-03:00`);
     const lastDay = new Date(y, m, 0).getDate();
-    end = new Date(
-      `${y}-${String(m).padStart(2, "0")}-${lastDay}T23:59:59.999-03:00`
-    );
+    end = new Date(`${y}-${String(m).padStart(2, "0")}-${lastDay}T23:59:59.999-03:00`);
+
+    // Prev month: Decisions - "Mes anterior completo calendario" (e.g. Marzo vs Febrero).
+    // This is much more intuitive for kiosk owners than a rolling 30-day window.
+    const prevM = m === 1 ? 12 : m - 1;
+    const prevY = m === 1 ? y - 1 : y;
+    prevStart = new Date(`${prevY}-${String(prevM).padStart(2, "0")}-01T00:00:00-03:00`);
+    const prevLastDay = new Date(prevY, prevM, 0).getDate();
+    prevEnd = new Date(`${prevY}-${String(prevM).padStart(2, "0")}-${prevLastDay}T23:59:59.999-03:00`);
   } else {
     // "dia"
     start = dayStart;
     end = dayEnd;
+
+    // Prev day: exactly 1 day before
+    prevStart = new Date(start);
+    prevStart.setUTCDate(prevStart.getUTCDate() - 1);
+    prevEnd = new Date(end);
+    prevEnd.setUTCDate(prevEnd.getUTCDate() - 1);
   }
 
-  // ─── Load data ────────────────────────────────────────────────────────────
-  const [sales, expenses, withdrawals] = await Promise.all([
+  // ─── Load data (Current & Prev Period) ───────────────────────────────────
+  const [sales, expenses, withdrawals, prevSales, prevExpenses] = await Promise.all([
     prisma.sale.findMany({
       where: { branchId, voided: false, createdAt: { gte: start, lte: end } },
       include: { items: true },
@@ -57,6 +77,14 @@ export async function GET(req: Request) {
     }),
     prisma.withdrawal.findMany({
       where: { branchId, createdAt: { gte: start, lte: end } },
+    }),
+    // We fetch prevPeriod strictly for KPI comparisons
+    prisma.sale.findMany({
+      where: { branchId, voided: false, createdAt: { gte: prevStart, lte: prevEnd } },
+      include: { items: true },
+    }),
+    prisma.expense.findMany({
+      where: { branchId, createdAt: { gte: prevStart, lte: prevEnd } },
     }),
   ]);
 
@@ -153,6 +181,26 @@ export async function GET(req: Request) {
 
   const promedioVentasDia = allDays.length > 0 ? Math.round(totalVentas / allDays.length) : 0;
 
+  // ─── Aggregate Prior Period KPIs ──────────────────────────────────────────
+  let prevTotalVentas = 0;
+  let prevGananciasBrutas = 0;
+  let prevHasCosts = false;
+
+  for (const sale of prevSales) {
+    prevTotalVentas += sale.total;
+    for (const item of sale.items) {
+      if (item.cost !== null) {
+        prevHasCosts = true;
+        prevGananciasBrutas += (item.price - item.cost) * item.quantity;
+      } else {
+        prevGananciasBrutas += item.price * item.quantity;
+      }
+    }
+  }
+
+  const prevTotalGastos = prevExpenses.reduce((sum, e) => sum + e.amount, 0);
+  const prevGananciasNetas = prevHasCosts ? prevGananciasBrutas - prevTotalGastos : null;
+
   return NextResponse.json({
     periodo,
     totalVentas: Math.round(totalVentas),
@@ -168,6 +216,12 @@ export async function GET(req: Request) {
     topProductos,
     ventasPorDia,
     ventasPorSemana,
+    prev: {
+      totalVentas: Math.round(prevTotalVentas),
+      totalGastos: Math.round(prevTotalGastos),
+      gananciasNetas: prevGananciasNetas !== null ? Math.round(prevGananciasNetas) : null,
+      hasCosts: prevHasCosts,
+    }
   });
 }
 

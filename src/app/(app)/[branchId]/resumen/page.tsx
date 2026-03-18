@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
+import { useParams } from "next/navigation";
+import BackButton from "@/components/ui/BackButton";
+import TurnosHistorial from "@/components/turnos/TurnosHistorial";
 import { formatARS } from "@/lib/utils";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -118,6 +121,53 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
   );
 }
 
+function MetodoBar({
+  label,
+  amount,
+  total,
+  icon,
+}: {
+  label: string;
+  amount: number;
+  total: number;
+  icon: string;
+}) {
+  const pct = total > 0 ? Math.round((amount / total) * 100) : 0;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, alignItems: "center" }}>
+        <span style={{ color: "var(--text-2)", display: "flex", gap: "6px", alignItems: "center" }}>
+          <span>{icon}</span> {label}
+        </span>
+        <span style={{ fontWeight: 600 }}>
+          {formatARS(amount)}
+          <span style={{ color: "var(--text-3)", fontWeight: 400, marginLeft: 6, width: "32px", display: "inline-block", textAlign: "right" }}>
+            {pct}%
+          </span>
+        </span>
+      </div>
+      <div
+        style={{
+          height: 6,
+          background: "var(--surface-2)",
+          borderRadius: 99,
+          overflow: "hidden",
+        }}
+      >
+        <div
+          style={{
+            height: "100%",
+            width: `${pct}%`,
+            background: "var(--primary)",
+            borderRadius: 99,
+            transition: "width 0.4s ease",
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
 // ─── Componente Saldo MP ──────────────────────────────────────────────────────
 
 function MpBalanceCard() {
@@ -210,6 +260,7 @@ function MpBalanceCard() {
 export default function ResumenPage() {
   const [data, setData] = useState<ResumenData | null>(null);
   const [loading, setLoading] = useState(true);
+  const { branchId } = useParams();
 
   useEffect(() => {
     fetch("/api/resumen/hoy")
@@ -256,6 +307,15 @@ export default function ResumenPage() {
   const otrosCobros = ventasMp + ventasDebito + ventasTransferencia + ventasTarjeta;
   const tieneOtrosCobros = otrosCobros > 0 || ventasFiado > 0;
 
+  const fechaFormateada = new Date().toLocaleDateString("es-AR", {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+  const openingTime = shifts.length > 0 ? new Date(shifts[0].openedAt).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" }) : 'N/A';
+
+
   return (
     <div
       style={{
@@ -266,6 +326,19 @@ export default function ResumenPage() {
         paddingBottom: "100px",
       }}
     >
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "16px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <BackButton fallback={`/${branchId}/caja`} />
+          <h1 style={{ fontSize: "24px", fontWeight: 800, margin: 0 }}>Cierre de caja</h1>
+        </div>
+        <div style={{ textAlign: "right", marginTop: "4px" }}>
+          <div style={{ fontSize: "14px", fontWeight: 600 }}>{fechaFormateada}</div>
+          <div style={{ fontSize: "12px", color: "var(--text-3)" }}>
+            Abre: {openingTime}
+          </div>
+        </div>
+      </div>
+
       {/* ── Hero ────────────────────────────────────────────────────────── */}
       <div
         style={{
@@ -457,26 +530,73 @@ export default function ResumenPage() {
         </div>
       )}
 
-      {/* ── Total del día ────────────────────────────────────────────────── */}
+      {/* ── Resultados del día (Rendimiento) ────────────────────────────────────────────────── */}
       {totalVentas > 0 && (
-        <div
-          style={{
-            padding: "14px 16px",
-            background: "var(--surface-2)",
-            borderRadius: "var(--radius)",
-            border: "1px solid var(--border)",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-          }}
-        >
-          <span style={{ fontWeight: 600, color: "var(--text-2)", fontSize: "14px" }}>
-            Total del día (todos los medios)
-          </span>
-          <span style={{ fontWeight: 800, fontSize: "18px", color: "var(--text)" }}>
-            {formatARS(totalVentas)}
-          </span>
-        </div>
+        <>
+          <div className="separator" />
+          <SectionTitle>📊 Rendimiento del día</SectionTitle>
+          <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+            
+            {/* Grid de KPIs financieros */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+              <div className="card" style={{ padding: "14px", display: "flex", flexDirection: "column", gap: "4px" }}>
+                <span style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-3)" }}>Total Ventas</span>
+                <span style={{ fontSize: "20px", fontWeight: 800, color: "var(--text)" }}>{formatARS(totalVentas)}</span>
+              </div>
+              
+              {hasCosts && ganancia !== null ? (
+                <div 
+                  className="card" 
+                  style={{ 
+                    padding: "14px", 
+                    display: "flex", 
+                    flexDirection: "column", 
+                    gap: "4px",
+                    background: "linear-gradient(135deg, rgba(34,197,94,0.1), rgba(34,197,94,0.03))",
+                    borderColor: "rgba(34,197,94,0.25)"
+                  }}
+                >
+                  <span style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--green)" }}>Ganancia Neta</span>
+                  <span style={{ fontSize: "20px", fontWeight: 800, color: "var(--green)" }}>{formatARS(ganancia)}</span>
+                  <span style={{ fontSize: "11px", color: "var(--text-3)" }}>Costo y gastos deducidos</span>
+                </div>
+              ) : (
+                <div className="card" style={{ padding: "14px", display: "flex", flexDirection: "column", justifyContent: "center", gap: "4px" }}>
+                  <span style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-3)" }}>Ganancia Neta</span>
+                  <span style={{ fontSize: "12px", color: "var(--text-3)", fontStyle: "italic" }}>Requiere cargar costos</span>
+                </div>
+              )}
+
+              {/* Fila secundaria: Costo estimado y Gastos */}
+              {hasCosts && ganancia !== null && (
+                <div className="card" style={{ padding: "14px", display: "flex", flexDirection: "column", gap: "4px" }}>
+                  <span style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-3)" }}>Costo Mercadería</span>
+                  <span style={{ fontSize: "18px", fontWeight: 800, color: "var(--text-2)" }}>{formatARS(totalVentas - (ganancia + totalGastos))}</span>
+                </div>
+              )}
+              
+              <div className="card" style={{ padding: "14px", display: "flex", flexDirection: "column", gap: "4px" }}>
+                <span style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-3)" }}>Gastos Registrados</span>
+                <span style={{ fontSize: "18px", fontWeight: 800, color: totalGastos > 0 ? "var(--red)" : "var(--text-2)" }}>{formatARS(totalGastos)}</span>
+              </div>
+            </div>
+
+            {/* Desglose de cobros consolidado */}
+            <div className="card" style={{ padding: "16px" }}>
+              <h3 style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-3)", marginBottom: "16px" }}>
+                Composición de ingresos (Todos los medios)
+              </h3>
+              <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+                {ventasEfectivo > 0 && <MetodoBar label="Efectivo" amount={ventasEfectivo} total={totalVentas} icon="💵" />}
+                {ventasMp > 0 && <MetodoBar label="MercadoPago" amount={ventasMp} total={totalVentas} icon="📱" />}
+                {ventasDebito > 0 && <MetodoBar label="Débito" amount={ventasDebito} total={totalVentas} icon="💳" />}
+                {ventasTransferencia > 0 && <MetodoBar label="Transferencia" amount={ventasTransferencia} total={totalVentas} icon="🏦" />}
+                {ventasTarjeta > 0 && <MetodoBar label="Tarjeta de Crédito" amount={ventasTarjeta} total={totalVentas} icon="🏧" />}
+                {ventasFiado > 0 && <MetodoBar label="Fiado" amount={ventasFiado} total={totalVentas} icon="📋" />}
+              </div>
+            </div>
+          </div>
+        </>
       )}
 
       {/* ── Turnos ──────────────────────────────────────────────────────── */}

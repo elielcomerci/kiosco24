@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
 import { formatARS, todayART } from "@/lib/utils";
 import TurnosHistorial from "@/components/turnos/TurnosHistorial";
+import BackButton from "@/components/ui/BackButton";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -22,6 +23,12 @@ interface PeriodoData {
   topProductos: { name: string; cantidad: number; total: number }[];
   ventasPorDia: { fecha: string; ventas: number; ganancia: number | null }[];
   ventasPorSemana: { semana: number; ventas: number; ganancia: number | null }[] | null;
+  prev?: {
+    totalVentas: number;
+    totalGastos: number;
+    gananciasNetas: number | null;
+    hasCosts: boolean;
+  };
 }
 
 type Periodo = "dia" | "semana" | "mes";
@@ -50,18 +57,56 @@ const GASTO_LABEL: Record<string, string> = {
 
 // ─── Helper components ────────────────────────────────────────────────────────
 
+function getNavLabel(periodo: Periodo, iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  const dateObj = new Date(y, m - 1, d);
+  
+  if (periodo === "mes") {
+    const month = dateObj.toLocaleDateString("es-AR", { month: "long" });
+    return `${month.charAt(0).toUpperCase() + month.slice(1)} ${y}`;
+  }
+  if (periodo === "semana") {
+    const dow = dateObj.getDay();
+    const daysFromMonday = dow === 0 ? 6 : dow - 1;
+    const mon = new Date(dateObj);
+    mon.setDate(dateObj.getDate() - daysFromMonday);
+    return `Semana del ${mon.getDate()} ${mon.toLocaleDateString("es-AR", { month: "short" })}`;
+  }
+  return dateObj.toLocaleDateString("es-AR", { day: "numeric", month: "long" });
+}
+
+function offsetDate(iso: string, periodo: Periodo, dir: 1 | -1): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  const dateObj = new Date(y, m - 1, d);
+
+  if (periodo === "dia") {
+    dateObj.setDate(dateObj.getDate() + 1 * dir);
+  } else if (periodo === "semana") {
+    dateObj.setDate(dateObj.getDate() + 7 * dir);
+  } else if (periodo === "mes") {
+    dateObj.setMonth(dateObj.getMonth() + 1 * dir);
+  }
+  
+  const yy = dateObj.getFullYear();
+  const mm = String(dateObj.getMonth() + 1).padStart(2, "0");
+  const dd = String(dateObj.getDate()).padStart(2, "0");
+  return `${yy}-${mm}-${dd}`;
+}
+
 function KpiCard({
   label,
   value,
   sub,
   highlight,
   warning,
+  trend,
 }: {
   label: string;
   value: string;
   sub?: string;
   highlight?: boolean;
   warning?: boolean;
+  trend?: number | null;
 }) {
   return (
     <div
@@ -74,20 +119,37 @@ function KpiCard({
         padding: "16px",
         display: "flex",
         flexDirection: "column",
-        gap: 4,
+        gap: 6,
       }}
     >
-      <span
-        style={{
-          fontSize: 11,
-          fontWeight: 700,
-          textTransform: "uppercase",
-          letterSpacing: "0.08em",
-          color: "var(--text-3)",
-        }}
-      >
-        {label}
-      </span>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+        <span
+          style={{
+            fontSize: 11,
+            fontWeight: 700,
+            textTransform: "uppercase",
+            letterSpacing: "0.08em",
+            color: "var(--text-3)",
+          }}
+        >
+          {label}
+        </span>
+        {trend !== undefined && trend !== null && (
+          <span style={{
+            fontSize: 11,
+            fontWeight: 700,
+            padding: "2px 6px",
+            borderRadius: "4px",
+            background: trend > 0 ? "rgba(34,197,94,0.15)" : trend < 0 ? "rgba(239,68,68,0.15)" : "var(--surface-2)",
+            color: trend > 0 ? "var(--green)" : trend < 0 ? "var(--red)" : "var(--text-3)",
+            display: "flex",
+            alignItems: "center",
+            gap: "2px"
+          }}>
+            {trend > 0 ? "↑" : trend < 0 ? "↓" : "−"} {Math.abs(Math.round(trend))}%
+          </span>
+        )}
+      </div>
       <span
         style={{
           fontSize: 22,
@@ -220,18 +282,18 @@ function MetodoBar({
 export default function EstadisticasPage() {
   const params = useParams();
   const branchId = params.branchId as string;
+  const today = todayART();
   const [periodo, setPeriodo] = useState<Periodo>("semana");
+  const [currentDate, setCurrentDate] = useState<string>(today);
   const [data, setData] = useState<PeriodoData | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const today = todayART();
-
-  const load = useCallback(async (p: Periodo) => {
+  const load = useCallback(async (p: Periodo, iso: string) => {
     setLoading(true);
     setData(null);
     try {
       const res = await fetch(
-        `/api/stats/periodo?periodo=${p}&isoDate=${today}`,
+        `/api/stats/periodo?periodo=${p}&isoDate=${iso}`,
         { headers: { "x-branch-id": branchId } }
       );
       const json = await res.json();
@@ -239,60 +301,101 @@ export default function EstadisticasPage() {
     } finally {
       setLoading(false);
     }
-  }, [branchId, today]);
+  }, [branchId]);
 
   useEffect(() => {
-    load(periodo);
-  }, [periodo, load]);
+    load(periodo, currentDate);
+  }, [periodo, currentDate, load]);
+
+  const handlePeriodoChange = (p: Periodo) => {
+    setPeriodo(p);
+    setCurrentDate(today); // Reset to today when switching periods to avoid confusion
+  };
+
+  const handleNav = (dir: 1 | -1) => {
+    setCurrentDate((prev) => offsetDate(prev, periodo, dir));
+  };
 
   // Build period date range for TurnosHistorial
-  const { from, to } = getPeriodRange(periodo, today);
+  const { from, to } = getPeriodRange(periodo, currentDate);
 
   // Build chart data
   const chartData = buildChartData(data, periodo);
+
+  // Trend calcs
+  const getTrend = (current: number | null, prev: number | null) => {
+    if (current === null || prev === null) return null;
+    if (prev === 0) return current > 0 ? 100 : current < 0 ? -100 : 0;
+    return ((current - prev) / Math.abs(prev)) * 100;
+  };
+
+  const isCurrentPeriod = (() => {
+    if (periodo === "dia") return currentDate === today;
+    const nextOffset = offsetDate(currentDate, periodo, 1);
+    // If navigating forward puts us strictly past today, we are at the edge
+    return nextOffset > today;
+  })();
 
   return (
     <div style={{ padding: "20px 16px", display: "flex", flexDirection: "column", gap: 20, paddingBottom: 100 }}>
 
       {/* Header */}
       <div>
-        <h1 style={{ fontSize: 22, fontWeight: 800, marginBottom: 4 }}>📊 Estadísticas</h1>
-        <p style={{ color: "var(--text-3)", fontSize: 13 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
+          <BackButton fallback={`/${branchId}/caja`} />
+          <h1 style={{ fontSize: 22, fontWeight: 800, margin: 0 }}>📊 Estadísticas</h1>
+        </div>
+        <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: "8px" }}>
           Ventas, rentabilidad y rendimiento de tu kiosco
         </p>
       </div>
 
       {/* Period selector */}
-      <div
-        style={{
-          display: "flex",
-          gap: 8,
-          background: "var(--surface-2)",
-          padding: 4,
-          borderRadius: "var(--radius)",
-          border: "1px solid var(--border)",
-        }}
-      >
-        {(["dia", "semana", "mes"] as Periodo[]).map((p) => (
-          <button
-            key={p}
-            onClick={() => setPeriodo(p)}
-            style={{
-              flex: 1,
-              padding: "8px 0",
-              borderRadius: "calc(var(--radius) - 2px)",
-              border: "none",
-              background: periodo === p ? "var(--primary)" : "transparent",
-              color: periodo === p ? "#000" : "var(--text-2)",
-              fontWeight: 700,
-              fontSize: 13,
-              cursor: "pointer",
-              transition: "all 0.2s",
-            }}
-          >
-            {PERIODO_LABEL[p]}
+      <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginBottom: "8px" }}>
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            background: "var(--surface-2)",
+            padding: 4,
+            borderRadius: "var(--radius)",
+            border: "1px solid var(--border)",
+          }}
+        >
+          {(["dia", "semana", "mes"] as Periodo[]).map((p) => (
+            <button
+              key={p}
+              onClick={() => handlePeriodoChange(p)}
+              style={{
+                flex: 1,
+                padding: "8px 0",
+                borderRadius: "calc(var(--radius) - 2px)",
+                border: "none",
+                background: periodo === p ? "var(--primary)" : "transparent",
+                color: periodo === p ? "#000" : "var(--text-2)",
+                fontWeight: 700,
+                fontSize: 13,
+                cursor: "pointer",
+                transition: "all 0.2s",
+              }}
+            >
+              {PERIODO_LABEL[p]}
+            </button>
+          ))}
+        </div>
+
+        {/* Date Navigator */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "var(--surface)", padding: "8px", borderRadius: "12px", border: "1px solid var(--border)" }}>
+          <button className="btn btn-ghost" style={{ padding: "8px 16px", borderRadius: "8px" }} onClick={() => handleNav(-1)}>
+            ‹ Ant
           </button>
-        ))}
+          <span style={{ fontWeight: 700, fontSize: "14px", color: "var(--text)", textTransform: "capitalize" }}>
+            {getNavLabel(periodo, currentDate)}
+          </span>
+          <button className="btn btn-ghost" style={{ padding: "8px 16px", borderRadius: "8px", opacity: isCurrentPeriod ? 0.3 : 1 }} onClick={() => handleNav(1)} disabled={isCurrentPeriod}>
+            Sig ›
+          </button>
+        </div>
       </div>
 
       {loading && (
@@ -309,6 +412,7 @@ export default function EstadisticasPage() {
               label="Total ventas"
               value={formatARS(data.totalVentas)}
               sub={`Prom: ${formatARS(data.promedioVentasDia)}/día`}
+              trend={getTrend(data.totalVentas, data.prev?.totalVentas ?? null)}
             />
             {data.hasCosts && data.gananciasNetas !== null ? (
               <KpiCard
@@ -316,6 +420,7 @@ export default function EstadisticasPage() {
                 value={formatARS(data.gananciasNetas)}
                 sub={data.margenPorcentaje !== null ? `Margen: ${data.margenPorcentaje}%` : undefined}
                 highlight
+                trend={getTrend(data.gananciasNetas, data.prev?.gananciasNetas ?? null)}
               />
             ) : (
               <div
@@ -342,6 +447,7 @@ export default function EstadisticasPage() {
               label="Gastos"
               value={formatARS(data.totalGastos)}
               warning={data.totalGastos > 0}
+              trend={getTrend(data.totalGastos, data.prev?.totalGastos ?? null)}
             />
             <KpiCard
               label="Margen %"

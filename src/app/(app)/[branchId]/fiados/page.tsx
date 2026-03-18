@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useParams } from "next/navigation";
 import { formatARS } from "@/lib/utils";
 import NumPad from "@/components/ui/NumPad";
+import BackButton from "@/components/ui/BackButton";
 
 interface CreditCustomer {
   id: string;
@@ -11,6 +13,8 @@ interface CreditCustomer {
 }
 
 export default function FiadosPage() {
+  const params = useParams();
+  const branchId = params.branchId as string;
   const [customers, setCustomers] = useState<CreditCustomer[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -50,7 +54,10 @@ export default function FiadosPage() {
 
   return (
     <div style={{ padding: "24px 16px", minHeight: "100dvh", display: "flex", flexDirection: "column" }}>
-      <h1 style={{ fontSize: "24px", fontWeight: 800, marginBottom: "8px" }}>Fiados</h1>
+      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+        <BackButton fallback={`/${branchId}/caja`} />
+        <h1 style={{ fontSize: "24px", fontWeight: 800, margin: 0 }}>Fiados</h1>
+      </div>
       <p style={{ color: "var(--text-2)", fontSize: "14px", marginBottom: "20px" }}>
         Total en la calle: <strong style={{ color: "var(--amber)" }}>{formatARS(totalFiado)}</strong>
       </p>

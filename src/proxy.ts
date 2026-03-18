@@ -1,14 +1,21 @@
+import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 
 export default auth((req: any) => {
   const { nextUrl } = req;
   const isLoggedIn = !!req.auth?.user?.id;
   const isEmployeeAccessLink = /^\/KIOSCO-[A-Z0-9]{8}-[A-Z0-9]{8}$/i.test(nextUrl.pathname);
+  const isInternalEmployeeAccess = nextUrl.pathname.startsWith("/_employee-access/");
+
+  if (isEmployeeAccessLink) {
+    const rewriteUrl = new URL(`/_employee-access${nextUrl.pathname}`, nextUrl);
+    return NextResponse.rewrite(rewriteUrl);
+  }
 
   const isPublic = 
     nextUrl.pathname === "/" || 
     nextUrl.pathname === "/onboarding" || 
-    isEmployeeAccessLink ||
+    isInternalEmployeeAccess ||
     nextUrl.pathname === "/sw.js" || 
     nextUrl.pathname === "/manifest.json" ||
     nextUrl.pathname.startsWith("/api/auth");

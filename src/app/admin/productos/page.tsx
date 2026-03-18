@@ -9,6 +9,7 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import PlatformProductBulkImporter from "@/app/admin/productos/PlatformProductBulkImporter";
 import PlatformProductQuickEditor from "@/app/admin/productos/PlatformProductQuickEditor";
 
 async function ensurePlatformAdmin() {
@@ -334,6 +335,8 @@ export default async function AdminProductsPage() {
             status: product.status,
           }))}
         />
+
+        <PlatformProductBulkImporter />
 
         <section
           style={{

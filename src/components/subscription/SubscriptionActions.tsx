@@ -2,6 +2,10 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import {
+  SUBSCRIPTION_CONTINUATION_LABEL,
+  SUBSCRIPTION_ENTRY_LABEL,
+} from "@/lib/subscription-plan";
 
 type Props = {
   canCreateSubscription: boolean;
@@ -63,6 +67,20 @@ export default function SubscriptionActions({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+      <div
+        style={{
+          padding: "12px 14px",
+          borderRadius: "12px",
+          background: "rgba(34,197,94,.1)",
+          border: "1px solid rgba(34,197,94,.18)",
+          color: "var(--text-2)",
+          fontSize: "13px",
+          lineHeight: 1.6,
+        }}
+      >
+        Compras {SUBSCRIPTION_ENTRY_LABEL} y luego sigue en {SUBSCRIPTION_CONTINUATION_LABEL}.
+      </div>
+
       {canCreateSubscription && (
         <button
           type="button"
@@ -71,7 +89,7 @@ export default function SubscriptionActions({
           disabled={loading}
           style={{ width: "100%" }}
         >
-          {loading ? "Generando link..." : "Activar suscripcion"}
+          {loading ? "Generando link..." : `Comprar ${SUBSCRIPTION_ENTRY_LABEL}`}
         </button>
       )}
 

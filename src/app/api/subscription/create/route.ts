@@ -1,5 +1,6 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { SUBSCRIPTION_PRICE_ARS } from "@/lib/subscription-plan";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function POST(req: NextRequest) {
@@ -46,7 +47,7 @@ export async function POST(req: NextRequest) {
     auto_recurring: {
       frequency: 1,
       frequency_type: "months",
-      transaction_amount: 9900,
+      transaction_amount: SUBSCRIPTION_PRICE_ARS,
       currency_id: "ARS",
     },
     // MP requiere el payer_email

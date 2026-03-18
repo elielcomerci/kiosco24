@@ -2,6 +2,10 @@
 
 import { signIn } from "next-auth/react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import {
+  SUBSCRIPTION_CONTINUATION_LABEL,
+  SUBSCRIPTION_ENTRY_LABEL,
+} from "@/lib/subscription-plan";
 
 const AUTH_TIMEOUT_MS = 15000;
 const ACCESS_KEY_RE = /^KIOSCO-[A-Z0-9]{8}-[A-Z0-9]{8}$/;
@@ -659,7 +663,9 @@ export default function LoginExperience({
         )}
       </div>
 
-      <p style={{ fontSize: "13px", color: "var(--text-3)" }}>$9.900/mes con activacion online</p>
+      <p style={{ fontSize: "13px", color: "var(--text-3)", textAlign: "center", maxWidth: "320px" }}>
+        {SUBSCRIPTION_ENTRY_LABEL}. Luego, {SUBSCRIPTION_CONTINUATION_LABEL}.
+      </p>
     </div>
   );
 }

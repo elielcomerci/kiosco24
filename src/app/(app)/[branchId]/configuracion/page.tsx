@@ -4,6 +4,11 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import BackButton from "@/components/ui/BackButton";
 import ThemeEditor from "@/components/ui/ThemeEditor";
+import {
+  SUBSCRIPTION_CONTINUATION_LABEL,
+  SUBSCRIPTION_ENTRY_LABEL,
+  SUBSCRIPTION_PRICE_LABEL,
+} from "@/lib/subscription-plan";
 
 interface Employee {
   id: string;
@@ -1212,7 +1217,10 @@ export default function ConfiguracionPage() {
                   {!subscription && <span style={{ color: "var(--text-3)" }}>No configurada</span>}
                 </div>
               </div>
-              <div style={{ fontSize: "20px", fontWeight: 800 }}>$9.900<span style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 500 }}>/mes</span></div>
+              <div style={{ fontSize: "20px", fontWeight: 800 }}>{SUBSCRIPTION_PRICE_LABEL}<span style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 500 }}> por mes</span></div>
+            </div>
+            <div style={{ fontSize: "12px", color: "var(--text-3)" }}>
+              {SUBSCRIPTION_ENTRY_LABEL}. Luego, {SUBSCRIPTION_CONTINUATION_LABEL}.
             </div>
             
             {subscription?.managementUrl && (

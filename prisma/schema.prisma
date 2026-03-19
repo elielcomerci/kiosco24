@@ -105,6 +105,7 @@ model Branch {
   mpTokenExpiresAt DateTime? // access_token dura 180 días
   mpStoreId        String? // ID de sucursal creada en MP
   mpPosId          String? // external_id del punto de venta en MP
+  mpIncomingPaymentNotices MpIncomingPaymentNotice[]
   restockEvents    RestockEvent[]
 
   @@index([kioscoId])
@@ -426,6 +427,31 @@ model RestockItem {
   @@index([variantId])
 }
 
+model MpIncomingPaymentNotice {
+  id                 String                   @id @default(cuid())
+  branchId           String
+  branch             Branch                   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  mpPaymentId        String                   @unique
+  collectorId        String?
+  channel            MpIncomingPaymentChannel @default(MERCADOPAGO)
+  status             String
+  paymentType        String?
+  paymentMethod      String?
+  amount             Float
+  currency           String?
+  payerName          String?
+  payerEmail         String?
+  referenceLabel     String?
+  occurredAt         DateTime?
+  approvedObservedAt DateTime?
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
+
+  @@index([branchId, createdAt])
+  @@index([branchId, approvedObservedAt])
+  @@index([branchId, status, approvedObservedAt])
+}
+
 enum PaymentMethod {
   CASH
   MERCADOPAGO
@@ -500,4 +526,9 @@ enum PlatformProductSubmissionStatus {
   PENDING
   APPROVED
   REJECTED
+}
+
+enum MpIncomingPaymentChannel {
+  MERCADOPAGO
+  TRANSFER
 }

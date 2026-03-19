@@ -879,7 +879,7 @@ export default function ConfiguracionPage() {
                   a tu cuenta — nosotros nunca lo tocamos.
                 </p>
               </div>
-              <a href="/api/mp/auth" style={{ textDecoration: "none" }}>
+              <a href={`/api/mp/auth?branchId=${branchId}`} style={{ textDecoration: "none" }}>
                 <button
                   className="btn btn-green"
                   style={{ width: "100%", gap: 8 }}
@@ -899,9 +899,9 @@ export default function ConfiguracionPage() {
                   <p style={{ fontSize: "12px", color: "var(--text-3)" }}>ID: {currentBranch.mpUserId}</p>
                 </div>
               </div>
-              <div
-                style={{
-                  background: "rgba(245,158,11,0.08)",
+                <div
+                  style={{
+                    background: "rgba(245,158,11,0.08)",
                   border: "1px solid rgba(245,158,11,0.3)",
                   borderRadius: "var(--radius-sm, 6px)",
                   padding: "12px 14px",
@@ -959,9 +959,9 @@ export default function ConfiguracionPage() {
                   </p>
                 </div>
               </div>
-              <button
-                className="btn btn-ghost"
-                style={{ fontSize: "12px", color: "var(--text-3)", alignSelf: "flex-start" }}
+                <button
+                  className="btn btn-ghost"
+                  style={{ fontSize: "12px", color: "var(--text-3)", alignSelf: "flex-start" }}
                 onClick={handleMpDisconnect}
               >
                 Desconectar cuenta

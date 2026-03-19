@@ -57,7 +57,30 @@ export async function GET(req: Request) {
   // Ganancia = ventas - costo de productos vendidos (solo si hay costos cargados)
   let ganancia = 0;
   let hasCosts = false;
+  let ventasMp = 0;
+  let ventasDebito = 0;
+  let ventasTransferencia = 0;
+  let ventasTarjeta = 0;
+  let ventasFiado = 0;
   for (const sale of allSales) {
+    switch (sale.paymentMethod) {
+      case "MERCADOPAGO":
+        ventasMp += sale.total;
+        break;
+      case "DEBIT":
+        ventasDebito += sale.total;
+        break;
+      case "TRANSFER":
+        ventasTransferencia += sale.total;
+        break;
+      case "CREDIT_CARD":
+        ventasTarjeta += sale.total;
+        break;
+      case "CREDIT":
+        ventasFiado += sale.total;
+        break;
+    }
+
     for (const item of sale.items) {
       if (item.cost !== null) {
         hasCosts = true;
@@ -71,6 +94,14 @@ export async function GET(req: Request) {
   // Only subtract expenses from ganancia when there are costs loaded
   if (hasCosts) ganancia -= expensesTotal;
 
+  const totalVentas =
+    cashSalesTotal +
+    ventasMp +
+    ventasDebito +
+    ventasTransferencia +
+    ventasTarjeta +
+    ventasFiado;
+
   return NextResponse.json({
     enCaja: Math.round(enCaja),
     ganancia: canSeeProfit && hasCosts ? Math.round(ganancia) : null,
@@ -78,6 +109,12 @@ export async function GET(req: Request) {
     // Shift close summary breakdown
     openingAmount: Math.round(openingAmount),
     ventasEfectivo: Math.round(cashSalesTotal),
+    ventasMp: Math.round(ventasMp),
+    ventasDebito: Math.round(ventasDebito),
+    ventasTransferencia: Math.round(ventasTransferencia),
+    ventasTarjeta: Math.round(ventasTarjeta),
+    ventasFiado: Math.round(ventasFiado),
+    totalVentas: Math.round(totalVentas),
     totalGastos: Math.round(expensesTotal),
     totalRetiros: Math.round(withdrawalsTotal),
   });

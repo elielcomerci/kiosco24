@@ -409,7 +409,6 @@ export default function ResumenPage() {
       </div>
 
       {/* ── Saldo MercadoPago ────────────────────────────────────────────── */}
-      <MpBalanceCard />
 
       {/* ── Alertas de Bajo Stock ─────────────────────────────────────────── */}
       {data.lowStockItems && data.lowStockItems.length > 0 && (

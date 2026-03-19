@@ -2,7 +2,7 @@ import { Pool } from "pg";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from ".prisma/client";
 
-export { PaymentMethod, ExpenseReason, Prisma } from ".prisma/client";
+export { PaymentMethod, ExpenseReason, MpIncomingPaymentChannel, Prisma } from ".prisma/client";
 export type {
   User,
   Kiosco,
@@ -17,6 +17,7 @@ export type {
   SaleItem,
   CreditCustomer,
   CreditPayment,
+  MpIncomingPaymentNotice,
 } from ".prisma/client";
 
 const isEdge = typeof (globalThis as any).EdgeRuntime === "string";

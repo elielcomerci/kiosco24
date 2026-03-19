@@ -14,7 +14,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(new URL("/login", req.url));
   }
 
-  const branchId = await getBranchId(req, session.user.id);
+  const requestedBranchId = req.nextUrl.searchParams.get("branchId");
+  const branchId = requestedBranchId || (await getBranchId(req, session.user.id));
   if (!branchId) {
     return NextResponse.json({ error: "No branch" }, { status: 404 });
   }

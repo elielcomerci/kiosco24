@@ -9,6 +9,8 @@ import GastoModal from "@/components/caja/GastoModal";
 import OtroModal from "@/components/caja/OtroModal";
 import RetiroModal from "@/components/caja/RetiroModal";
 import CreditCustomerModal from "@/components/caja/CreditCustomerModal";
+import CajaTotalsBreakdownModal from "@/components/caja/CajaTotalsBreakdownModal";
+import MpIncomingPaymentToasts from "@/components/caja/MpIncomingPaymentToasts";
 import OpenShiftModal, { type ShiftAssignee } from "@/components/turnos/OpenShiftModal";
 import CloseShiftModal from "@/components/turnos/CloseShiftModal";
 import TransferShiftModal from "@/components/turnos/TransferShiftModal";
@@ -112,7 +114,21 @@ export default function CajaPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [ticket, setTicket] = useState<TicketItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [cajaStats, setCajaStats] = useState<{ enCaja: number; ganancia: number | null; hasCosts: boolean; openingAmount?: number; ventasEfectivo?: number; totalGastos?: number; totalRetiros?: number }>({ enCaja: 0, ganancia: null, hasCosts: false });
+  const [cajaStats, setCajaStats] = useState<{
+    enCaja: number;
+    ganancia: number | null;
+    hasCosts: boolean;
+    openingAmount?: number;
+    ventasEfectivo?: number;
+    ventasMp?: number;
+    ventasDebito?: number;
+    ventasTransferencia?: number;
+    ventasTarjeta?: number;
+    ventasFiado?: number;
+    totalVentas?: number;
+    totalGastos?: number;
+    totalRetiros?: number;
+  }>({ enCaja: 0, ganancia: null, hasCosts: false });
   const [lastSale, setLastSale] = useState<Sale | null>(null);
   const [confirmedSale, setConfirmedSale] = useState<Sale | null>(null);
   const [showGasto, setShowGasto] = useState(false);
@@ -126,6 +142,7 @@ export default function CajaPage() {
   const [showOpenShift, setShowOpenShift] = useState(false);
   const [showCloseShift, setShowCloseShift] = useState(false);
   const [showTransferShift, setShowTransferShift] = useState(false);
+  const [showTotalsBreakdown, setShowTotalsBreakdown] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [showRestockModal, setShowRestockModal] = useState(false);
   const [cajaSearch, setCajaSearch] = useState("");
@@ -891,12 +908,18 @@ export default function CajaPage() {
 
       {/* Status Bar */}
       <div className="status-bar">
-        <div className="status-bar-item">
+        <button
+          type="button"
+          className="status-bar-item"
+          onClick={() => setShowTotalsBreakdown(true)}
+          style={{ background: "transparent", border: "none", cursor: "pointer" }}
+          title="Ver desglose de caja"
+        >
           <span className="status-bar-label">En Caja</span>
           <span className="status-bar-value" style={{ color: "var(--primary)" }}>
             {formatARS(cajaStats.enCaja)}
           </span>
-        </div>
+        </button>
         <div className="separator" style={{ width: "1px", height: "32px", background: "var(--border-2)" }} />
         <div className="status-bar-item" style={{ alignItems: "flex-end" }}>
           <span className="status-bar-label">Ganancia estimada</span>
@@ -1380,6 +1403,12 @@ export default function CajaPage() {
           onClose={() => setShowScanner(false)}
         />
       )}
+      {showTotalsBreakdown && (
+        <CajaTotalsBreakdownModal
+          stats={cajaStats}
+          onClose={() => setShowTotalsBreakdown(false)}
+        />
+      )}
 
       {/* Variant Selector Modal */}
       {variantSelector && (
@@ -1409,7 +1438,7 @@ export default function CajaPage() {
           </div>
         </div>
       )}
-        {showRestockModal && (
+      {showRestockModal && (
           <QuickRestockModal
             products={products}
             branchId={branchId}
@@ -1421,6 +1450,10 @@ export default function CajaPage() {
           }}
         />
       )}
+      <MpIncomingPaymentToasts
+        branchId={branchId}
+        enabled={Boolean(activeShift && (userRole === "OWNER" || canOperateCurrentShift))}
+      />
     </div>
   );
 }

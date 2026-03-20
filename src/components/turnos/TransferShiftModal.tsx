@@ -12,10 +12,30 @@ interface Employee {
   hasPin: boolean;
 }
 
+type EmployeeApiResponse = {
+  id?: string;
+  name?: string;
+  hasPin?: boolean;
+};
+
 interface TransferShiftModalProps {
   currentResponsibleName: string;
   onConfirm: (assignee: ShiftAssignee) => void | Promise<void>;
   onCancel: () => void;
+}
+
+function normalizeEmployees(data: unknown): Employee[] {
+  if (!Array.isArray(data)) {
+    return [];
+  }
+
+  return data
+    .map((entry: EmployeeApiResponse) => ({
+      id: entry.id,
+      name: entry.name,
+      hasPin: Boolean(entry.hasPin),
+    }))
+    .filter((employee): employee is Employee => Boolean(employee.id && employee.name));
 }
 
 export default function TransferShiftModal({
@@ -39,13 +59,7 @@ export default function TransferShiftModal({
     })
       .then((r) => r.json())
       .then((data) => {
-        const active = Array.isArray(data)
-          ? data.map((e: any) => ({
-              id: e.id,
-              name: e.name,
-              hasPin: Boolean(e.hasPin),
-            }))
-          : [];
+        const active = normalizeEmployees(data);
         setEmployees(active);
         if (active.length > 0) {
           setSelectedEmployee(active[0].id);
@@ -56,7 +70,7 @@ export default function TransferShiftModal({
       .catch(() => setSelectedEmployee("owner"));
   }, [branchId]);
 
-  const selectedEmp = employees.find((e) => e.id === selectedEmployee);
+  const selectedEmp = employees.find((employee) => employee.id === selectedEmployee);
   const assignee: ShiftAssignee = selectedEmp
     ? { employeeId: selectedEmp.id, employeeName: selectedEmp.name }
     : { employeeId: null, employeeName: "Dueño" };
@@ -67,14 +81,14 @@ export default function TransferShiftModal({
     setLoading(false);
   };
 
-  const handleConfirmClick = async () => {
+  const handleConfirmClick = () => {
     if (selectedEmp?.hasPin) {
       setPinError(null);
       setShowPinModal(true);
       return;
     }
 
-    proceed();
+    void proceed();
   };
 
   const handlePinConfirm = async (pin: string) => {
@@ -96,9 +110,9 @@ export default function TransferShiftModal({
 
     if (data.ok) {
       setShowPinModal(false);
-      proceed();
+      void proceed();
     } else {
-      setPinError("PIN incorrecto. Intentá de nuevo.");
+      setPinError("PIN incorrecto. Intenta de nuevo.");
     }
   };
 
@@ -109,7 +123,7 @@ export default function TransferShiftModal({
           <div>
             <h2 style={{ fontSize: "20px", fontWeight: 700 }}>Transferir turno</h2>
             <p style={{ color: "var(--text-2)", fontSize: "14px", marginBottom: "16px" }}>
-              La caja está a nombre de {currentResponsibleName}. Elegí quién se hace cargo ahora.
+              La caja esta a nombre de {currentResponsibleName}. Elegi quien se hace cargo ahora.
             </p>
           </div>
 
@@ -120,14 +134,16 @@ export default function TransferShiftModal({
             >
               Dueño
             </button>
-            {employees.map((emp) => (
+            {employees.map((employee) => (
               <button
-                key={emp.id}
-                className={`btn btn-sm ${selectedEmployee === emp.id ? "btn-green" : "btn-ghost"}`}
-                onClick={() => setSelectedEmployee(emp.id)}
+                key={employee.id}
+                className={`btn btn-sm ${selectedEmployee === employee.id ? "btn-green" : "btn-ghost"}`}
+                onClick={() => setSelectedEmployee(employee.id)}
               >
-                {emp.name}
-                {emp.hasPin && <span style={{ marginLeft: "4px", fontSize: "11px", opacity: 0.7 }}>🔐</span>}
+                {employee.name}
+                {employee.hasPin && (
+                  <span style={{ marginLeft: "4px", fontSize: "11px", opacity: 0.7 }}>PIN</span>
+                )}
               </button>
             ))}
           </div>
@@ -142,7 +158,7 @@ export default function TransferShiftModal({
               textAlign: "center",
             }}
           >
-            El próximo responsable será <strong>{assignee.employeeName}</strong>.
+            El proximo responsable sera <strong>{assignee.employeeName}</strong>.
           </div>
 
           <div style={{ display: "flex", gap: "10px", marginTop: "16px" }}>
@@ -150,7 +166,7 @@ export default function TransferShiftModal({
               Cancelar
             </button>
             <button className="btn btn-primary" style={{ flex: 2 }} onClick={handleConfirmClick} disabled={loading}>
-              {loading ? "Transfiriendo..." : selectedEmp?.hasPin ? "Transferir 🔐" : "Transferir"}
+              {loading ? "Transfiriendo..." : selectedEmp?.hasPin ? "Transferir con PIN" : "Transferir"}
             </button>
           </div>
         </div>
@@ -159,7 +175,7 @@ export default function TransferShiftModal({
       {showPinModal && (
         <PinModal
           title={`PIN de ${assignee.employeeName}`}
-          subtitle="Ingresá el PIN para recibir el turno"
+          subtitle="Ingresa el PIN para recibir el turno"
           onConfirm={handlePinConfirm}
           onCancel={() => setShowPinModal(false)}
           loading={pinLoading}

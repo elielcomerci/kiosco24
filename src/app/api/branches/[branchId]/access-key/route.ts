@@ -44,7 +44,7 @@ export async function POST(
     });
 
     return NextResponse.json({ accessKey: updatedBranch.accessKey });
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: "Failed to generate key" }, { status: 500 });
   }
 }

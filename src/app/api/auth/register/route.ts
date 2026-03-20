@@ -1,10 +1,14 @@
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
+import { UserRole } from "@prisma/client";
 
 export async function POST(req: Request) {
   try {
-    const { email, name, password, kioscoName } = await req.json();
+    const { email, password } = (await req.json()) as {
+      email?: string;
+      password?: string;
+    };
 
     console.log(`[Register] Attempting to register email: ${email}`);
 
@@ -38,7 +42,7 @@ export async function POST(req: Request) {
       data: {
         email,
         password: hashedPassword,
-        role: "OWNER",
+        role: UserRole.OWNER,
       },
     });
 
@@ -49,13 +53,18 @@ export async function POST(req: Request) {
         email: user.email,
       },
     });
-  } catch (error: any) {
+  } catch (error) {
+    const details = error instanceof Error ? error.message : "Unknown error";
+    const stack =
+      process.env.NODE_ENV === "development" && error instanceof Error
+        ? error.stack
+        : undefined;
     console.error("[Register] CRITICAL ERROR:", error);
     return NextResponse.json(
-      { 
-        error: "Error al registrar el usuario", 
-        details: error.message,
-        stack: error.stack
+      {
+        error: "Error al registrar el usuario",
+        details,
+        ...(stack ? { stack } : {}),
       },
       { status: 500 }
     );

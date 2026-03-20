@@ -83,7 +83,6 @@ export default function QuickRestockModal({
   const [showScanner, setShowScanner] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [lookupState, setLookupState] = useState<"idle" | "loading" | "ready" | "not-found">("idle");
-  const [suggestion, setSuggestion] = useState<BarcodeSuggestion | null>(null);
   const [createDraft, setCreateDraft] = useState<CreateProductDraft | null>(null);
   const [creatingProduct, setCreatingProduct] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -105,14 +104,12 @@ export default function QuickRestockModal({
   useEffect(() => {
     if (!search.trim()) {
       setLookupState("idle");
-      setSuggestion(null);
       setCreateDraft(null);
       return;
     }
 
     if (createDraft && normalizeBarcodeCode(search) !== createDraft.code) {
       setLookupState("idle");
-      setSuggestion(null);
       setCreateDraft(null);
     }
   }, [createDraft, search]);
@@ -159,7 +156,6 @@ export default function QuickRestockModal({
 
   const resetCreateFlow = () => {
     setLookupState("idle");
-    setSuggestion(null);
     setCreateDraft(null);
   };
 
@@ -168,7 +164,6 @@ export default function QuickRestockModal({
     if (!canLookupBarcode(code)) return;
 
     setLookupState("loading");
-    setSuggestion(null);
     setCreateDraft(buildDraft(code, null));
 
     try {
@@ -176,17 +171,14 @@ export default function QuickRestockModal({
       const data = (await res.json()) as BarcodeLookupResponse;
 
       if (data.found && data.suggestion) {
-        setSuggestion(data.suggestion);
         setCreateDraft(buildDraft(code, data.suggestion));
         setLookupState("ready");
       } else {
-        setSuggestion(null);
         setCreateDraft(buildDraft(code, null));
         setLookupState("not-found");
       }
     } catch (error) {
       console.error(error);
-      setSuggestion(null);
       setCreateDraft(buildDraft(code, null));
       setLookupState("not-found");
     }

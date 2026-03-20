@@ -6,13 +6,79 @@ import { getMpAccessTokenForBranch } from "@/lib/mp-token";
 import { MpIncomingPaymentChannel, prisma } from "@/lib/prisma";
 import { SubscriptionStatus } from "@prisma/client";
 
+type MpWebhookPayload = {
+  action?: string | null;
+  type?: string | null;
+  user_id?: string | number | null;
+  data?: {
+    id?: string | number | null;
+  } | null;
+};
+
+type MpPreapprovalResponse = {
+  status?: string | null;
+};
+
+type MpPaymentResponse = {
+  status?: string | null;
+  transaction_amount?: number | string | null;
+  transaction_details?: {
+    total_paid_amount?: number | string | null;
+  } | null;
+  payment_type_id?: string | null;
+  payment_method_id?: string | null;
+  currency_id?: string | null;
+  external_reference?: string | number | null;
+  description?: string | null;
+  date_approved?: string | null;
+  date_created?: string | null;
+  date_last_updated?: string | null;
+  metadata?: {
+    pos_id?: string | number | null;
+    mpPosId?: string | number | null;
+  } | null;
+  order?: {
+    id?: string | number | null;
+  } | null;
+  point_of_interaction?: {
+    pos_id?: string | number | null;
+    business_info?: {
+      pos_id?: string | number | null;
+    } | null;
+    transaction_data?: {
+      pos_id?: string | number | null;
+    } | null;
+  } | null;
+  payer?: {
+    first_name?: string | null;
+    last_name?: string | null;
+    nickname?: string | null;
+    email?: string | null;
+  } | null;
+  additional_info?: {
+    payer?: {
+      first_name?: string | null;
+      last_name?: string | null;
+      email?: string | null;
+    } | null;
+  } | null;
+};
+
+function isMpWebhookPayload(value: unknown): value is MpWebhookPayload {
+  return typeof value === "object" && value !== null;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const rawBodyText = await req.text();
-    let body: any;
+    let body: MpWebhookPayload;
 
     try {
-      body = JSON.parse(rawBodyText);
+      const parsed = JSON.parse(rawBodyText) as unknown;
+      if (!isMpWebhookPayload(parsed)) {
+        return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
+      }
+      body = parsed;
     } catch {
       return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
     }
@@ -59,7 +125,7 @@ export async function POST(req: NextRequest) {
   }
 }
 
-async function handleSubscriptionPreapproval(body: any) {
+async function handleSubscriptionPreapproval(body: MpWebhookPayload) {
   const preapprovalId = body.data?.id;
   if (!preapprovalId) return;
 
@@ -74,7 +140,7 @@ async function handleSubscriptionPreapproval(body: any) {
     return;
   }
 
-  const preapproval = await res.json();
+  const preapproval = (await res.json()) as MpPreapprovalResponse;
   const mpStatus = preapproval.status;
 
   let dbStatus: SubscriptionStatus = "PENDING";
@@ -90,7 +156,7 @@ async function handleSubscriptionPreapproval(body: any) {
   console.log(`[Webhook] Suscripcion ${preapprovalId} actualizada a ${dbStatus}`);
 }
 
-async function handleIncomingPayment(body: any) {
+async function handleIncomingPayment(body: MpWebhookPayload) {
   const paymentId = optionalString(body.data?.id);
   const collectorId = optionalString(body.user_id);
 
@@ -130,7 +196,7 @@ async function handleIncomingPayment(body: any) {
     return;
   }
 
-  const payment = await paymentRes.json();
+  const payment = (await paymentRes.json()) as MpPaymentResponse;
   const branch = resolveBranchForPayment(candidateBranches, payment);
 
   if (!branch) {
@@ -192,7 +258,7 @@ async function handleIncomingPayment(body: any) {
 
 function resolveBranchForPayment(
   candidateBranches: Array<{ id: string; mpPosId: string | null }>,
-  payment: any,
+  payment: MpPaymentResponse,
 ) {
   if (candidateBranches.length === 1) {
     return candidateBranches[0];
@@ -218,7 +284,7 @@ function resolveBranchForPayment(
   return null;
 }
 
-function detectPaymentChannel(payment: any): MpIncomingPaymentChannel {
+function detectPaymentChannel(payment: MpPaymentResponse): MpIncomingPaymentChannel {
   const paymentType = optionalString(payment.payment_type_id)?.toLowerCase();
   const paymentMethod = optionalString(payment.payment_method_id)?.toLowerCase();
 
@@ -233,7 +299,7 @@ function detectPaymentChannel(payment: any): MpIncomingPaymentChannel {
   return MpIncomingPaymentChannel.MERCADOPAGO;
 }
 
-function extractPayerName(payment: any) {
+function extractPayerName(payment: MpPaymentResponse) {
   const primaryName = [
     optionalString(payment.payer?.first_name),
     optionalString(payment.payer?.last_name),
@@ -261,11 +327,11 @@ function extractPayerName(payment: any) {
   return optionalString(payment.payer?.nickname) ?? optionalString(payment.payer?.email) ?? null;
 }
 
-function extractPayerEmail(payment: any) {
+function extractPayerEmail(payment: MpPaymentResponse) {
   return optionalString(payment.payer?.email) ?? optionalString(payment.additional_info?.payer?.email) ?? null;
 }
 
-function extractPaymentReference(payment: any) {
+function extractPaymentReference(payment: MpPaymentResponse) {
   return (
     optionalString(payment.external_reference) ??
     optionalString(payment.description) ??
@@ -274,7 +340,7 @@ function extractPaymentReference(payment: any) {
   );
 }
 
-function extractPaymentOccurredAt(payment: any) {
+function extractPaymentOccurredAt(payment: MpPaymentResponse) {
   const rawValue =
     optionalString(payment.date_approved) ??
     optionalString(payment.date_created) ??

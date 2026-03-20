@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import BackButton from "@/components/ui/BackButton";
-import TurnosHistorial from "@/components/turnos/TurnosHistorial";
 import PrintablePage from "@/components/print/PrintablePage";
 import { useRegisterShortcuts } from "@/components/ui/BranchWorkspace";
 import { formatARS } from "@/lib/utils";
@@ -173,6 +172,7 @@ function MetodoBar({
 
 // ─── Componente Saldo MP ──────────────────────────────────────────────────────
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function MpBalanceCard() {
   const [balance, setBalance] = useState<{ connected: boolean; available?: number; total?: number; error?: string } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -265,13 +265,13 @@ export default function ResumenPage() {
   const [loading, setLoading] = useState(true);
   const { branchId } = useParams();
 
-  const refreshData = async () => {
+  const refreshData = useCallback(async () => {
     setLoading(true);
     const res = await fetch("/api/resumen/hoy");
     const json = await res.json();
     setData(json);
     setLoading(false);
-  };
+  }, []);
 
   const shortcuts = useMemo(
     () => [
@@ -287,14 +287,20 @@ export default function ResumenPage() {
         },
       },
     ],
-    []
+    [refreshData]
   );
 
   useRegisterShortcuts(shortcuts);
 
   useEffect(() => {
-    void refreshData();
-  }, []);
+    const timeoutId = window.setTimeout(() => {
+      void refreshData();
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [refreshData]);
 
   if (loading) {
     return (
@@ -1053,8 +1059,25 @@ const METODO_LABEL: Record<string, string> = {
   CREDIT: "Fiado",
 };
 
+type VentaDetalleItem = {
+  name: string;
+  quantity: number;
+  price: number;
+  total: number;
+};
+
+type VentaDetalle = {
+  id: string;
+  total: number;
+  paymentMethod: string;
+  voided: boolean;
+  createdAt: string;
+  employeeName: string;
+  items: VentaDetalleItem[];
+};
+
 function VentasDetail() {
-  const [ventas, setVentas] = useState<any[]>([]);
+  const [ventas, setVentas] = useState<VentaDetalle[]>([]);
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState(false);
 
@@ -1065,8 +1088,8 @@ function VentasDetail() {
     }
     setLoading(true);
     const res = await fetch("/api/resumen/ventas");
-    const data = await res.json();
-    setVentas(data);
+    const data = (await res.json()) as VentaDetalle[];
+    setVentas(Array.isArray(data) ? data : []);
     setLoading(false);
     setExpanded(true);
   };
@@ -1119,7 +1142,7 @@ function VentasDetail() {
               No hay ventas hoy.
             </div>
           ) : (
-            ventas.map((v: any) => (
+            ventas.map((v) => (
               <div
                 key={v.id}
                 className="card"
@@ -1157,7 +1180,7 @@ function VentasDetail() {
                   </span>
                 </div>
 
-                {v.items.map((i: any, idx: number) => (
+                {v.items.map((i, idx) => (
                   <div
                     key={idx}
                     style={{

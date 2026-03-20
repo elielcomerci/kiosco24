@@ -67,7 +67,29 @@ interface Sale {
   paymentMethod: "CASH" | "MERCADOPAGO" | "TRANSFER" | "DEBIT" | "CREDIT_CARD" | "CREDIT";
   items: TicketItem[];
   creditCustomerName?: string;
+  receivedAmount?: number;
 }
+
+interface ActiveShift {
+  id: string;
+  openingAmount: number;
+  employeeId: string | null;
+  employeeName: string;
+  employee?: {
+    id: string;
+    name: string;
+  } | null;
+}
+
+interface WakeLockSentinelLike {
+  release: () => Promise<void>;
+}
+
+type NavigatorWithWakeLock = Navigator & {
+  wakeLock?: {
+    request: (type: "screen") => Promise<WakeLockSentinelLike>;
+  };
+};
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
@@ -116,12 +138,11 @@ export default function CajaPage() {
   const branchId = params.branchId as string;
   const isDesktop = useIsDesktop();
   const { data: session, status } = useSession();
-  const userRole = (session?.user as any)?.role;
-  const employeeId = (session?.user as any)?.employeeId;
+  const userRole = session?.user?.role;
+  const employeeId = session?.user?.employeeId;
   
   const [products, setProducts] = useState<Product[]>([]);
   const [ticket, setTicket] = useState<TicketItem[]>([]);
-  const [loading, setLoading] = useState(true);
   const [cajaStats, setCajaStats] = useState<{
     enCaja: number;
     ganancia: number | null;
@@ -146,7 +167,7 @@ export default function CajaPage() {
   const [showCashNumpad, setShowCashNumpad] = useState(false);
   const [receivedAmount, setReceivedAmount] = useState("");
   
-  const [activeShift, setActiveShift] = useState<any | null>(null);
+  const [activeShift, setActiveShift] = useState<ActiveShift | null>(null);
   const [showOpenShift, setShowOpenShift] = useState(false);
   const [showCloseShift, setShowCloseShift] = useState(false);
   const [showTransferShift, setShowTransferShift] = useState(false);
@@ -193,17 +214,20 @@ export default function CajaPage() {
       : `La caja esta a nombre de ${shiftResponsibleName}. Transferi o cerra el turno para operar desde esta sesion.`;
 
   // ─── WakeLock Logic ───────────────────────────────────────────────────────
-  const wakeLockRef = useRef<any>(null);
+  const wakeLockRef = useRef<WakeLockSentinelLike | null>(null);
   useEffect(() => {
-    if (activeShift && 'wakeLock' in navigator) {
+    const wakeLockNavigator = navigator as NavigatorWithWakeLock;
+    const wakeLock = wakeLockNavigator.wakeLock;
+
+    if (activeShift && wakeLock) {
       const requestWakeLock = async () => {
         try {
-          wakeLockRef.current = await (navigator as any).wakeLock.request('screen');
-        } catch (err) {}
+          wakeLockRef.current = await wakeLock.request("screen");
+        } catch {}
       };
-      requestWakeLock();
+      void requestWakeLock();
     } else if (!activeShift && wakeLockRef.current) {
-      wakeLockRef.current.release().then(() => {
+      void wakeLockRef.current.release().then(() => {
         wakeLockRef.current = null;
       });
     }
@@ -346,7 +370,6 @@ export default function CajaPage() {
       // 3. Check Active Shift
       await fetchActiveShift();
     } catch {
-      setLoading(false);
     }
   };
 
@@ -458,7 +481,6 @@ export default function CajaPage() {
         setCategories(Array.isArray(catData) ? catData : []);
       }
     } finally {
-      setLoading(false);
     }
   };
 
@@ -545,7 +567,6 @@ export default function CajaPage() {
       return;
     }
 
-    const targetId = variant ? variant.id : product.id;
     const targetName = variant ? `${product.name} - ${variant.name}` : product.name;
     const targetStock = variant ? variant.stock : (product.stock ?? 999999);
 
@@ -680,10 +701,11 @@ export default function CajaPage() {
           try {
             await savePendingSale(reqBody);
             alert("Estás sin conexión. La venta se guardó como pendiente para sincronizar.");
-          } catch (err: any) {
+          } catch (err: unknown) {
             console.error("[Ventas] Error guardando venta offline:", err);
-            const message = typeof err?.message === "string" ? err.message.toLowerCase() : "";
-            const name = (err as any)?.name || "";
+            const message =
+              err instanceof Error && typeof err.message === "string" ? err.message.toLowerCase() : "";
+            const name = err instanceof Error ? err.name : "";
             const isQuota =
               name === "QuotaExceededError" ||
               message.includes("quota") ||
@@ -700,22 +722,23 @@ export default function CajaPage() {
         }
 
         setLastSale(newSale);
-        setConfirmedSale({ ...newSale, ...(received ? { receivedAmount: received } as any : {}) });
+        setConfirmedSale({ ...newSale, ...(received ? { receivedAmount: received } : {}) });
         setTicket([]);
       setReceivedAmount("");
       setShowCashNumpad(false);
       fetchStats();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("[Ventas] Error de red o inesperado al registrar venta:", err);
 
       // Fallback: intentar guardar como pendiente aunque pensáramos que había conexión
       try {
         await savePendingSale(reqBody);
         alert("Hubo un problema de conexión. La venta se guardó como pendiente para sincronizar.");
-      } catch (inner: any) {
+      } catch (inner: unknown) {
         console.error("[Ventas] Error adicional al guardar venta offline en fallback:", inner);
-        const message = typeof inner?.message === "string" ? inner.message.toLowerCase() : "";
-        const name = (inner as any)?.name || "";
+        const message =
+          inner instanceof Error && typeof inner.message === "string" ? inner.message.toLowerCase() : "";
+        const name = inner instanceof Error ? inner.name : "";
         const isQuota =
           name === "QuotaExceededError" ||
           message.includes("quota") ||
@@ -835,7 +858,7 @@ export default function CajaPage() {
   if (confirmedSale) {
     return (
       <ConfirmationScreen
-        sale={confirmedSale as any}
+        sale={confirmedSale}
         onChange={change}
         onCorregir={handleCorregir}
         onListo={() => setConfirmedSale(null)}

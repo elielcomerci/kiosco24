@@ -1,7 +1,33 @@
-import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
+
+import { auth } from "@/lib/auth";
 import { getBranchContext } from "@/lib/branch";
+import { prisma } from "@/lib/prisma";
+
+type RestockInputItem = {
+  productId: string;
+  variantId?: string;
+  quantity: number;
+};
+
+function normalizeRestockItems(items: unknown): RestockInputItem[] {
+  if (!Array.isArray(items)) {
+    return [];
+  }
+
+  return items
+    .map((item) => ({
+      productId: typeof item?.productId === "string" ? item.productId : "",
+      variantId: typeof item?.variantId === "string" && item.variantId ? item.variantId : undefined,
+      quantity:
+        typeof item?.quantity === "number"
+          ? item.quantity
+          : Number.isFinite(Number(item?.quantity))
+            ? Number(item?.quantity)
+            : 0,
+    }))
+    .filter((item) => item.productId && Number.isFinite(item.quantity) && item.quantity > 0);
+}
 
 export async function POST(req: Request) {
   try {
@@ -16,21 +42,20 @@ export async function POST(req: Request) {
     }
 
     const { items, note, employeeId } = await req.json();
+    const normalizedItems = normalizeRestockItems(items);
 
-    if (!items || !Array.isArray(items) || items.length === 0) {
+    if (normalizedItems.length === 0) {
       return NextResponse.json({ error: "No items provided" }, { status: 400 });
     }
 
-    // Wrap the auditable restocking and increment logic in a transaction
     const result = await prisma.$transaction(async (tx) => {
-      // 1. Create the RestockEvent Audit Log
       const restockEvent = await tx.restockEvent.create({
         data: {
-          note: note || null,
-          employeeId: employeeId || null,
+          note: typeof note === "string" ? note : null,
+          employeeId: typeof employeeId === "string" && employeeId ? employeeId : null,
           branchId,
           items: {
-            create: items.map((item: any) => ({
+            create: normalizedItems.map((item) => ({
               productId: item.productId,
               variantId: item.variantId || null,
               quantity: item.quantity,
@@ -39,10 +64,8 @@ export async function POST(req: Request) {
         },
       });
 
-      // 2. Increment stock individually for each item (avoiding race conditions)
-      for (const item of items) {
+      for (const item of normalizedItems) {
         if (item.variantId) {
-          // Increment VariantInventory
           await tx.variantInventory.updateMany({
             where: {
               variantId: item.variantId,
@@ -53,7 +76,6 @@ export async function POST(req: Request) {
             },
           });
         } else {
-          // Increment global InventoryRecord
           await tx.inventoryRecord.updateMany({
             where: {
               productId: item.productId,
@@ -74,7 +96,7 @@ export async function POST(req: Request) {
     console.error("Error processing restock:", error);
     return NextResponse.json(
       { error: "Internal server error processing the restock" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

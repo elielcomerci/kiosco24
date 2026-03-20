@@ -1,5 +1,5 @@
 import NextAuth, { type DefaultSession } from "next-auth";
-import { type JWT } from "next-auth/jwt";
+import "next-auth/jwt";
 import Google from "next-auth/providers/google";
 import Credentials from "next-auth/providers/credentials";
 import { PrismaAdapter } from "@auth/prisma-adapter";
@@ -44,7 +44,7 @@ declare module "next-auth/jwt" {
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  adapter: PrismaAdapter(prisma as any),
+  adapter: PrismaAdapter(prisma),
   session: { strategy: "jwt" },
   secret: authSecret,
   trustHost: true,

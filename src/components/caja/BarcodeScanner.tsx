@@ -1,12 +1,20 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Html5Qrcode } from "html5-qrcode";
+import {
+  Html5Qrcode,
+  Html5QrcodeSupportedFormats,
+  type Html5QrcodeCameraScanConfig,
+} from "html5-qrcode";
 
 interface BarcodeScannerProps {
   onScan: (result: string) => void;
   onClose: () => void;
 }
+
+type BarcodeScannerError = {
+  message?: string;
+};
 
 export default function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
   const [error, setError] = useState<string | null>(null);
@@ -25,50 +33,58 @@ export default function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps)
         html5QrCode = new Html5Qrcode("reader", {
           verbose: false,
           formatsToSupport: [
-            0,
-            1,
-            2,
-            3,
-            4,
-            5,
-            6,
-            7,
-            8,
-            9,
-            10,
-            11,
-            12,
-            13,
-            14,
-            15,
-            16,
+            Html5QrcodeSupportedFormats.QR_CODE,
+            Html5QrcodeSupportedFormats.AZTEC,
+            Html5QrcodeSupportedFormats.CODABAR,
+            Html5QrcodeSupportedFormats.CODE_39,
+            Html5QrcodeSupportedFormats.CODE_93,
+            Html5QrcodeSupportedFormats.CODE_128,
+            Html5QrcodeSupportedFormats.DATA_MATRIX,
+            Html5QrcodeSupportedFormats.MAXICODE,
+            Html5QrcodeSupportedFormats.ITF,
+            Html5QrcodeSupportedFormats.EAN_13,
+            Html5QrcodeSupportedFormats.EAN_8,
+            Html5QrcodeSupportedFormats.PDF_417,
+            Html5QrcodeSupportedFormats.RSS_14,
+            Html5QrcodeSupportedFormats.RSS_EXPANDED,
+            Html5QrcodeSupportedFormats.UPC_A,
+            Html5QrcodeSupportedFormats.UPC_E,
+            Html5QrcodeSupportedFormats.UPC_EAN_EXTENSION,
           ],
         });
 
+        const scanConfig: Html5QrcodeCameraScanConfig & {
+          disableFlip: boolean;
+          experimentalFeatures: {
+            useBarCodeDetectorIfSupported: boolean;
+          };
+        } = {
+          fps: 15,
+          qrbox: { width: 300, height: 100 },
+          aspectRatio: 1,
+          disableFlip: false,
+          experimentalFeatures: {
+            useBarCodeDetectorIfSupported: true,
+          },
+        };
+
         await html5QrCode.start(
           { facingMode: "environment" },
-          {
-            fps: 15,
-            qrbox: { width: 300, height: 100 },
-            aspectRatio: 1,
-            disableFlip: false,
-            experimentalFeatures: {
-              useBarCodeDetectorIfSupported: true,
-            },
-          } as any,
+          scanConfig,
           (decodedText) => {
             if (!active) return;
             onScanRef.current(decodedText);
             active = false;
-            html5QrCode?.stop().catch(console.error);
+            void html5QrCode?.stop().catch(console.error);
           },
           () => {
-            // html5-qrcode reports a miss on almost every frame; keep logs clean.
+            // html5-qrcode informa misses en casi todos los frames.
           },
         );
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (!active) return;
-        setError("Error al iniciar camara: " + (err?.message || err));
+        const scannerError = err as BarcodeScannerError;
+        setError(`Error al iniciar camara: ${scannerError.message ?? String(err)}`);
       }
     };
 
@@ -80,7 +96,7 @@ export default function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps)
       active = false;
       window.clearTimeout(timer);
       if (html5QrCode?.isScanning) {
-        html5QrCode
+        void html5QrCode
           .stop()
           .catch(console.error)
           .finally(() => {

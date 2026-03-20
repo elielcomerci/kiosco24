@@ -1,23 +1,18 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useSyncExternalStore } from "react";
 
 export function useIsDesktop(breakpoint = 1024) {
-  const [isDesktop, setIsDesktop] = useState(false);
+  return useSyncExternalStore(
+    (onStoreChange) => {
+      if (typeof window === "undefined") {
+        return () => {};
+      }
 
-  useEffect(() => {
-    // Evitar errores de SSR
-    if (typeof window !== "undefined") {
-      setIsDesktop(window.innerWidth >= breakpoint);
-
-      const handleResize = () => {
-        setIsDesktop(window.innerWidth >= breakpoint);
-      };
-
-      window.addEventListener("resize", handleResize);
-      return () => window.removeEventListener("resize", handleResize);
-    }
-  }, [breakpoint]);
-
-  return isDesktop;
+      window.addEventListener("resize", onStoreChange);
+      return () => window.removeEventListener("resize", onStoreChange);
+    },
+    () => (typeof window !== "undefined" ? window.innerWidth >= breakpoint : false),
+    () => false,
+  );
 }

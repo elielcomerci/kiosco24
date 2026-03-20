@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatARS, applyPercentage } from "@/lib/utils";
 import {
   BarcodeLookupResponse,
@@ -92,6 +92,21 @@ function ProductModal({
   const [lookupState, setLookupState] = useState<"idle" | "loading" | "ready">("idle");
   const [dismissedSuggestionCode, setDismissedSuggestionCode] = useState<string | null>(null);
   const barcodeRef = useRef<HTMLInputElement>(null);
+  const normalizedBarcode = normalizeBarcodeCode(barcode);
+  const lookupCode =
+    !hasVariants &&
+    canLookupBarcode(normalizedBarcode) &&
+    dismissedSuggestionCode !== normalizedBarcode
+      ? normalizedBarcode
+      : null;
+  const visibleSuggestion =
+    lookupCode &&
+    suggestion &&
+    normalizeBarcodeCode(suggestion.code) === lookupCode
+      ? suggestion
+      : null;
+  const effectiveLookupState =
+    !lookupCode ? "idle" : visibleSuggestion ? "ready" : lookupState === "loading" ? "loading" : "idle";
 
   const toNum = (v: string) => {
     const n = parseFloat(v);
@@ -128,29 +143,16 @@ function ProductModal({
   };
 
   useEffect(() => {
-    const code = normalizeBarcodeCode(barcode);
-
-    if (hasVariants || !canLookupBarcode(code)) {
-      setSuggestion(null);
-      setLookupState("idle");
+    if (!lookupCode) {
       return;
     }
-
-    if (dismissedSuggestionCode === code) {
-      setSuggestion(null);
-      setLookupState("idle");
-      return;
-    }
-
-    setSuggestion(null);
-    setLookupState("idle");
 
     let cancelled = false;
     const timeoutId = window.setTimeout(async () => {
       setLookupState("loading");
 
       try {
-        const res = await fetch(`/api/platform-products/lookup?code=${encodeURIComponent(code)}`);
+        const res = await fetch(`/api/platform-products/lookup?code=${encodeURIComponent(lookupCode)}`);
         const data = (await res.json()) as BarcodeLookupResponse;
 
         if (cancelled) return;
@@ -175,7 +177,7 @@ function ProductModal({
       cancelled = true;
       window.clearTimeout(timeoutId);
     };
-  }, [barcode, dismissedSuggestionCode, hasVariants]);
+  }, [lookupCode]);
 
   const handleSave = async () => {
     if (!name.trim()) return;
@@ -289,12 +291,12 @@ function ProductModal({
               Al usar variantes, el codigo principal se elimina y cada variante usa el suyo.
             </div>
           )}
-          {lookupState === "loading" && (
+          {effectiveLookupState === "loading" && (
             <div style={{ marginTop: "8px", fontSize: "12px", color: "var(--text-3)" }}>
               Buscando en la base general...
             </div>
           )}
-          {lookupState === "ready" && suggestion && (
+          {effectiveLookupState === "ready" && visibleSuggestion && (
             <div
               style={{
                 marginTop: "10px",
@@ -311,11 +313,11 @@ function ProductModal({
                 Base general
               </div>
               <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-                {suggestion?.image ? (
+                {visibleSuggestion.image ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
-                    src={suggestion.image ?? undefined}
-                    alt={suggestion.name}
+                    src={visibleSuggestion.image ?? undefined}
+                    alt={visibleSuggestion.name}
                     style={{ width: "56px", height: "56px", objectFit: "cover", borderRadius: "10px", flexShrink: 0 }}
                   />
                 ) : (
@@ -331,8 +333,8 @@ function ProductModal({
                   />
                 )}
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontWeight: 700 }}>{suggestion?.name}</div>
-                  {(suggestion?.brand || suggestion?.presentation || suggestion?.description) && (
+                  <div style={{ fontWeight: 700 }}>{visibleSuggestion.name}</div>
+                  {(visibleSuggestion.brand || visibleSuggestion.presentation || visibleSuggestion.description) && (
                     <div style={{ fontSize: "12px", color: "var(--text-3)", marginTop: "4px" }}>
                       {[suggestion?.brand, suggestion?.presentation, suggestion?.description].filter(Boolean).join(" · ")}
                     </div>
@@ -345,13 +347,11 @@ function ProductModal({
                   style={{ flex: 1 }}
                   onClick={() => {
                     setDismissedSuggestionCode(normalizeBarcodeCode(barcode));
-                    setSuggestion(null);
-                    setLookupState("idle");
                   }}
                 >
                   Ocultar
                 </button>
-                <button className="btn btn-green" style={{ flex: 1 }} onClick={() => suggestion && applySuggestion(suggestion)}>
+                <button className="btn btn-green" style={{ flex: 1 }} onClick={() => visibleSuggestion && applySuggestion(visibleSuggestion)}>
                   Usar
                 </button>
               </div>
@@ -732,12 +732,12 @@ function ProductModal({
                   📷
                 </button>
               </div>
-              {lookupState === "loading" && (
+              {effectiveLookupState === "loading" && (
                 <div style={{ marginTop: "8px", fontSize: "12px", color: "var(--text-3)" }}>
                   Buscando datos sugeridos...
                 </div>
               )}
-              {lookupState === "ready" && suggestion && (
+              {effectiveLookupState === "ready" && visibleSuggestion && (
                 <div
                   style={{
                     marginTop: "10px",
@@ -754,11 +754,11 @@ function ProductModal({
                     Datos sugeridos
                   </div>
                   <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-                    {suggestion?.image ? (
+                    {visibleSuggestion!.image ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
-                        src={suggestion?.image ?? undefined}
-                        alt={suggestion?.name || "Producto"}
+                        src={visibleSuggestion!.image ?? undefined}
+                        alt={visibleSuggestion!.name || "Producto"}
                         style={{ width: "56px", height: "56px", objectFit: "cover", borderRadius: "10px", flexShrink: 0 }}
                       />
                     ) : (
@@ -774,8 +774,8 @@ function ProductModal({
                       />
                     )}
                     <div style={{ minWidth: 0, flex: 1 }}>
-                      <div style={{ fontWeight: 700 }}>{suggestion?.name}</div>
-                      {(suggestion?.brand || suggestion?.presentation || suggestion?.description) && (
+                      <div style={{ fontWeight: 700 }}>{visibleSuggestion!.name}</div>
+                      {(visibleSuggestion!.brand || visibleSuggestion!.presentation || visibleSuggestion!.description) && (
                         <div style={{ fontSize: "12px", color: "var(--text-3)", marginTop: "4px" }}>
                           {[suggestion?.brand, suggestion?.presentation, suggestion?.description].filter(Boolean).join(" · ")}
                         </div>
@@ -788,8 +788,6 @@ function ProductModal({
                       style={{ flex: 1 }}
                       onClick={() => {
                         setDismissedSuggestionCode(normalizeBarcodeCode(barcode));
-                        setSuggestion(null);
-                        setLookupState("idle");
                       }}
                     >
                       Ocultar
@@ -798,8 +796,8 @@ function ProductModal({
                       className="btn btn-green"
                       style={{ flex: 1 }}
                       onClick={() => {
-                        if (suggestion) {
-                          applySuggestion(suggestion);
+                        if (visibleSuggestion) {
+                          applySuggestion(visibleSuggestion);
                         }
                       }}
                     >
@@ -924,7 +922,7 @@ export default function ProductosPage() {
   const pctMatch = parseInt(percentStr, 10);
   const percent = isNaN(pctMatch) ? 0 : pctMatch;
 
-  const fetchProducts = async () => {
+  const fetchProducts = useCallback(async () => {
     setLoading(true);
     // We use showInGrid=false to get ALL products (including hidden)
     const res = await fetch("/api/productos?all=1");
@@ -937,11 +935,17 @@ export default function ProductosPage() {
     setCategories(Array.isArray(catData) ? catData : []);
 
     setLoading(false);
-  };
+  }, []);
 
   useEffect(() => {
-    fetchProducts();
-  }, []);
+    const timeoutId = window.setTimeout(() => {
+      void fetchProducts();
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [fetchProducts]);
 
   const filtered = products.filter((p) => {
     const normalizedSearch = search.toLowerCase();

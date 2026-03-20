@@ -1,12 +1,12 @@
+import { UserRole } from "@prisma/client";
+import { NextResponse } from "next/server";
+
 import { auth } from "@/lib/auth";
 import { guardOperationalAccess } from "@/lib/access-control";
 import { getBranchContext } from "@/lib/branch";
 import { prisma } from "@/lib/prisma";
-import { NextResponse } from "next/server";
-
 import { createShiftForbiddenResponse, getActiveShift } from "@/lib/shift-access";
 
-// POST /api/ventas/[id]/anular
 export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -27,7 +27,7 @@ export async function POST(
   const sale = await prisma.sale.findFirst({
     where: {
       id,
-      ...(session.user.role === "EMPLOYEE"
+      ...(session.user.role === UserRole.EMPLOYEE
         ? { branchId: branchId ?? "__blocked__" }
         : { branch: { kiosco: { ownerId: session.user.id } } }),
     },
@@ -42,9 +42,9 @@ export async function POST(
     return NextResponse.json({ ok: true, alreadyVoided: true });
   }
 
-  if ((session.user as any)?.role === "EMPLOYEE") {
+  if (session.user.role === UserRole.EMPLOYEE) {
     const activeShift = branchId ? await getActiveShift(branchId) : null;
-    if (!activeShift || activeShift.employeeId !== (session.user as any)?.employeeId) {
+    if (!activeShift || activeShift.employeeId !== session.user.employeeId) {
       return createShiftForbiddenResponse(activeShift ?? { employeeName: "otro responsable" });
     }
   }

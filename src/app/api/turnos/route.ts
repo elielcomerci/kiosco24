@@ -1,30 +1,36 @@
-import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { UserRole } from "@prisma/client";
 import { NextResponse } from "next/server";
 
+import { auth } from "@/lib/auth";
 import { getBranchId } from "@/lib/branch";
+import { prisma } from "@/lib/prisma";
 import { getActiveShift } from "@/lib/shift-access";
 
-// GET /api/turnos — returns the active (open) shift for the branch, if any
 export async function GET(req: Request) {
   const session = await auth();
-  if (!session?.user?.id) return NextResponse.json(null);
+  if (!session?.user?.id) {
+    return NextResponse.json(null);
+  }
 
   const branchId = await getBranchId(req, session.user.id);
-  if (!branchId) return NextResponse.json(null);
+  if (!branchId) {
+    return NextResponse.json(null);
+  }
 
   const activeShift = await getActiveShift(branchId);
-
   return NextResponse.json(activeShift);
 }
 
-// POST /api/turnos/abrir
 export async function POST(req: Request) {
   const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const branchId = await getBranchId(req, session.user.id);
-  if (!branchId) return NextResponse.json({ error: "No branch" }, { status: 404 });
+  if (!branchId) {
+    return NextResponse.json({ error: "No branch" }, { status: 404 });
+  }
 
   const { openingAmount, employeeId } = await req.json();
   const openingAmountNumber = Number(openingAmount);
@@ -33,12 +39,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "El monto de apertura no es valido." }, { status: 400 });
   }
 
-  const sessionEmployeeId = (session.user as any)?.employeeId as string | undefined;
-  const sessionRole = (session.user as any)?.role as string | undefined;
+  const sessionEmployeeId = session.user.employeeId;
+  const sessionRole = session.user.role;
   let finalEmployeeId: string | null = sessionEmployeeId ?? null;
-  let finalEmployeeName = (session.user as any)?.name || "Dueño";
+  let finalEmployeeName = session.user.name || "Dueño";
 
-  if (sessionRole !== "EMPLOYEE") {
+  if (sessionRole !== UserRole.EMPLOYEE) {
     if (typeof employeeId === "string" && employeeId) {
       const employee = await prisma.employee.findFirst({
         where: {
@@ -104,6 +110,7 @@ export async function POST(req: Request) {
     if (error instanceof Error && error.message === "ACTIVE_SHIFT_EXISTS") {
       return NextResponse.json({ error: "Ya hay un turno abierto en esta sucursal." }, { status: 409 });
     }
+
     throw error;
   }
 }

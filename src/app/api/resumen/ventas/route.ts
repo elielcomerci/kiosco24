@@ -3,6 +3,29 @@ import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { todayRange } from "@/lib/utils";
 import { getBranchId } from "@/lib/branch";
+import { Prisma } from "@prisma/client";
+
+type SaleWithItemsAndShift = Prisma.SaleGetPayload<{
+  include: {
+    items: true;
+    shift: { select: { employeeName: true } };
+  };
+}>;
+
+type SaleSummaryResponse = {
+  id: string;
+  total: number;
+  paymentMethod: string;
+  voided: boolean;
+  createdAt: Date;
+  employeeName: string;
+  items: {
+    name: string;
+    quantity: number;
+    price: number;
+    total: number;
+  }[];
+};
 
 // GET /api/resumen/ventas
 // Retorna las ventas detalladas del día
@@ -27,14 +50,14 @@ export async function GET(req: Request) {
     orderBy: { createdAt: "desc" },
   });
 
-  const formattedSales = sales.map((s: any) => ({
+  const formattedSales: SaleSummaryResponse[] = sales.map((s: SaleWithItemsAndShift) => ({
     id: s.id,
     total: s.total,
     paymentMethod: s.paymentMethod,
     voided: s.voided,
     createdAt: s.createdAt,
     employeeName: s.shift?.employeeName || "Dueño",
-    items: s.items.map((i: any) => ({
+    items: s.items.map((i) => ({
       name: i.name || "Producto manual",
       quantity: i.quantity,
       price: i.price,

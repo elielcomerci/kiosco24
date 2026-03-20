@@ -3,6 +3,7 @@ import { guardOperationalAccess } from "@/lib/access-control";
 import { getBranchId } from "@/lib/branch";
 import { PaymentMethod, Prisma, prisma } from "@/lib/prisma";
 import { todayRange } from "@/lib/utils";
+import { UserRole } from "@prisma/client";
 import { NextResponse } from "next/server";
 
 import { canOperateShift, createShiftForbiddenResponse, getActiveShift } from "@/lib/shift-access";
@@ -338,12 +339,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "No hay un turno abierto en esta sucursal." }, { status: 409 });
     }
 
-    if (!canOperateShift(session.user as any, activeShift)) {
+    if (!canOperateShift(session.user, activeShift)) {
       return createShiftForbiddenResponse(activeShift);
     }
 
     const createdByEmployeeId =
-      (session.user as any)?.role === "EMPLOYEE" ? (session.user as any)?.employeeId ?? null : null;
+      session.user.role === UserRole.EMPLOYEE ? session.user.employeeId ?? null : null;
 
     const sale = await prisma.$transaction(async (tx) => {
       if (clientSaleId) {

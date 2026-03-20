@@ -59,7 +59,8 @@ export async function syncPendingSales() {
     }
 
     try {
-      const { id, timestamp, ...payload } = sale;
+      const { id, timestamp: _timestamp, ...payload } = sale;
+      void _timestamp;
       const res = await fetch("/api/ventas", {
         method: "POST",
         headers: {

@@ -91,21 +91,32 @@ export default function MpIncomingPaymentToasts({
   useEffect(() => {
     cursorRef.current = new Date().toISOString();
     seenIdsRef.current = new Set();
-    setToasts([]);
+    const resetId = window.setTimeout(() => {
+      setToasts([]);
+    }, 0);
+    const activeTimers = timersRef.current;
 
     return () => {
-      timersRef.current.forEach((timerId) => window.clearTimeout(timerId));
-      timersRef.current.clear();
+      window.clearTimeout(resetId);
+      activeTimers.forEach((timerId) => window.clearTimeout(timerId));
+      activeTimers.clear();
     };
   }, [branchId]);
 
   useEffect(() => {
     if (!enabled) {
-      setToasts([]);
-      return;
+      const resetId = window.setTimeout(() => {
+        setToasts([]);
+      }, 0);
+
+      return () => {
+        window.clearTimeout(resetId);
+      };
     }
 
-    void pollIncomingPayments();
+    const pollNowId = window.setTimeout(() => {
+      void pollIncomingPayments();
+    }, 0);
 
     const intervalId = window.setInterval(() => {
       void pollIncomingPayments();
@@ -121,6 +132,7 @@ export default function MpIncomingPaymentToasts({
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
+      window.clearTimeout(pollNowId);
       window.clearInterval(intervalId);
       window.removeEventListener("focus", pollIncomingPayments);
       document.removeEventListener("visibilitychange", handleVisibilityChange);

@@ -1,34 +1,79 @@
-import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
+
+import { auth } from "@/lib/auth";
 import { getBranchContext } from "@/lib/branch";
+import { Prisma, prisma } from "@/lib/prisma";
 import {
   findApprovedPlatformProductByBarcode,
   platformDraftDiffers,
   queuePlatformProductSubmission,
 } from "@/lib/platform-catalog";
 
-function normalizeVariantPayload(variants: any[] | undefined) {
-  return (variants ?? [])
+type VariantPayload = {
+  id?: string;
+  name: string;
+  barcode: string | null;
+  stock: number;
+  minStock: number;
+};
+
+type ProductListInventory = Prisma.InventoryRecordGetPayload<{
+  include: {
+    product: {
+      include: {
+        category: {
+          select: {
+            showInGrid: true;
+          };
+        };
+        variants: {
+          include: {
+            inventory: true;
+          };
+        };
+      };
+    };
+  };
+}>;
+
+function normalizeVariantPayload(variants: unknown): VariantPayload[] {
+  if (!Array.isArray(variants)) {
+    return [];
+  }
+
+  return variants
     .map((variant) => ({
       id: typeof variant?.id === "string" ? variant.id : undefined,
       name: typeof variant?.name === "string" ? variant.name.trim() : "",
-      barcode: typeof variant?.barcode === "string" && variant.barcode.trim() ? variant.barcode.trim() : null,
-      stock: typeof variant?.stock === "number" ? variant.stock : 0,
-      minStock: typeof variant?.minStock === "number" ? variant.minStock : 0,
+      barcode:
+        typeof variant?.barcode === "string" && variant.barcode.trim() ? variant.barcode.trim() : null,
+      stock:
+        typeof variant?.stock === "number"
+          ? variant.stock
+          : Number.isFinite(Number(variant?.stock))
+            ? Number(variant?.stock)
+            : 0,
+      minStock:
+        typeof variant?.minStock === "number"
+          ? variant.minStock
+          : Number.isFinite(Number(variant?.minStock))
+            ? Number(variant?.minStock)
+            : 0,
     }))
     .filter((variant) => variant.name);
 }
 
-// GET /api/productos — list all active products for the branch
 export async function GET(req: Request) {
   const session = await auth();
-  if (!session?.user?.id) return NextResponse.json([], { status: 401 });
+  if (!session?.user?.id) {
+    return NextResponse.json([], { status: 401 });
+  }
 
   const { branchId } = await getBranchContext(req, session.user.id);
-  if (!branchId) return NextResponse.json([], { status: 200 });
+  if (!branchId) {
+    return NextResponse.json([], { status: 200 });
+  }
 
-  // Filter and map the catalog through the branch's active inventory
   const inventory = await prisma.inventoryRecord.findMany({
     where: { branchId },
     include: {
@@ -44,63 +89,66 @@ export async function GET(req: Request) {
           },
         },
       },
-    } as any,
+    },
     orderBy: { product: { name: "asc" } },
   });
 
-  const products = inventory.map((inv: any) => {
-    const hasVariantStock = inv.product.variants.some((v: any) => (v.inventory[0]?.stock ?? 0) > 0);
-    const hasBaseStock = (inv.stock ?? 0) > 0;
-    const hasStock = inv.product.variants.length > 0 ? hasVariantStock : hasBaseStock;
+  const products = inventory.map((record: ProductListInventory) => {
+    const hasVariantStock = record.product.variants.some((variant) => (variant.inventory[0]?.stock ?? 0) > 0);
+    const hasBaseStock = (record.stock ?? 0) > 0;
+    const hasStock = record.product.variants.length > 0 ? hasVariantStock : hasBaseStock;
     const readyForSale =
-      inv.showInGrid &&
-      inv.price > 0 &&
-      typeof inv.cost === "number" &&
-      inv.cost > 0 &&
+      record.showInGrid &&
+      record.price > 0 &&
+      typeof record.cost === "number" &&
+      record.cost > 0 &&
       hasStock &&
-      (inv.product.category?.showInGrid ?? true);
+      (record.product.category?.showInGrid ?? true);
 
     return {
-    id: inv.product.id,
-    name: inv.product.name,
-    emoji: inv.product.emoji,
-    barcode: inv.product.barcode,
-    internalCode: inv.product.internalCode,
-    image: inv.product.image,
-    brand: inv.product.brand,
-    description: inv.product.description,
-    presentation: inv.product.presentation,
-    supplierName: inv.product.supplierName,
-    notes: inv.product.notes,
-    platformProductId: inv.product.platformProductId,
-    categoryId: inv.product.categoryId,
-    price: inv.price,
-    cost: inv.cost,
-    stock: inv.stock,
-    minStock: inv.minStock,
-    showInGrid: inv.showInGrid,
-    readyForSale,
-    categoryShowInGrid: inv.product.category?.showInGrid ?? true,
-    variants: inv.product.variants.map((v: any) => ({
-      id: v.id,
-      name: v.name,
-      barcode: v.barcode,
-      stock: v.inventory[0]?.stock ?? 0,
-      minStock: v.inventory[0]?.minStock ?? 0,
-    })),
-  };
+      id: record.product.id,
+      name: record.product.name,
+      emoji: record.product.emoji,
+      barcode: record.product.barcode,
+      internalCode: record.product.internalCode,
+      image: record.product.image,
+      brand: record.product.brand,
+      description: record.product.description,
+      presentation: record.product.presentation,
+      supplierName: record.product.supplierName,
+      notes: record.product.notes,
+      platformProductId: record.product.platformProductId,
+      categoryId: record.product.categoryId,
+      price: record.price,
+      cost: record.cost,
+      stock: record.stock,
+      minStock: record.minStock,
+      showInGrid: record.showInGrid,
+      readyForSale,
+      categoryShowInGrid: record.product.category?.showInGrid ?? true,
+      variants: record.product.variants.map((variant) => ({
+        id: variant.id,
+        name: variant.name,
+        barcode: variant.barcode,
+        stock: variant.inventory[0]?.stock ?? 0,
+        minStock: variant.inventory[0]?.minStock ?? 0,
+      })),
+    };
   });
 
   return NextResponse.json(products);
 }
 
-// POST /api/productos — create a single product (used in scanning/adding manually)
 export async function POST(req: Request) {
   const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const { kioscoId, branchId } = await getBranchContext(req, session.user.id);
-  if (!kioscoId || !branchId) return NextResponse.json({ error: "No kiosco/branch" }, { status: 404 });
+  if (!kioscoId || !branchId) {
+    return NextResponse.json({ error: "No kiosco/branch" }, { status: 404 });
+  }
 
   const body = await req.json();
   const {
@@ -125,74 +173,79 @@ export async function POST(req: Request) {
 
   try {
     const normalizedVariants = normalizeVariantPayload(variants);
-    const normalizedBarcode = normalizedVariants.length > 0 ? null : barcode?.trim() || null;
+    const normalizedBarcode =
+      normalizedVariants.length > 0 || typeof barcode !== "string" ? null : barcode.trim() || null;
     const lookupBarcode =
       normalizedBarcode ?? normalizedVariants.find((variant) => variant.barcode)?.barcode ?? null;
     const platformProduct = lookupBarcode
       ? await findApprovedPlatformProductByBarcode(lookupBarcode)
       : null;
 
-    // Create global product
     const product = await prisma.product.create({
       data: {
-        name: name?.trim(),
+        name: typeof name === "string" ? name.trim() : "",
         barcode: normalizedBarcode,
-        internalCode: internalCode?.trim() || null,
-        emoji,
-        image,
-        brand: brand?.trim() || null,
-        description: description?.trim() || null,
-        presentation: presentation?.trim() || null,
-        supplierName: supplierName?.trim() || null,
-        notes: notes?.trim() || null,
-        categoryId,
+        internalCode: typeof internalCode === "string" ? internalCode.trim() || null : null,
+        emoji: typeof emoji === "string" ? emoji : null,
+        image: typeof image === "string" ? image : null,
+        brand: typeof brand === "string" ? brand.trim() || null : null,
+        description: typeof description === "string" ? description.trim() || null : null,
+        presentation: typeof presentation === "string" ? presentation.trim() || null : null,
+        supplierName: typeof supplierName === "string" ? supplierName.trim() || null : null,
+        notes: typeof notes === "string" ? notes.trim() || null : null,
+        categoryId: typeof categoryId === "string" && categoryId ? categoryId : null,
         platformProductId: platformProduct?.id ?? null,
         kioscoId,
-        variants: normalizedVariants.length ? {
-          create: normalizedVariants.map((v: any) => ({
-            name: v.name,
-            barcode: v.barcode || null,
-          })),
-        } : undefined,
-      } as any,
-      include: { variants: true } as any
+        variants: normalizedVariants.length
+          ? {
+              create: normalizedVariants.map((variant) => ({
+                name: variant.name,
+                barcode: variant.barcode || null,
+              })),
+            }
+          : undefined,
+      },
+      include: { variants: true },
     });
 
-    // Propagar a TODAS las sucursales del Kiosco
     const branches = await prisma.branch.findMany({
-      where: { kioscoId }
+      where: { kioscoId },
+      select: { id: true },
     });
 
     if (branches.length > 0) {
       await prisma.inventoryRecord.createMany({
-        data: branches.map((b: any) => ({
+        data: branches.map((branch) => ({
           productId: product.id,
-          branchId: b.id,
-          price: price ?? 0,
-          cost: cost ?? null,
-          stock: b.id === branchId ? (stock ?? 0) : 0,
-          minStock: b.id === branchId ? (minStock ?? 0) : 0,
-          showInGrid: showInGrid ?? true,
-        }))
+          branchId: branch.id,
+          price: typeof price === "number" ? price : 0,
+          cost: typeof cost === "number" ? cost : null,
+          stock: branch.id === branchId ? (typeof stock === "number" ? stock : 0) : 0,
+          minStock: branch.id === branchId ? (typeof minStock === "number" ? minStock : 0) : 0,
+          showInGrid: typeof showInGrid === "boolean" ? showInGrid : true,
+        })),
       });
 
-      // Propagar VariantInventory
-      if (product.variants?.length > 0 && normalizedVariants.length > 0) {
-        const variantStockData: any[] = [];
-        branches.forEach((b: any) => {
-          product.variants.forEach((pv: any) => {
-            const reqVar = normalizedVariants.find((v: any) => v.name === pv.name);
+      if (product.variants.length > 0 && normalizedVariants.length > 0) {
+        const variantStockData: Prisma.VariantInventoryCreateManyInput[] = [];
+
+        branches.forEach((branch) => {
+          product.variants.forEach((productVariant) => {
+            const requestedVariant = normalizedVariants.find((variant) => variant.name === productVariant.name);
             variantStockData.push({
-              variantId: pv.id,
-              branchId: b.id,
-              stock: b.id === branchId ? (reqVar?.stock || 0) : 0,
-              minStock: b.id === branchId ? (reqVar?.minStock || 0) : 0,
+              variantId: productVariant.id,
+              branchId: branch.id,
+              stock: branch.id === branchId ? requestedVariant?.stock ?? 0 : 0,
+              minStock: branch.id === branchId ? requestedVariant?.minStock ?? 0 : 0,
             });
           });
         });
-        await (prisma as any).variantInventory.createMany({
-          data: variantStockData,
-        });
+
+        if (variantStockData.length > 0) {
+          await prisma.variantInventory.createMany({
+            data: variantStockData,
+          });
+        }
       }
     }
 
@@ -200,7 +253,7 @@ export async function POST(req: Request) {
       (normalizedBarcode || normalizedVariants.some((variant) => variant.barcode)) &&
       platformDraftDiffers(platformProduct, {
         barcode: normalizedBarcode,
-        name: name?.trim(),
+        name: typeof name === "string" ? name.trim() : "",
         brand,
         description,
         presentation,
@@ -216,7 +269,7 @@ export async function POST(req: Request) {
         submittedByUserId: session.user.id,
         submittedFromKioscoId: kioscoId,
         barcode: normalizedBarcode,
-        name: name?.trim(),
+        name: typeof name === "string" ? name.trim() : "",
         brand,
         description,
         presentation,
@@ -235,45 +288,50 @@ export async function POST(req: Request) {
   }
 }
 
-// PATCH /api/productos — bulk update prices or specific product properties
 export async function PATCH(req: Request) {
   const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const { branchId } = await getBranchContext(req, session.user.id);
-  if (!branchId) return NextResponse.json({ error: "No branch" }, { status: 404 });
+  if (!branchId) {
+    return NextResponse.json({ error: "No branch" }, { status: 404 });
+  }
 
   const body = await req.json();
-  const { percentage, productIds, categoryId } = body;
+  const normalizedProductIds = Array.isArray(body?.productIds)
+    ? body.productIds.filter((id: unknown): id is string => typeof id === "string" && id.length > 0)
+    : [];
+  const categoryId = body?.categoryId;
+  const percentageValue = Number(body?.percentage);
 
-  if (!productIds || productIds.length === 0) {
+  if (normalizedProductIds.length === 0) {
     return NextResponse.json({ error: "No products provided" }, { status: 400 });
   }
 
-  // Si se envió un porcentaje, actualizamos todos los inventarios de esa branch
-  if (percentage) {
-    const multiplier = 1 + percentage / 100;
+  if (Number.isFinite(percentageValue) && percentageValue !== 0) {
+    const multiplier = 1 + percentageValue / 100;
     const inventoryToUpdate = await prisma.inventoryRecord.findMany({
-      where: { branchId, productId: { in: productIds } },
+      where: { branchId, productId: { in: normalizedProductIds } },
+      select: { id: true, price: true },
     });
 
-    const transactions = inventoryToUpdate.map(
-      (inv: { id: string; price: number }) =>
-        prisma.inventoryRecord.update({
-          where: { id: inv.id },
-          data: { price: Math.round(inv.price * multiplier) },
-        })
+    const transactions = inventoryToUpdate.map((inventory) =>
+      prisma.inventoryRecord.update({
+        where: { id: inventory.id },
+        data: { price: Math.round(inventory.price * multiplier) },
+      }),
     );
     await prisma.$transaction(transactions);
   }
 
-  // Si se envió categoryId (incluido nulo para borrar categoría), actualizamos los productos globales
   if (categoryId !== undefined) {
     await prisma.product.updateMany({
-      where: { id: { in: productIds } },
-      data: { categoryId: categoryId || null },
+      where: { id: { in: normalizedProductIds } },
+      data: { categoryId: typeof categoryId === "string" && categoryId ? categoryId : null },
     });
   }
 
-  return NextResponse.json({ success: true, count: productIds.length });
+  return NextResponse.json({ success: true, count: normalizedProductIds.length });
 }

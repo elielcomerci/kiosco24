@@ -20,7 +20,12 @@ export type {
   MpIncomingPaymentNotice,
 } from ".prisma/client";
 
-const isEdge = typeof (globalThis as any).EdgeRuntime === "string";
+const globalWithEdgeRuntime = globalThis as typeof globalThis & {
+  EdgeRuntime?: string;
+};
+
+const isEdge = typeof globalWithEdgeRuntime.EdgeRuntime === "string";
+type PrismaPgClient = ConstructorParameters<typeof PrismaPg>[0];
 
 function prismaClientSingleton() {
   let connectionString = (process.env.DATABASE_URL || "").trim().replace(/^["']|["']$/g, "");
@@ -37,7 +42,7 @@ function prismaClientSingleton() {
   console.log(`[Prisma Init] pg TCP | Runtime: ${isEdge ? "Edge" : "Node"} | Host: ${host}`);
 
   const pool = new Pool({ connectionString });
-  const adapter = new PrismaPg(pool as any);
+  const adapter = new PrismaPg(pool as unknown as PrismaPgClient);
 
   return new PrismaClient({ adapter });
 }

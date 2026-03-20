@@ -1,3 +1,5 @@
+import { NextResponse } from "next/server";
+
 import { auth } from "@/lib/auth";
 import { getBranchId } from "@/lib/branch";
 import { prisma } from "@/lib/prisma";
@@ -7,7 +9,6 @@ import {
   createShiftForbiddenResponse,
   getActiveShift,
 } from "@/lib/shift-access";
-import { NextResponse } from "next/server";
 
 export async function POST(
   req: Request,
@@ -44,12 +45,12 @@ export async function POST(
     return NextResponse.json({ error: "Solo se puede transferir el turno activo actual." }, { status: 409 });
   }
 
-  if (!canManageShiftLifecycle(session.user as any, shift)) {
+  if (!canManageShiftLifecycle(session.user, shift)) {
     return createShiftForbiddenResponse(shift);
   }
 
   let nextEmployeeId: string | null = null;
-  let nextEmployeeName = "Dueno";
+  let nextEmployeeName = "Dueño";
 
   if (typeof employeeId === "string" && employeeId) {
     const employee = await prisma.employee.findFirst({
@@ -80,7 +81,7 @@ export async function POST(
     );
   }
 
-  const currentResponsible = shift.employee?.name || shift.employeeName || "Dueno";
+  const currentResponsible = shift.employee?.name || shift.employeeName || "Dueño";
 
   const nextShift = await prisma.$transaction(async (tx) => {
     const expectedAmount = await computeShiftExpectedAmount(shift.id, shift.openingAmount, tx);

@@ -902,7 +902,7 @@ function buildChartData(
       ganancia: w.ganancia ?? 0,
     }));
   }
-  return data.ventasPorDia.map((d, i) => {
+  return data.ventasPorDia.map((d) => {
     // Convert date to day label
     const dt = new Date(`${d.fecha}T12:00:00-03:00`);
     const dow = dt.getDay(); // 0=Sun

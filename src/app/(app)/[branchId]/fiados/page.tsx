@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import PrintablePage from "@/components/print/PrintablePage";
 import { useRegisterShortcuts } from "@/components/ui/BranchWorkspace";
@@ -24,17 +24,23 @@ export default function FiadosPage() {
   const [payAmount, setPayAmount] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  const fetchCustomers = async () => {
+  const fetchCustomers = useCallback(async () => {
     setLoading(true);
     const res = await fetch("/api/fiados/customers");
     const data = await res.json();
     setCustomers(data);
     setLoading(false);
-  };
+  }, []);
 
   useEffect(() => {
-    fetchCustomers();
-  }, []);
+    const timeoutId = window.setTimeout(() => {
+      void fetchCustomers();
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [fetchCustomers]);
 
   const totalFiado = customers.reduce((sum, customer) => sum + customer.balance, 0);
 
@@ -73,7 +79,7 @@ export default function FiadosPage() {
     });
     setCobrarCustomer(null);
     setPayAmount("");
-    fetchCustomers();
+    await fetchCustomers();
   };
 
   return (

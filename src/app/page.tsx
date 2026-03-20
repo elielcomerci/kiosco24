@@ -1,7 +1,6 @@
 import { auth, signOut } from "@/lib/auth";
 import { isPlatformAdmin } from "@/lib/platform-admin";
 import { prisma } from "@/lib/prisma";
-import { redirect } from "next/navigation";
 import Link from "next/link";
 
 import { FeatureCard } from "@/components/FeatureCard";

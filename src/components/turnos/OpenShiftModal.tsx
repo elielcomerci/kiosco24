@@ -1,5 +1,6 @@
 "use client";
 
+import { UserRole } from "@prisma/client";
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useParams } from "next/navigation";
@@ -13,6 +14,12 @@ interface Employee {
   hasPin: boolean;
 }
 
+type EmployeeApiResponse = {
+  id?: string;
+  name?: string;
+  hasPin?: boolean;
+};
+
 export interface ShiftAssignee {
   employeeId: string | null;
   employeeName: string;
@@ -22,12 +29,26 @@ interface OpenShiftModalProps {
   onConfirm: (payload: { openingAmount: number; assignee: ShiftAssignee }) => void | Promise<void>;
 }
 
+function normalizeEmployees(data: unknown): Employee[] {
+  if (!Array.isArray(data)) {
+    return [];
+  }
+
+  return data
+    .map((entry: EmployeeApiResponse) => ({
+      id: entry.id,
+      name: entry.name,
+      hasPin: Boolean(entry.hasPin),
+    }))
+    .filter((employee): employee is Employee => Boolean(employee.id && employee.name));
+}
+
 export default function OpenShiftModal({ onConfirm }: OpenShiftModalProps) {
   const { branchId } = useParams() as { branchId: string };
   const { data: session } = useSession();
-  const userRole = (session?.user as any)?.role as string | undefined;
-  const sessionEmployeeId = (session?.user as any)?.employeeId as string | undefined;
-  const sessionName = (session?.user as any)?.name as string | undefined;
+  const userRole = session?.user?.role;
+  const sessionEmployeeId = session?.user?.employeeId;
+  const sessionName = session?.user?.name;
 
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [selectedEmployee, setSelectedEmployee] = useState<string>("owner");
@@ -46,16 +67,10 @@ export default function OpenShiftModal({ onConfirm }: OpenShiftModalProps) {
     })
       .then((r) => r.json())
       .then((data) => {
-        const active = Array.isArray(data)
-          ? data.map((e: any) => ({
-              id: e.id,
-              name: e.name,
-              hasPin: Boolean(e.hasPin),
-            }))
-          : [];
+        const active = normalizeEmployees(data);
         setEmployees(active);
 
-        if (userRole === "EMPLOYEE" && sessionEmployeeId) {
+        if (userRole === UserRole.EMPLOYEE && sessionEmployeeId) {
           setSelectedEmployee(sessionEmployeeId);
         } else if (active.length > 0) {
           setSelectedEmployee(active[0].id);
@@ -64,7 +79,7 @@ export default function OpenShiftModal({ onConfirm }: OpenShiftModalProps) {
         }
       })
       .catch(() => {
-        if (userRole === "EMPLOYEE" && sessionEmployeeId) {
+        if (userRole === UserRole.EMPLOYEE && sessionEmployeeId) {
           setSelectedEmployee(sessionEmployeeId);
         } else {
           setSelectedEmployee("owner");
@@ -72,9 +87,9 @@ export default function OpenShiftModal({ onConfirm }: OpenShiftModalProps) {
       });
   }, [branchId, userRole, sessionEmployeeId]);
 
-  const selectedEmp = employees.find((e) => e.id === selectedEmployee);
+  const selectedEmp = employees.find((employee) => employee.id === selectedEmployee);
   const resolvedAssignee: ShiftAssignee =
-    userRole === "EMPLOYEE"
+    userRole === UserRole.EMPLOYEE
       ? {
           employeeId: sessionEmployeeId ?? null,
           employeeName: sessionName || selectedEmp?.name || "Empleado",
@@ -92,7 +107,7 @@ export default function OpenShiftModal({ onConfirm }: OpenShiftModalProps) {
     setLoading(false);
   };
 
-  const handleConfirmClick = async () => {
+  const handleConfirmClick = () => {
     if (!amount) return;
 
     if (selectedEmp?.hasPin && resolvedAssignee.employeeId) {
@@ -101,7 +116,7 @@ export default function OpenShiftModal({ onConfirm }: OpenShiftModalProps) {
       return;
     }
 
-    proceed();
+    void proceed();
   };
 
   const handlePinConfirm = async (pin: string) => {
@@ -123,9 +138,9 @@ export default function OpenShiftModal({ onConfirm }: OpenShiftModalProps) {
 
     if (data.ok) {
       setShowPinModal(false);
-      proceed();
+      void proceed();
     } else {
-      setPinError("PIN incorrecto. Intentá de nuevo.");
+      setPinError("PIN incorrecto. Intenta de nuevo.");
     }
   };
 
@@ -134,9 +149,9 @@ export default function OpenShiftModal({ onConfirm }: OpenShiftModalProps) {
       <div className="modal-overlay animate-fade-in">
         <div className="modal animate-slide-up">
           <div>
-            <h2 style={{ fontSize: "20px", fontWeight: 700 }}>Abrir Turno</h2>
+            <h2 style={{ fontSize: "20px", fontWeight: 700 }}>Abrir turno</h2>
             <p style={{ color: "var(--text-2)", fontSize: "14px", marginBottom: "16px" }}>
-              Ingresá el dinero con el que abrís la caja y quién queda a cargo.
+              Ingresa el dinero con el que abris la caja y quien queda a cargo.
             </p>
           </div>
 
@@ -155,7 +170,7 @@ export default function OpenShiftModal({ onConfirm }: OpenShiftModalProps) {
               Responsable del turno
             </label>
 
-            {userRole === "EMPLOYEE" ? (
+            {userRole === UserRole.EMPLOYEE ? (
               <div
                 style={{
                   padding: "12px 14px",
@@ -176,14 +191,16 @@ export default function OpenShiftModal({ onConfirm }: OpenShiftModalProps) {
                 >
                   Dueño
                 </button>
-                {employees.map((emp) => (
+                {employees.map((employee) => (
                   <button
-                    key={emp.id}
-                    className={`btn btn-sm ${selectedEmployee === emp.id ? "btn-green" : "btn-ghost"}`}
-                    onClick={() => setSelectedEmployee(emp.id)}
+                    key={employee.id}
+                    className={`btn btn-sm ${selectedEmployee === employee.id ? "btn-green" : "btn-ghost"}`}
+                    onClick={() => setSelectedEmployee(employee.id)}
                   >
-                    {emp.name}
-                    {emp.hasPin && <span style={{ marginLeft: "4px", fontSize: "11px", opacity: 0.7 }}>🔐</span>}
+                    {employee.name}
+                    {employee.hasPin && (
+                      <span style={{ marginLeft: "4px", fontSize: "11px", opacity: 0.7 }}>PIN</span>
+                    )}
                   </button>
                 ))}
               </div>
@@ -208,8 +225,13 @@ export default function OpenShiftModal({ onConfirm }: OpenShiftModalProps) {
 
           <NumPad value={amount} onChange={setAmount} />
 
-          <button className="btn btn-green" style={{ marginTop: "10px" }} onClick={handleConfirmClick} disabled={!amount || loading}>
-            {loading ? "Abriendo..." : selectedEmp?.hasPin ? "Abrir Caja 🔐" : "Abrir Caja"}
+          <button
+            className="btn btn-green"
+            style={{ marginTop: "10px" }}
+            onClick={handleConfirmClick}
+            disabled={!amount || loading}
+          >
+            {loading ? "Abriendo..." : selectedEmp?.hasPin ? "Abrir caja con PIN" : "Abrir caja"}
           </button>
         </div>
       </div>
@@ -217,7 +239,7 @@ export default function OpenShiftModal({ onConfirm }: OpenShiftModalProps) {
       {showPinModal && (
         <PinModal
           title={`PIN de ${resolvedAssignee.employeeName}`}
-          subtitle="Ingresá el PIN para confirmar"
+          subtitle="Ingresa el PIN para confirmar"
           onConfirm={handlePinConfirm}
           onCancel={() => setShowPinModal(false)}
           loading={pinLoading}

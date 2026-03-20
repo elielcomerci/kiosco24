@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 // ─── Theme Presets ─────────────────────────────────────────────────────────
 const PRESETS = [
@@ -42,10 +42,32 @@ export default function ThemeEditor({ branchId, initialBg, initialAccent, onSave
   const [bg, setBg] = useState(initialBg || "#0f172a");
   const [accent, setAccent] = useState(initialAccent || "#22c55e");
   const [saving, setSaving] = useState(false);
+  const initialThemeRef = useRef({
+    bg: initialBg || "#0f172a",
+    accent: initialAccent || "#22c55e",
+  });
 
   useEffect(() => {
-    setBg(initialBg || "#0f172a");
-    setAccent(initialAccent || "#22c55e");
+    const nextBg = initialBg || "#0f172a";
+    const nextAccent = initialAccent || "#22c55e";
+
+    if (
+      initialThemeRef.current.bg === nextBg &&
+      initialThemeRef.current.accent === nextAccent
+    ) {
+      return;
+    }
+
+    initialThemeRef.current = { bg: nextBg, accent: nextAccent };
+
+    const syncId = window.setTimeout(() => {
+      setBg(nextBg);
+      setAccent(nextAccent);
+    }, 0);
+
+    return () => {
+      window.clearTimeout(syncId);
+    };
   }, [initialBg, initialAccent]);
 
   // Apply immediately on mount or config change to keep in sync

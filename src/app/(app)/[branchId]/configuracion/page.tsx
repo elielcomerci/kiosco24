@@ -673,7 +673,7 @@ export default function ConfiguracionPage() {
         const data = await res.json();
         setSubscription(data);
       }
-    } catch(e) {}
+    } catch {}
     setLoadingSubscription(false);
   };
 

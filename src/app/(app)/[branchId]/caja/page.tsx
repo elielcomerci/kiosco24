@@ -168,7 +168,7 @@ export default function CajaPage() {
     if (userRole === "EMPLOYEE") {
       return Boolean(employeeId && activeShift.employeeId && activeShift.employeeId === employeeId);
     }
-    return !activeShift.employeeId;
+    return true;
   }, [activeShift, employeeId, userRole]);
   const canManageCurrentShift = useMemo(() => {
     if (!activeShift) return false;
@@ -639,22 +639,29 @@ export default function CajaPage() {
           creditCustomerName,
         };
 
-        if (isOnline) {
-          const res = await fetch("/api/ventas", {
-            method: "POST",
-            headers: { 
-              "Content-Type": "application/json",
+          if (isOnline) {
+            const res = await fetch("/api/ventas", {
+              method: "POST",
+              headers: { 
+                "Content-Type": "application/json",
               "x-branch-id": branchId
             },
             body: JSON.stringify(reqBody),
-          });
+            });
 
-          if (!res.ok) {
-            const errorText = await res.text().catch(() => "");
-            console.error("[Ventas] Error HTTP registrando venta:", res.status, errorText);
-            alert("No se pudo registrar la venta en el servidor. Intentá de nuevo en unos segundos.");
-            return;
-          }
+            if (!res.ok) {
+              const errorText = await res.text().catch(() => "");
+              let serverMessage = "";
+              try {
+                const parsed = JSON.parse(errorText);
+                if (parsed && typeof parsed.error === "string") {
+                  serverMessage = parsed.error;
+                }
+              } catch {}
+              console.error("[Ventas] Error HTTP registrando venta:", res.status, errorText);
+              alert(serverMessage || "No se pudo registrar la venta en el servidor. Intentá de nuevo en unos segundos.");
+              return;
+            }
 
           const sale = await res.json();
           newSale.id = sale.id;

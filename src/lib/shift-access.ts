@@ -24,7 +24,7 @@ export function canOperateShift(user: SessionUserLike, shift: { employeeId: stri
     return Boolean(user.employeeId && shift.employeeId && user.employeeId === shift.employeeId);
   }
 
-  return !shift.employeeId;
+  return true;
 }
 
 export function canManageShiftLifecycle(user: SessionUserLike, shift: { employeeId: string | null }) {

@@ -82,6 +82,8 @@ model Branch {
   name               String
   kioscoId           String
   kiosco             Kiosco             @relation(fields: [kioscoId], references: [id], onDelete: Cascade)
+  activeShiftId      String?            @unique
+  activeShift        Shift?             @relation("BranchActiveShift", fields: [activeShiftId], references: [id], onDelete: SetNull)
   employees          Employee[]
   inventory          InventoryRecord[]
   sales              Sale[]
@@ -294,6 +296,7 @@ model Shift {
   employeeName   String
   branchId       String
   branch         Branch       @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  activeForBranch Branch?     @relation("BranchActiveShift")
   openingAmount  Float
   closingAmount  Float?
   expectedAmount Float?
@@ -341,6 +344,7 @@ model Withdrawal {
 
 model Sale {
   id               String          @id @default(cuid())
+  clientSaleId     String?
   total            Float
   paymentMethod    PaymentMethod
   receivedAmount   Float?
@@ -359,6 +363,7 @@ model Sale {
 
   @@index([branchId, createdAt])
   @@index([shiftId])
+  @@unique([branchId, clientSaleId])
 }
 
 model SaleItem {

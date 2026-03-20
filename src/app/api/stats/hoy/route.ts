@@ -1,60 +1,68 @@
 import { auth } from "@/lib/auth";
+import { getBranchId } from "@/lib/branch";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
-import { todayRange } from "@/lib/utils";
 
-import { getBranchId } from "@/lib/branch";
+import { getActiveShift } from "@/lib/shift-access";
 
 // GET /api/stats/hoy
 export async function GET(req: Request) {
   const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ enCaja: 0, ganancia: 0 });
+  if (!session?.user?.id) {
+    return NextResponse.json({ enCaja: 0, ganancia: 0, hasCosts: false });
+  }
+
   const canSeeProfit = session.user.role === "OWNER";
-
   const branchId = await getBranchId(req, session.user.id);
-  if (!branchId) return NextResponse.json({ enCaja: 0, ganancia: 0 });
+  if (!branchId) {
+    return NextResponse.json({ enCaja: 0, ganancia: 0, hasCosts: false });
+  }
 
-  const { start, end } = todayRange();
+  const activeShift = await getActiveShift(branchId);
+  if (!activeShift) {
+    return NextResponse.json({
+      enCaja: 0,
+      ganancia: null,
+      hasCosts: false,
+      openingAmount: 0,
+      ventasEfectivo: 0,
+      ventasMp: 0,
+      ventasDebito: 0,
+      ventasTransferencia: 0,
+      ventasTarjeta: 0,
+      ventasFiado: 0,
+      totalVentas: 0,
+      totalGastos: 0,
+      totalRetiros: 0,
+    });
+  }
 
-  // 1. Get active shift opening amount (if any)
-  const activeShift = await prisma.shift.findFirst({
-    where: { branchId, closedAt: null },
-    orderBy: { openedAt: "desc" },
-  });
-  const montoApertura = activeShift?.openingAmount || 0;
+  const [cashSales, allSales, expenses, withdrawals] = await Promise.all([
+    prisma.sale.aggregate({
+      where: { shiftId: activeShift.id, paymentMethod: "CASH", voided: false },
+      _sum: { total: true },
+    }),
+    prisma.sale.findMany({
+      where: { shiftId: activeShift.id, voided: false },
+      include: { items: true },
+    }),
+    prisma.expense.aggregate({
+      where: { shiftId: activeShift.id },
+      _sum: { amount: true },
+    }),
+    prisma.withdrawal.aggregate({
+      where: { shiftId: activeShift.id },
+      _sum: { amount: true },
+    }),
+  ]);
 
-  // 2. Sum CASH sales (received today)
-  const cashSales = await prisma.sale.aggregate({
-    where: { branchId, paymentMethod: "CASH", voided: false, createdAt: { gte: start, lte: end } },
-    _sum: { total: true },
-  });
-
-  // 3. Sum ALL sales (for ganancia)
-  const allSales = await prisma.sale.findMany({
-    where: { branchId, voided: false, createdAt: { gte: start, lte: end } },
-    include: { items: true },
-  });
-
-  // 4. Sum expenses today
-  const expenses = await prisma.expense.aggregate({
-    where: { branchId, createdAt: { gte: start, lte: end } },
-    _sum: { amount: true },
-  });
-
-  // 5. Sum withdrawals today
-  const withdrawals = await prisma.withdrawal.aggregate({
-    where: { branchId, createdAt: { gte: start, lte: end } },
-    _sum: { amount: true },
-  });
-
-  const openingAmount = activeShift?.openingAmount ?? 0;
+  const openingAmount = activeShift.openingAmount ?? 0;
   const cashSalesTotal = cashSales._sum.total ?? 0;
   const expensesTotal = expenses._sum.amount ?? 0;
   const withdrawalsTotal = withdrawals._sum.amount ?? 0;
 
   const enCaja = openingAmount + cashSalesTotal - expensesTotal - withdrawalsTotal;
 
-  // Ganancia = ventas - costo de productos vendidos (solo si hay costos cargados)
   let ganancia = 0;
   let hasCosts = false;
   let ventasMp = 0;
@@ -62,6 +70,7 @@ export async function GET(req: Request) {
   let ventasTransferencia = 0;
   let ventasTarjeta = 0;
   let ventasFiado = 0;
+
   for (const sale of allSales) {
     switch (sale.paymentMethod) {
       case "MERCADOPAGO":
@@ -79,6 +88,8 @@ export async function GET(req: Request) {
       case "CREDIT":
         ventasFiado += sale.total;
         break;
+      default:
+        break;
     }
 
     for (const item of sale.items) {
@@ -91,8 +102,9 @@ export async function GET(req: Request) {
     }
   }
 
-  // Only subtract expenses from ganancia when there are costs loaded
-  if (hasCosts) ganancia -= expensesTotal;
+  if (hasCosts) {
+    ganancia -= expensesTotal;
+  }
 
   const totalVentas =
     cashSalesTotal +
@@ -106,7 +118,6 @@ export async function GET(req: Request) {
     enCaja: Math.round(enCaja),
     ganancia: canSeeProfit && hasCosts ? Math.round(ganancia) : null,
     hasCosts: canSeeProfit ? hasCosts : false,
-    // Shift close summary breakdown
     openingAmount: Math.round(openingAmount),
     ventasEfectivo: Math.round(cashSalesTotal),
     ventasMp: Math.round(ventasMp),

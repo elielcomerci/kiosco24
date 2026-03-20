@@ -14,6 +14,11 @@ export async function POST(req: Request) {
   if (!branchId) return NextResponse.json({ error: "No branch" }, { status: 404 });
 
   const { amount, reason, note } = await req.json();
+  const amountNumber = Number(amount);
+
+  if (!Number.isFinite(amountNumber) || amountNumber <= 0) {
+    return NextResponse.json({ error: "El monto del gasto no es valido." }, { status: 400 });
+  }
 
   const activeShift = await getActiveShift(branchId);
   if (!activeShift) {
@@ -27,7 +32,7 @@ export async function POST(req: Request) {
   const expense = await prisma.expense.create({
     data: {
       branchId,
-      amount: Number(amount),
+      amount: amountNumber,
       reason,
       note: note ?? null,
       shiftId: activeShift.id,

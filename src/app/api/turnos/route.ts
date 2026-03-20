@@ -26,12 +26,12 @@ export async function POST(req: Request) {
   const branchId = await getBranchId(req, session.user.id);
   if (!branchId) return NextResponse.json({ error: "No branch" }, { status: 404 });
 
-  const currentShift = await getActiveShift(branchId);
-  if (currentShift) {
-    return NextResponse.json({ error: "Ya hay un turno abierto en esta sucursal." }, { status: 409 });
-  }
-
   const { openingAmount, employeeId } = await req.json();
+  const openingAmountNumber = Number(openingAmount);
+
+  if (!Number.isFinite(openingAmountNumber) || openingAmountNumber < 0) {
+    return NextResponse.json({ error: "El monto de apertura no es valido." }, { status: 400 });
+  }
 
   const sessionEmployeeId = (session.user as any)?.employeeId as string | undefined;
   const sessionRole = (session.user as any)?.role as string | undefined;
@@ -65,15 +65,45 @@ export async function POST(req: Request) {
     }
   }
 
-  const shift = await prisma.shift.create({
-    data: {
-      branchId,
-      openingAmount: Number(openingAmount),
-      employeeId: finalEmployeeId,
-      employeeName: finalEmployeeName,
-    },
-    include: { employee: true },
-  });
+  try {
+    const shift = await prisma.$transaction(async (tx) => {
+      const currentShift = await getActiveShift(branchId, tx);
+      if (currentShift) {
+        throw new Error("ACTIVE_SHIFT_EXISTS");
+      }
 
-  return NextResponse.json(shift);
+      const createdShift = await tx.shift.create({
+        data: {
+          branchId,
+          openingAmount: openingAmountNumber,
+          employeeId: finalEmployeeId,
+          employeeName: finalEmployeeName,
+        },
+        include: { employee: true },
+      });
+
+      const activated = await tx.branch.updateMany({
+        where: {
+          id: branchId,
+          activeShiftId: null,
+        },
+        data: {
+          activeShiftId: createdShift.id,
+        },
+      });
+
+      if (activated.count !== 1) {
+        throw new Error("ACTIVE_SHIFT_EXISTS");
+      }
+
+      return createdShift;
+    });
+
+    return NextResponse.json(shift);
+  } catch (error) {
+    if (error instanceof Error && error.message === "ACTIVE_SHIFT_EXISTS") {
+      return NextResponse.json({ error: "Ya hay un turno abierto en esta sucursal." }, { status: 409 });
+    }
+    throw error;
+  }
 }

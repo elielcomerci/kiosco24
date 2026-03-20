@@ -3,6 +3,18 @@ import { openDB } from "idb";
 const DB_NAME = "kiosco24-db";
 const STORE_NAME = "pending_sales";
 
+type PendingSaleRecord = {
+  id?: number;
+  branchId?: string;
+  clientSaleId?: string;
+  timestamp?: number;
+  items: unknown[];
+  total: number;
+  paymentMethod: string;
+  receivedAmount?: number | null;
+  creditCustomerId?: string | null;
+};
+
 export async function getDb() {
   return openDB(DB_NAME, 1, {
     upgrade(db) {
@@ -13,7 +25,7 @@ export async function getDb() {
   });
 }
 
-export async function savePendingSale(saleData: any) {
+export async function savePendingSale(saleData: PendingSaleRecord) {
   const db = await getDb();
   await db.add(STORE_NAME, {
     ...saleData,
@@ -33,19 +45,32 @@ export async function clearPendingSale(id: number) {
 
 export async function syncPendingSales() {
   if (!navigator.onLine) return;
-  const sales = await getPendingSales();
+  const sales = (await getPendingSales()) as PendingSaleRecord[];
   if (sales.length === 0) return;
 
   for (const sale of sales) {
+    if (!sale.id) {
+      continue;
+    }
+
+    if (!sale.branchId) {
+      console.warn("[Offline] Venta pendiente sin branchId. No se puede sincronizar de forma segura.", sale);
+      continue;
+    }
+
     try {
+      const { id, timestamp, ...payload } = sale;
       const res = await fetch("/api/ventas", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(sale),
+        headers: {
+          "Content-Type": "application/json",
+          "x-branch-id": sale.branchId,
+        },
+        body: JSON.stringify(payload),
       });
 
       if (res.ok) {
-        await clearPendingSale(sale.id);
+        await clearPendingSale(id);
       }
     } catch (err) {
       console.error("Error syncing sale", err);

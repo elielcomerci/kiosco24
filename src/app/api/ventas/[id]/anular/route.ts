@@ -3,15 +3,18 @@ import { guardOperationalAccess } from "@/lib/access-control";
 import { getBranchContext } from "@/lib/branch";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
+
 import { createShiftForbiddenResponse, getActiveShift } from "@/lib/shift-access";
 
 // POST /api/ventas/[id]/anular
 export async function POST(
   req: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const accessResponse = await guardOperationalAccess(session.user);
   if (accessResponse) {
@@ -31,7 +34,13 @@ export async function POST(
     include: { items: true },
   });
 
-  if (!sale) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!sale) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
+  if (sale.voided) {
+    return NextResponse.json({ ok: true, alreadyVoided: true });
+  }
 
   if ((session.user as any)?.role === "EMPLOYEE") {
     const activeShift = branchId ? await getActiveShift(branchId) : null;
@@ -40,55 +49,63 @@ export async function POST(
     }
   }
 
-  // Revert credit balance if it was a fiado
-  if (sale.creditCustomerId) {
-    await prisma.creditCustomer.update({
-      where: { id: sale.creditCustomerId },
-      data: { balance: { decrement: sale.total } },
+  await prisma.$transaction(async (tx) => {
+    const currentSale = await tx.sale.findUnique({
+      where: { id: sale.id },
+      include: { items: true },
     });
-  }
 
-  // Restore stock in the specific branch
-  for (const item of sale.items) {
-    if ((item as any).variantId) {
-      // Restaurar stock de variante
-      const vInv = await (prisma as any).variantInventory.findUnique({
+    if (!currentSale || currentSale.voided) {
+      return;
+    }
+
+    if (currentSale.creditCustomerId) {
+      await tx.creditCustomer.updateMany({
         where: {
-          variantId_branchId: {
-            variantId: (item as any).variantId,
-            branchId: sale.branchId,
-          },
+          id: currentSale.creditCustomerId,
+          branchId: currentSale.branchId,
+        },
+        data: {
+          balance: { decrement: currentSale.total },
         },
       });
-      if (vInv?.stock !== null && vInv?.stock !== undefined) {
-        await (prisma as any).variantInventory.update({
-          where: { id: vInv.id },
-          data: { stock: vInv.stock + item.quantity },
+    }
+
+    for (const item of currentSale.items) {
+      if (item.variantId) {
+        const variantInventory = await tx.variantInventory.findFirst({
+          where: { variantId: item.variantId, branchId: currentSale.branchId },
+          select: { id: true, stock: true },
         });
+
+        if (variantInventory && typeof variantInventory.stock === "number") {
+          await tx.variantInventory.update({
+            where: { id: variantInventory.id },
+            data: { stock: { increment: item.quantity } },
+          });
+        }
+        continue;
       }
-    } else if (item.productId) {
-      // Restaurar stock de producto base
-      const inventory = await (prisma as any).inventoryRecord.findUnique({
-        where: {
-          productId_branchId: {
-            productId: item.productId,
-            branchId: sale.branchId,
-          },
-        },
-      });
 
-      if (inventory?.stock !== null && inventory?.stock !== undefined) {
-        await (prisma as any).inventoryRecord.update({
-          where: { id: inventory.id },
-          data: { stock: inventory.stock + item.quantity },
+      if (item.productId) {
+        const inventory = await tx.inventoryRecord.findFirst({
+          where: { productId: item.productId, branchId: currentSale.branchId },
+          select: { id: true, stock: true },
         });
+
+        if (inventory && typeof inventory.stock === "number") {
+          await tx.inventoryRecord.update({
+            where: { id: inventory.id },
+            data: { stock: { increment: item.quantity } },
+          });
+        }
       }
     }
-  }
 
-  await prisma.sale.update({
-    where: { id },
-    data: { voided: true, voidedAt: new Date() },
+    await tx.sale.update({
+      where: { id: sale.id },
+      data: { voided: true, voidedAt: new Date() },
+    });
   });
 
   return NextResponse.json({ ok: true });

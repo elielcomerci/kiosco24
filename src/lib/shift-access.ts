@@ -1,12 +1,14 @@
-import { type Shift, type UserRole } from "@prisma/client";
+import { type UserRole } from "@prisma/client";
 import { NextResponse } from "next/server";
 
-import { prisma } from "@/lib/prisma";
+import { Prisma, prisma, type Shift } from "@/lib/prisma";
 
 type SessionUserLike = {
   role?: UserRole | null;
   employeeId?: string | null;
 };
+
+type ShiftDbClient = Prisma.TransactionClient | typeof prisma;
 
 export type ShiftWithEmployee = Shift & {
   employee?: {
@@ -45,25 +47,75 @@ export function createShiftForbiddenResponse(shift: { employeeName: string; empl
   );
 }
 
-export async function getActiveShift(branchId: string) {
-  return prisma.shift.findFirst({
+export async function getActiveShift(branchId: string, db: ShiftDbClient = prisma): Promise<ShiftWithEmployee | null> {
+  const branch = await db.branch.findUnique({
+    where: { id: branchId },
+    select: {
+      id: true,
+      activeShiftId: true,
+      activeShift: {
+        include: {
+          employee: {
+            select: { id: true, name: true },
+          },
+        },
+      },
+    },
+  });
+
+  if (!branch) {
+    return null;
+  }
+
+  if (branch.activeShift && !branch.activeShift.closedAt) {
+    return branch.activeShift as ShiftWithEmployee;
+  }
+
+  const latestOpenShift = await db.shift.findFirst({
     where: { branchId, closedAt: null },
-    include: { employee: { select: { id: true, name: true } } },
+    include: {
+      employee: {
+        select: { id: true, name: true },
+      },
+    },
     orderBy: { openedAt: "desc" },
   });
+
+  if (!latestOpenShift) {
+    if (branch.activeShiftId) {
+      await db.branch.update({
+        where: { id: branchId },
+        data: { activeShiftId: null },
+      });
+    }
+    return null;
+  }
+
+  if (branch.activeShiftId !== latestOpenShift.id) {
+    await db.branch.update({
+      where: { id: branchId },
+      data: { activeShiftId: latestOpenShift.id },
+    });
+  }
+
+  return latestOpenShift as ShiftWithEmployee;
 }
 
-export async function computeShiftExpectedAmount(shiftId: string, openingAmount: number) {
+export async function computeShiftExpectedAmount(
+  shiftId: string,
+  openingAmount: number,
+  db: ShiftDbClient = prisma,
+) {
   const [cashSales, expenses, withdrawals] = await Promise.all([
-    prisma.sale.aggregate({
+    db.sale.aggregate({
       where: { shiftId, paymentMethod: "CASH", voided: false },
       _sum: { total: true },
     }),
-    prisma.expense.aggregate({
+    db.expense.aggregate({
       where: { shiftId },
       _sum: { amount: true },
     }),
-    prisma.withdrawal.aggregate({
+    db.withdrawal.aggregate({
       where: { shiftId },
       _sum: { amount: true },
     }),

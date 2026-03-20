@@ -44,9 +44,9 @@ export default function CajaTotalsBreakdownModal({
         style={{ maxWidth: "420px", width: "95%", maxHeight: "85dvh", overflowY: "auto", padding: "20px" }}
       >
         <div style={{ display: "grid", gap: "6px", marginBottom: "16px" }}>
-          <h2 style={{ fontSize: "20px", fontWeight: 800, margin: 0 }}>Caja del dia</h2>
+          <h2 style={{ fontSize: "20px", fontWeight: 800, margin: 0 }}>Caja del turno</h2>
           <div style={{ fontSize: "13px", color: "var(--text-3)" }}>
-            Desglose rapido de caja fisica y medios de pago.
+            Desglose rapido del efectivo esperado y los medios de pago registrados en este turno.
           </div>
         </div>
 
@@ -99,13 +99,15 @@ export default function CajaTotalsBreakdownModal({
             <div>
               <div style={{ fontWeight: 700 }}>Medios de pago</div>
               <div style={{ fontSize: "12px", color: "var(--text-3)" }}>
-                Total vendido hoy: {formatARS(totalVentas)}
+                Total vendido en este turno: {formatARS(totalVentas)}
               </div>
             </div>
           </div>
 
           {paymentRows.length === 0 ? (
-            <div style={{ fontSize: "13px", color: "var(--text-3)" }}>Todavia no hay ventas registradas hoy.</div>
+            <div style={{ fontSize: "13px", color: "var(--text-3)" }}>
+              Todavia no hay ventas registradas en este turno.
+            </div>
           ) : (
             <div style={{ display: "grid", gap: "8px" }}>
               {paymentRows.map((row) => {

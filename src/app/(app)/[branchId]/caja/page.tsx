@@ -103,6 +103,14 @@ function AddStockActionIcon() {
   );
 }
 
+function createClientSaleId() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+
+  return `sale-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 export default function CajaPage() {
   const params = useParams();
   const branchId = params.branchId as string;
@@ -620,17 +628,19 @@ export default function CajaPage() {
     const received = method === "CASH" && receivedAmount
       ? parseFloat(receivedAmount)
       : undefined;
+    const clientSaleId = createClientSaleId();
+    const reqBody = {
+      items: ticket,
+      total,
+      paymentMethod: method,
+      receivedAmount: received,
+      creditCustomerId,
+      createdByEmployeeId: employeeId,
+      clientSaleId,
+      branchId,
+    };
 
     try {
-        const reqBody = {
-          items: ticket,
-          total,
-          paymentMethod: method,
-          receivedAmount: received,
-          creditCustomerId,
-          createdByEmployeeId: employeeId,
-        };
-
         const newSale: Sale = {
           id: "", // Will be set if online
           total,
@@ -700,14 +710,7 @@ export default function CajaPage() {
 
       // Fallback: intentar guardar como pendiente aunque pensáramos que había conexión
       try {
-        await savePendingSale({
-          items: ticket,
-          total,
-          paymentMethod: method,
-          receivedAmount: received,
-          creditCustomerId,
-          createdByEmployeeId: employeeId,
-        });
+        await savePendingSale(reqBody);
         alert("Hubo un problema de conexión. La venta se guardó como pendiente para sincronizar.");
       } catch (inner: any) {
         console.error("[Ventas] Error adicional al guardar venta offline en fallback:", inner);

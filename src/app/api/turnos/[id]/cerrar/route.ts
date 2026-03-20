@@ -6,6 +6,7 @@ import {
   canManageShiftLifecycle,
   computeShiftExpectedAmount,
   createShiftForbiddenResponse,
+  getActiveShift,
 } from "@/lib/shift-access";
 
 // POST /api/turnos/[id]/cerrar
@@ -18,8 +19,13 @@ export async function POST(
 
   const { id } = await params;
   const { closingAmount, note } = await req.json();
+  const closingAmountNumber = Number(closingAmount);
   const branchId = await getBranchId(req, session.user.id);
   if (!branchId) return NextResponse.json({ error: "No branch" }, { status: 404 });
+
+  if (!Number.isFinite(closingAmountNumber) || closingAmountNumber < 0) {
+    return NextResponse.json({ error: "El monto de cierre no es valido." }, { status: 400 });
+  }
 
   const shift = await prisma.shift.findUnique({
     where: { id },
@@ -35,22 +41,36 @@ export async function POST(
     return NextResponse.json({ error: "Turno invalido" }, { status: 404 });
   }
 
+  const activeShift = await getActiveShift(branchId);
+  if (!activeShift || activeShift.id !== shift.id) {
+    return NextResponse.json({ error: "Solo se puede cerrar el turno activo actual." }, { status: 409 });
+  }
+
   if (!canManageShiftLifecycle(session.user as any, shift)) {
     return createShiftForbiddenResponse(shift);
   }
-  const expectedAmount = await computeShiftExpectedAmount(id, shift.openingAmount);
 
-  const difference = closingAmount - expectedAmount;
+  const closedShift = await prisma.$transaction(async (tx) => {
+    const expectedAmount = await computeShiftExpectedAmount(id, shift.openingAmount, tx);
+    const difference = closingAmountNumber - expectedAmount;
 
-  const closedShift = await prisma.shift.update({
-    where: { id },
-    data: {
-      closingAmount,
-      expectedAmount,
-      difference,
-      note,
-      closedAt: new Date(),
-    },
+    const updatedShift = await tx.shift.update({
+      where: { id },
+      data: {
+        closingAmount: closingAmountNumber,
+        expectedAmount,
+        difference,
+        note,
+        closedAt: new Date(),
+      },
+    });
+
+    await tx.branch.update({
+      where: { id: branchId },
+      data: { activeShiftId: null },
+    });
+
+    return updatedShift;
   });
 
   return NextResponse.json(closedShift);

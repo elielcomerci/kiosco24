@@ -827,6 +827,10 @@ export default function CajaPage() {
     ? parseFloat(receivedAmount) - total
     : null;
 
+  useEffect(() => {
+    setSelectedIndex(0);
+  }, [cajaSearch, activeCategory]);
+
   // ─── Confirmed sale overlay ────────────────────────────────────────────────
   if (confirmedSale) {
     return (
@@ -888,10 +892,6 @@ export default function CajaPage() {
       </div>
     );
   }
-
-  useEffect(() => {
-    setSelectedIndex(0);
-  }, [cajaSearch, activeCategory]);
 
   const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "ArrowDown") {

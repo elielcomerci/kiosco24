@@ -785,11 +785,12 @@ export default function CajaPage() {
   }, [sellableProducts, activeCategory, cajaSearch]);
 
   const handleBarcodeScan = useCallback((result: string) => {
+    setShowScanner(false);
+
     // 1. Buscar en productos base
     const product = sellableProducts.find(p => p.barcode === result);
     if (product) {
       handleProductTap(product);
-      setShowScanner(false);
       return;
     }
 
@@ -799,13 +800,16 @@ export default function CajaPage() {
         const variant = p.variants.find(v => v.barcode === result);
         if (variant) {
           handleProductTap(p, variant);
-          setShowScanner(false);
           return;
         }
       }
     }
 
     // Not found
+    window.setTimeout(() => {
+      alert(`Codigo ${result} no encontrado.`);
+    }, 0);
+    return;
     alert(`Código ${result} no encontrado.`);
   }, [handleProductTap, sellableProducts]);
   handleBarcodeScanRef.current = handleBarcodeScan;

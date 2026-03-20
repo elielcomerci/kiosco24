@@ -28,10 +28,13 @@ interface Product {
   cost: number | null;
   emoji: string | null;
   barcode: string | null;
+  internalCode: string | null;
   image: string | null;
   brand: string | null;
   description: string | null;
   presentation: string | null;
+  supplierName: string | null;
+  notes: string | null;
   categoryId: string | null;
   stock: number | null;
   minStock: number | null;
@@ -65,10 +68,13 @@ function ProductModal({
   const [name, setName] = useState(product?.name || "");
   const [emoji, setEmoji] = useState(product?.emoji || "");
   const [barcode, setBarcode] = useState(product?.barcode || "");
+  const [internalCode, setInternalCode] = useState(product?.internalCode || "");
   const [image, setImage] = useState(product?.image || "");
   const [brand, setBrand] = useState(product?.brand || "");
   const [description, setDescription] = useState(product?.description || "");
   const [presentation, setPresentation] = useState(product?.presentation || "");
+  const [supplierName, setSupplierName] = useState(product?.supplierName || "");
+  const [notes, setNotes] = useState(product?.notes || "");
   const [categoryId, setCategoryId] = useState(product?.categoryId || "");
   const [price, setPrice] = useState(product?.price?.toString() || "");
   const [cost, setCost] = useState(product?.cost?.toString() || "");
@@ -179,10 +185,13 @@ function ProductModal({
       name: name.trim(),
       emoji: emoji || null,
       barcode: hasVariants ? null : (barcode.trim() || null),
+      internalCode: internalCode.trim() || null,
       image: image || null,
       brand: brand.trim() || null,
       description: description.trim() || null,
       presentation: presentation.trim() || null,
+      supplierName: supplierName.trim() || null,
+      notes: notes.trim() || null,
       categoryId: categoryId || null,
       price: toNum(price),
       cost: toNum(cost),
@@ -350,6 +359,18 @@ function ProductModal({
           )}
         </div>
 
+        <div style={{ marginBottom: "12px" }}>
+          <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase" }}>
+            Codigo interno
+          </label>
+          <input
+            className="input"
+            placeholder="SKU o referencia propia"
+            value={internalCode}
+            onChange={(e) => setInternalCode(e.target.value)}
+          />
+        </div>
+
         {/* Emoji Picker */}
         <div style={{ display: "flex", gap: "10px", alignItems: "center", marginBottom: "12px" }}>
           <button
@@ -493,6 +514,18 @@ function ProductModal({
 
         <div style={{ marginBottom: "12px" }}>
           <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase" }}>
+            Proveedor habitual
+          </label>
+          <input
+            className="input"
+            placeholder="Opcional"
+            value={supplierName}
+            onChange={(e) => setSupplierName(e.target.value)}
+          />
+        </div>
+
+        <div style={{ marginBottom: "12px" }}>
+          <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase" }}>
             Descripcion
           </label>
           <textarea
@@ -501,6 +534,20 @@ function ProductModal({
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             rows={3}
+            style={{ width: "100%", resize: "vertical" }}
+          />
+        </div>
+
+        <div style={{ marginBottom: "12px" }}>
+          <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase" }}>
+            Notas internas
+          </label>
+          <textarea
+            className="input"
+            placeholder="Dato util para tu equipo: proveedor, ubicacion, compra minima..."
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            rows={2}
             style={{ width: "100%", resize: "vertical" }}
           />
         </div>
@@ -897,7 +944,20 @@ export default function ProductosPage() {
   }, []);
 
   const filtered = products.filter((p) => {
-    const matchSearch = p.name.toLowerCase().includes(search.toLowerCase());
+    const normalizedSearch = search.toLowerCase();
+    const searchHaystack = [
+      p.name,
+      p.barcode,
+      p.internalCode,
+      p.brand,
+      p.presentation,
+      p.supplierName,
+      p.description,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    const matchSearch = searchHaystack.includes(normalizedSearch);
     const matchVisibility = showHidden ? true : p.showInGrid;
     return matchSearch && matchVisibility;
   });
@@ -1042,7 +1102,7 @@ export default function ProductosPage() {
           <input
             ref={searchInputRef}
             className="input"
-            placeholder="🔍 Buscar producto..."
+            placeholder="🔍 Buscar por nombre, codigo o proveedor..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             style={{ flex: 1 }}
@@ -1107,6 +1167,9 @@ export default function ProductosPage() {
                 {p.emoji && <div style={{ fontSize: "22px" }}>{p.emoji}</div>}
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 600 }}>{p.name}</div>
+                  <div style={{ fontSize: "12px", color: "var(--text-3)" }}>
+                    {[p.internalCode, p.barcode, p.supplierName].filter(Boolean).join(" · ") || "Sin codigo extra"}
+                  </div>
                   {(() => {
                     const totalStock = p.variants && p.variants.length > 0
                       ? p.variants.reduce((acc, v) => acc + (v.stock || 0), 0)
@@ -1148,6 +1211,9 @@ export default function ProductosPage() {
                   <div style={{ fontWeight: 600 }}>
                     {p.name}
                     {!p.showInGrid && <span style={{ fontSize: "10px", color: "var(--text-3)", marginLeft: "6px" }}>oculto</span>}
+                  </div>
+                  <div style={{ fontSize: "12px", color: "var(--text-3)" }}>
+                    {[p.internalCode, p.barcode, p.supplierName].filter(Boolean).join(" · ") || "Sin codigo extra"}
                   </div>
                   {(() => {
                     const totalStock = p.variants && p.variants.length > 0
@@ -1387,7 +1453,7 @@ export default function ProductosPage() {
             <thead>
               <tr>
                 <th>Producto</th>
-                <th>Codigo / Presentacion</th>
+                <th>Codigo / Referencia</th>
                 <th>Precio</th>
                 <th>Stock</th>
               </tr>
@@ -1404,12 +1470,12 @@ export default function ProductosPage() {
                     <td>
                       <div style={{ fontWeight: 700 }}>{product.name}</div>
                       <div style={{ fontSize: "8.5pt", color: "#6b7280" }}>
-                        {[product.brand, product.description].filter(Boolean).join(" · ") ||
+                        {[product.brand, product.supplierName, product.description].filter(Boolean).join(" · ") ||
                           (product.showInGrid ? "Visible" : "Oculto")}
                       </div>
                     </td>
                     <td>
-                      {[product.barcode, product.presentation].filter(Boolean).join(" · ") || "Sin dato"}
+                      {[product.internalCode, product.barcode, product.presentation].filter(Boolean).join(" · ") || "Sin dato"}
                     </td>
                     <td>{formatARS(product.price)}</td>
                     <td>{totalStock}</td>

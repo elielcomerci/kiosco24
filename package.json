@@ -7,6 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "typegen": "next typegen",
+    "typecheck": "npm run typegen && tsc --noEmit",
+    "verify:release": "npm run typecheck && npm run build",
     "postinstall": "prisma generate"
   },
   "dependencies": {
@@ -21,6 +24,7 @@
     "class-variance-authority": "^0.7.1",
     "cloudinary": "^2.9.0",
     "clsx": "^2.1.1",
+    "geist": "^1.7.0",
     "html5-qrcode": "^2.3.8",
     "idb": "^8.0.3",
     "next": "16.1.6",

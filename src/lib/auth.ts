@@ -9,6 +9,14 @@ import { getKioscoAccessContextByAccessKey } from "@/lib/access-control";
 import { InvalidEmployeePinError, verifyEmployeePinValue } from "@/lib/employee-pin";
 import { UserRole } from "@prisma/client";
 
+const authSecret =
+  process.env.AUTH_SECRET?.trim() ||
+  (process.env.NODE_ENV === "development" ? "dev-only-auth-secret" : undefined);
+
+if (!authSecret) {
+  throw new Error("AUTH_SECRET is required outside development.");
+}
+
 declare module "next-auth" {
   interface Session {
     user: {
@@ -38,7 +46,7 @@ declare module "next-auth/jwt" {
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(prisma as any),
   session: { strategy: "jwt" },
-  secret: process.env.AUTH_SECRET || "8f9e2b1c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u",
+  secret: authSecret,
   trustHost: true,
   debug: process.env.NODE_ENV === "development",
   providers: [

@@ -128,18 +128,21 @@ model Category {
 }
 
 model Product {
-  id         String            @id @default(cuid())
-  name       String
-  barcode    String?
-  emoji      String?
-  image      String? // Cloudinary URL
-  brand      String?
-  description String?
-  presentation String?
-  categoryId String?
-  category   Category?         @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  platformProductId String?
-  platformProduct PlatformProduct? @relation(fields: [platformProductId], references: [id], onDelete: SetNull)
+    id         String            @id @default(cuid())
+    name       String
+    barcode    String?
+    internalCode String?
+    emoji      String?
+    image      String? // Cloudinary URL
+    brand      String?
+    description String?
+    presentation String?
+    supplierName String?
+    notes      String?           @db.Text
+    categoryId String?
+    category   Category?         @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+    platformProductId String?
+    platformProduct PlatformProduct? @relation(fields: [platformProductId], references: [id], onDelete: SetNull)
   kioscoId   String
   kiosco     Kiosco            @relation(fields: [kioscoId], references: [id], onDelete: Cascade)
   inventory  InventoryRecord[]
@@ -148,11 +151,12 @@ model Product {
   createdAt  DateTime          @default(now())
   updatedAt  DateTime          @updatedAt
 
-  @@index([kioscoId])
-  @@index([categoryId])
-  @@index([barcode])
-  @@index([platformProductId])
-}
+    @@index([kioscoId])
+    @@index([categoryId])
+    @@index([barcode])
+    @@index([internalCode])
+    @@index([platformProductId])
+  }
 
 model PlatformProduct {
   id           String                     @id @default(cuid())

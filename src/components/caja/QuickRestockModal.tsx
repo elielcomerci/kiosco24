@@ -26,10 +26,12 @@ interface Product {
   id: string;
   name: string;
   barcode?: string | null;
+  internalCode?: string | null;
   image?: string | null;
   brand?: string | null;
   description?: string | null;
   presentation?: string | null;
+  supplierName?: string | null;
   variants?: ProductVariant[];
 }
 
@@ -133,7 +135,20 @@ export default function QuickRestockModal({
     }
 
     if (!foundProduct) {
-      const matches = availableProducts.filter((product) => product.name.toLowerCase().includes(term));
+      const matches = availableProducts.filter((product) =>
+        [
+          product.name,
+          product.barcode,
+          product.internalCode,
+          product.brand,
+          product.presentation,
+          product.supplierName,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase()
+          .includes(term),
+      );
       if (matches.length === 1 && (!matches[0].variants || matches[0].variants.length === 0)) {
         foundProduct = matches[0];
       }
@@ -230,6 +245,14 @@ export default function QuickRestockModal({
     for (const product of availableProducts) {
       if (product.name.toLowerCase().includes(term) || product.barcode === search) {
         results.push({ product });
+      } else if (
+        [product.internalCode, product.brand, product.presentation, product.supplierName]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase()
+          .includes(term)
+      ) {
+        results.push({ product });
       }
 
       for (const variant of product.variants || []) {
@@ -314,9 +337,11 @@ export default function QuickRestockModal({
         name: created.name || createDraft.name.trim(),
         barcode: created.barcode || createDraft.code,
         image: created.image || createDraft.image,
+        internalCode: null,
         brand: created.brand || createDraft.brand || null,
         description: created.description || createDraft.description || null,
         presentation: created.presentation || createDraft.presentation || null,
+        supplierName: null,
         variants: [],
       };
 

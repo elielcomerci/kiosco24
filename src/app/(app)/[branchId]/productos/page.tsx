@@ -9,6 +9,7 @@ import {
   normalizeBarcodeCode,
 } from "@/lib/barcode-suggestions";
 import BarcodeScanner from "@/components/caja/BarcodeScanner";
+import CategoryModal, { type CategoryRecord } from "@/components/config/CategoryModal";
 import BackButton from "@/components/ui/BackButton";
 import PrintablePage from "@/components/print/PrintablePage";
 import { useRegisterShortcuts } from "@/components/ui/BranchWorkspace";
@@ -44,11 +45,7 @@ interface Product {
   variants?: Variant[];
 }
 
-interface Category {
-  id: string;
-  name: string;
-  color: string | null;
-}
+type Category = CategoryRecord;
 
 const EMOJIS = ["🧃", "🥤", "🍫", "🍬", "🍭", "🥜", "🧀", "🍞", "🥛", "🧹", "🧴", "🪥", "📦", "💊", "🪙", "🎴"];
 
@@ -58,11 +55,13 @@ function ProductModal({
   categories,
   onClose,
   onSave,
+  onCategoriesChange,
 }: {
   product: Product | null;
   categories: Category[];
   onClose: () => void;
   onSave: () => void;
+  onCategoriesChange: (categories: Category[]) => void;
 }) {
   const isNew = !product;
   const [name, setName] = useState(product?.name || "");
@@ -86,6 +85,7 @@ function ProductModal({
   const [confirming, setConfirming] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [variants, setVariants] = useState<Variant[]>(product?.variants || []);
   const [hasVariants, setHasVariants] = useState((product?.variants?.length ?? 0) > 0);
   const [suggestion, setSuggestion] = useState<BarcodeSuggestion | null>(null);
@@ -233,6 +233,22 @@ function ProductModal({
     await fetch(`/api/productos/${product!.id}`, { method: "DELETE" });
     setLoading(false);
     onSave();
+  };
+
+  const refreshCategories = async (selectedCategoryId?: string) => {
+    const catRes = await fetch("/api/categorias");
+    if (!catRes.ok) {
+      alert("No se pudieron actualizar las categorias.");
+      return;
+    }
+
+    const catData = await catRes.json();
+    const nextCategories = Array.isArray(catData) ? (catData as Category[]) : [];
+    onCategoriesChange(nextCategories);
+
+    if (selectedCategoryId) {
+      setCategoryId(selectedCategoryId);
+    }
   };
 
   return (
@@ -430,9 +446,19 @@ function ProductModal({
         {/* Categoría & Foto */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "10px", marginBottom: "12px", alignItems: "flex-end" }}>
           <div>
-            <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase", display: "block", marginBottom: "4px" }}>
-              Categoría
-            </label>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", marginBottom: "4px" }}>
+              <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase", display: "block" }}>
+                Categoría
+              </label>
+              <button
+                type="button"
+                className="btn btn-sm btn-ghost"
+                style={{ padding: "4px 10px", fontSize: "12px", flexShrink: 0 }}
+                onClick={() => setShowCategoryModal(true)}
+              >
+                + Nueva
+              </button>
+            </div>
             <select
               className="input"
               value={categoryId}
@@ -893,6 +919,16 @@ function ProductModal({
             setShowScanner(false);
           }}
           onClose={() => setShowScanner(false)}
+        />
+      )}
+      {showCategoryModal && (
+        <CategoryModal
+          category="new"
+          onClose={() => setShowCategoryModal(false)}
+          onSave={(savedCategory) => {
+            setShowCategoryModal(false);
+            void refreshCategories(savedCategory?.id ?? undefined);
+          }}
         />
       )}
     </div>
@@ -1417,6 +1453,7 @@ export default function ProductosPage() {
           categories={categories}
           onClose={() => setModal(null)}
           onSave={() => { setModal(null); fetchProducts(); }}
+          onCategoriesChange={setCategories}
         />
       )}
     </div>

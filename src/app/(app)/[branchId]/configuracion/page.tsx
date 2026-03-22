@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import BackButton from "@/components/ui/BackButton";
 import ThemeEditor from "@/components/ui/ThemeEditor";
@@ -603,7 +603,7 @@ export default function ConfiguracionPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentBranch]);
 
-  const fetchEmployees = async () => {
+  const fetchEmployees = useCallback(async () => {
     setLoadingEmployees(true);
     const res = await fetch("/api/empleados", {
       headers: {
@@ -615,9 +615,9 @@ export default function ConfiguracionPage() {
       setEmployees(data);
     }
     setLoadingEmployees(false);
-  };
+  }, [branchId]);
 
-  const fetchBranches = async () => {
+  const fetchBranches = useCallback(async () => {
     setLoadingBranches(true);
     const res = await fetch("/api/branches");
     if(res.ok) {
@@ -625,9 +625,9 @@ export default function ConfiguracionPage() {
       setBranches(data.branches || []);
     }
     setLoadingBranches(false);
-  };
+  }, []);
 
-  const fetchCategories = async () => {
+  const fetchCategories = useCallback(async () => {
     setLoadingCategories(true);
     const res = await fetch("/api/categorias");
     if(res.ok) {
@@ -635,9 +635,9 @@ export default function ConfiguracionPage() {
       setCategories(Array.isArray(data) ? data : []);
     }
     setLoadingCategories(false);
-  };
+  }, []);
 
-  const fetchCurrentBranch = async () => {
+  const fetchCurrentBranch = useCallback(async () => {
     setLoadingCurrentBranch(true);
     const res = await fetch(`/api/branches`); // Reuse GET all or specific if needed
     if (res.ok) {
@@ -652,7 +652,7 @@ export default function ConfiguracionPage() {
       }
     }
     setLoadingCurrentBranch(false);
-  };
+  }, [branchId]);
 
   const copyAccessValue = async (value: string, successMessage: string) => {
     if (!value) return;
@@ -665,7 +665,7 @@ export default function ConfiguracionPage() {
     }
   };
 
-  const fetchSubscription = async () => {
+  const fetchSubscription = useCallback(async () => {
     setLoadingSubscription(true);
     try {
       const res = await fetch("/api/subscription/status");
@@ -675,7 +675,7 @@ export default function ConfiguracionPage() {
       }
     } catch {}
     setLoadingSubscription(false);
-  };
+  }, []);
 
   useEffect(() => {
     fetchEmployees();
@@ -683,7 +683,7 @@ export default function ConfiguracionPage() {
     fetchCategories();
     fetchCurrentBranch();
     fetchSubscription();
-  }, [branchId]);
+  }, [fetchEmployees, fetchBranches, fetchCategories, fetchCurrentBranch, fetchSubscription]);
 
   const handleSaveBranchSettings = async () => {
     setSavingBranch(true);
@@ -777,6 +777,7 @@ export default function ConfiguracionPage() {
           <div style={{ display: "flex", gap: "16px", alignItems: "center", marginBottom: "8px" }}>
             <div style={{ position: "relative", width: "80px", height: "80px", borderRadius: "12px", border: "2px dashed var(--border)", overflow: "hidden", background: "var(--surface-2)", display: "flex", alignItems: "center", justifyContent: "center" }}>
               {editLogoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
                 <img src={editLogoUrl} alt="Logo" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
               ) : uploadingLogo ? (
                 <span className="animate-pulse">...</span>

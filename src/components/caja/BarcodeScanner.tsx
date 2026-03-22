@@ -221,7 +221,8 @@ export default function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps)
                 height: "100%",
                 display: "block",
                 background: "#111",
-                objectFit: "contain",
+                objectFit: "cover",
+                objectPosition: "center center",
               }}
             />
             <div

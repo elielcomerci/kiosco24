@@ -2,6 +2,10 @@
 
 Este documento concentra la pasada minima antes de instalar Kiosco24 en un local real.
 
+Complemento recomendado:
+
+- Ver [NEGOCIO-REAL.md](/c:/Users/eliel/kiosco24/NEGOCIO-REAL.md) para el checklist de madurez y el plan posterior al piloto.
+
 ## Estado Actual
 
 Validado al 20/03/2026:

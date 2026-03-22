@@ -46,6 +46,7 @@ interface Product {
 }
 
 type Category = CategoryRecord;
+const AUTO_SUGGESTED_CATEGORY_COLOR = "#64748b";
 
 const EMOJIS = ["🧃", "🥤", "🍫", "🍬", "🍭", "🥜", "🧀", "🍞", "🥛", "🧹", "🧴", "🪥", "📦", "💊", "🪙", "🎴"];
 
@@ -86,6 +87,7 @@ function ProductModal({
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [applyingSuggestion, setApplyingSuggestion] = useState(false);
   const [variants, setVariants] = useState<Variant[]>(product?.variants || []);
   const [hasVariants, setHasVariants] = useState((product?.variants?.length ?? 0) > 0);
   const [suggestion, setSuggestion] = useState<BarcodeSuggestion | null>(null);
@@ -113,13 +115,80 @@ function ProductModal({
     return isNaN(n) ? null : n;
   };
 
-  const applySuggestion = (nextSuggestion: BarcodeSuggestion) => {
+  const findCategoryByName = (categoryName: string, sourceCategories: Category[] = categories) => {
+    const normalizedCategoryName = categoryName.trim().toLocaleLowerCase("es-AR");
+    return (
+      sourceCategories.find(
+        (category) =>
+          category.name.trim().toLocaleLowerCase("es-AR") === normalizedCategoryName,
+      ) ?? null
+    );
+  };
+
+  const refreshCategories = async (selectedCategoryId?: string) => {
+    const catRes = await fetch("/api/categorias");
+    if (!catRes.ok) {
+      alert("No se pudieron actualizar las categorias.");
+      return null;
+    }
+
+    const catData = await catRes.json();
+    const nextCategories = Array.isArray(catData) ? (catData as Category[]) : [];
+    onCategoriesChange(nextCategories);
+
+    if (selectedCategoryId) {
+      setCategoryId(selectedCategoryId);
+    }
+
+    return nextCategories;
+  };
+
+  const ensureSuggestionCategory = async (categoryName: string) => {
+    const trimmedCategoryName = categoryName.trim();
+    if (!trimmedCategoryName) {
+      return null;
+    }
+
+    const existingCategory = findCategoryByName(trimmedCategoryName);
+    if (existingCategory) {
+      setCategoryId(existingCategory.id);
+      return existingCategory.id;
+    }
+
+    const res = await fetch("/api/categorias", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: trimmedCategoryName,
+        color: AUTO_SUGGESTED_CATEGORY_COLOR,
+        showInGrid: true,
+      }),
+    });
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      throw new Error(data?.error || "No se pudo crear la categoria sugerida.");
+    }
+
+    const savedCategory = (await res.json()) as Category;
+    await refreshCategories(savedCategory.id);
+    return savedCategory.id;
+  };
+
+  const applySuggestion = async (nextSuggestion: BarcodeSuggestion) => {
+    setApplyingSuggestion(true);
+
+    try {
     const suggestedVariants = (nextSuggestion.variants ?? []).map((variant) => ({
       name: variant.name,
       barcode: variant.barcode,
       stock: null,
       minStock: null,
     }));
+
+      if (nextSuggestion.categoryName) {
+        await ensureSuggestionCategory(nextSuggestion.categoryName);
+      }
 
       setName(nextSuggestion.name);
       setBrand(nextSuggestion.brand || "");
@@ -140,6 +209,12 @@ function ProductModal({
     setSuggestion(nextSuggestion);
     setLookupState("ready");
     setDismissedSuggestionCode(null);
+    } catch (error) {
+      console.error(error);
+      alert(error instanceof Error ? error.message : "No se pudo aplicar la sugerencia.");
+    } finally {
+      setApplyingSuggestion(false);
+    }
   };
 
   useEffect(() => {
@@ -233,22 +308,6 @@ function ProductModal({
     await fetch(`/api/productos/${product!.id}`, { method: "DELETE" });
     setLoading(false);
     onSave();
-  };
-
-  const refreshCategories = async (selectedCategoryId?: string) => {
-    const catRes = await fetch("/api/categorias");
-    if (!catRes.ok) {
-      alert("No se pudieron actualizar las categorias.");
-      return;
-    }
-
-    const catData = await catRes.json();
-    const nextCategories = Array.isArray(catData) ? (catData as Category[]) : [];
-    onCategoriesChange(nextCategories);
-
-    if (selectedCategoryId) {
-      setCategoryId(selectedCategoryId);
-    }
   };
 
   return (
@@ -355,6 +414,11 @@ function ProductModal({
                       {[suggestion?.brand, suggestion?.presentation, suggestion?.description].filter(Boolean).join(" · ")}
                     </div>
                   )}
+                  {visibleSuggestion.categoryName && (
+                    <div style={{ fontSize: "12px", color: "var(--text-3)", marginTop: "4px" }}>
+                      Categoria sugerida: {visibleSuggestion.categoryName}
+                    </div>
+                  )}
                 </div>
               </div>
               <div style={{ display: "flex", gap: "8px" }}>
@@ -367,8 +431,13 @@ function ProductModal({
                 >
                   Ocultar
                 </button>
-                <button className="btn btn-green" style={{ flex: 1 }} onClick={() => visibleSuggestion && applySuggestion(visibleSuggestion)}>
-                  Usar
+                <button
+                  className="btn btn-green"
+                  style={{ flex: 1 }}
+                  onClick={() => visibleSuggestion && void applySuggestion(visibleSuggestion)}
+                  disabled={applyingSuggestion}
+                >
+                  {applyingSuggestion ? "Aplicando..." : "Usar"}
                 </button>
               </div>
             </div>
@@ -823,7 +892,7 @@ function ProductModal({
                       style={{ flex: 1 }}
                       onClick={() => {
                         if (visibleSuggestion) {
-                          applySuggestion(visibleSuggestion);
+                          void applySuggestion(visibleSuggestion);
                         }
                       }}
                     >

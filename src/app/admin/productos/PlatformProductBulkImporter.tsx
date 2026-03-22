@@ -11,9 +11,9 @@ interface ImportSummary {
 }
 
 const EXAMPLE_ROWS = [
-  "barcode;nombre;marca;presentacion;descripcion;imagen;estado",
-  "7790895000998;Coca-Cola 500 ml;Coca-Cola;500 ml;Gaseosa cola;;APPROVED",
-  "7790040171207;Papas Lays Clasicas;Lays;150 g;Papas fritas clasicas;;APROBADO",
+  "barcode;nombre;marca;categoria;presentacion;descripcion;imagen;estado",
+  "7790895000998;Coca-Cola 500 ml;Coca-Cola;Bebidas;500 ml;Gaseosa cola;;APPROVED",
+  "7790040171207;Papas Lays Clasicas;Lays;Snacks;150 g;Papas fritas clasicas;;APROBADO",
 ];
 
 function countRows(raw: string) {
@@ -108,7 +108,7 @@ export default function PlatformProductBulkImporter() {
           gap: "8px",
         }}
       >
-        <div>Formato recomendado: `barcode;nombre;marca;presentacion;descripcion;imagen;estado`</div>
+        <div>Formato recomendado: `barcode;nombre;marca;categoria;presentacion;descripcion;imagen;estado`</div>
         <div>Tambien acepta tabulaciones o comas. `estado` puede ser `APPROVED`, `APROBADO`, `HIDDEN` u `OCULTO`.</div>
         <pre
           style={{

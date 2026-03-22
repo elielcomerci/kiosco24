@@ -4,13 +4,17 @@ import {
 } from "@prisma/client";
 
 import type { BarcodeSuggestion } from "@/lib/barcode-suggestions";
-import { DEFAULT_KIOSCO_PRODUCTS } from "@/lib/default-kiosco-catalog";
+import {
+  DEFAULT_KIOSCO_CATEGORIES,
+  DEFAULT_KIOSCO_PRODUCTS,
+} from "@/lib/default-kiosco-catalog";
 import { prisma } from "@/lib/prisma";
 
 type PlatformProductDraft = {
   barcode?: string | null;
   name: string;
   brand?: string | null;
+  categoryName?: string | null;
   description?: string | null;
   presentation?: string | null;
   image?: string | null;
@@ -48,6 +52,9 @@ function normalizeVariants(
 }
 
 let seedPromise: Promise<void> | null = null;
+const defaultCategoryNameByKey = new Map(
+  DEFAULT_KIOSCO_CATEGORIES.map((category) => [category.key, category.name]),
+);
 
 export async function ensurePlatformCatalogSeeded() {
   const existing = await prisma.platformProduct.findMany({
@@ -76,6 +83,7 @@ export async function ensurePlatformCatalogSeeded() {
           update: {
             name: product.name,
             brand: product.brand ?? null,
+            categoryName: defaultCategoryNameByKey.get(product.categoryKey) ?? null,
             description: product.description ?? null,
             presentation: product.presentation ?? null,
             image: null,
@@ -85,6 +93,7 @@ export async function ensurePlatformCatalogSeeded() {
             barcode: product.barcode,
             name: product.name,
             brand: product.brand ?? null,
+            categoryName: defaultCategoryNameByKey.get(product.categoryKey) ?? null,
             description: product.description ?? null,
             presentation: product.presentation ?? null,
             image: null,
@@ -141,6 +150,7 @@ export function platformProductToSuggestion(product: PlatformProductDraft): Barc
     code: cleanText(product.barcode) ?? normalizedVariants[0]?.barcode ?? "",
     name: product.name,
     brand: cleanText(product.brand),
+    categoryName: cleanText(product.categoryName),
     description: cleanText(product.description),
     presentation: cleanText(product.presentation),
     image: cleanText(product.image),
@@ -153,6 +163,7 @@ export function normalizePlatformProductDraft(draft: PlatformProductDraft) {
     barcode: cleanText(draft.barcode),
     name: draft.name.trim(),
     brand: cleanText(draft.brand),
+    categoryName: cleanText(draft.categoryName),
     description: cleanText(draft.description),
     presentation: cleanText(draft.presentation),
     image: cleanText(draft.image),
@@ -175,6 +186,7 @@ export function platformDraftDiffers(
     normalizedProduct.barcode !== normalizedDraft.barcode ||
     normalizedProduct.name !== normalizedDraft.name ||
     normalizedProduct.brand !== normalizedDraft.brand ||
+    normalizedProduct.categoryName !== normalizedDraft.categoryName ||
     normalizedProduct.description !== normalizedDraft.description ||
     normalizedProduct.presentation !== normalizedDraft.presentation ||
     normalizedProduct.image !== normalizedDraft.image ||
@@ -189,6 +201,7 @@ export async function queuePlatformProductSubmission(args: {
   barcode?: string | null;
   name: string;
   brand?: string | null;
+  categoryName?: string | null;
   description?: string | null;
   presentation?: string | null;
   image?: string | null;
@@ -218,6 +231,7 @@ export async function queuePlatformProductSubmission(args: {
       data: {
         name: draft.name,
         brand: draft.brand,
+        categoryName: draft.categoryName,
         description: draft.description,
         presentation: draft.presentation,
         image: draft.image,
@@ -240,6 +254,7 @@ export async function queuePlatformProductSubmission(args: {
       barcode: draft.barcode,
       name: draft.name,
       brand: draft.brand,
+      categoryName: draft.categoryName,
       description: draft.description,
       presentation: draft.presentation,
       image: draft.image,

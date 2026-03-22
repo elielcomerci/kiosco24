@@ -35,6 +35,7 @@ async function savePlatformProduct(formData: FormData) {
   const barcode = String(formData.get("barcode") ?? "").trim() || null;
   const name = String(formData.get("name") ?? "").trim();
   const brand = String(formData.get("brand") ?? "").trim();
+  const categoryName = String(formData.get("categoryName") ?? "").trim();
   const presentation = String(formData.get("presentation") ?? "").trim();
   const description = String(formData.get("description") ?? "").trim();
   const image = String(formData.get("image") ?? "").trim();
@@ -62,6 +63,7 @@ async function savePlatformProduct(formData: FormData) {
         barcode: effectiveBarcode,
         name,
         brand: brand || null,
+        categoryName: categoryName || null,
         presentation: presentation || null,
         description: description || null,
         image: image || null,
@@ -74,6 +76,7 @@ async function savePlatformProduct(formData: FormData) {
       update: {
         name,
         brand: brand || null,
+        categoryName: categoryName || null,
         presentation: presentation || null,
         description: description || null,
         image: image || null,
@@ -145,6 +148,7 @@ async function reviewSubmission(formData: FormData) {
           barcode: effectiveBarcode,
           name: submission.name,
           brand: submission.brand,
+          categoryName: submission.categoryName,
           description: submission.description,
           presentation: submission.presentation,
           image: submission.image,
@@ -161,6 +165,7 @@ async function reviewSubmission(formData: FormData) {
           update: {
             name: submission.name,
             brand: submission.brand,
+            categoryName: submission.categoryName,
             description: submission.description,
             presentation: submission.presentation,
             image: submission.image,
@@ -174,6 +179,7 @@ async function reviewSubmission(formData: FormData) {
             barcode: effectiveBarcode,
             name: submission.name,
             brand: submission.brand,
+            categoryName: submission.categoryName,
             description: submission.description,
             presentation: submission.presentation,
             image: submission.image,
@@ -187,16 +193,17 @@ async function reviewSubmission(formData: FormData) {
         data: {
           barcode: effectiveBarcode,
           name: submission.name,
-            brand: submission.brand,
-            description: submission.description,
-            presentation: submission.presentation,
-            image: submission.image,
-            status: PlatformProductStatus.APPROVED,
-            variants: {
-              create: variantData,
-            },
+          brand: submission.brand,
+          categoryName: submission.categoryName,
+          description: submission.description,
+          presentation: submission.presentation,
+          image: submission.image,
+          status: PlatformProductStatus.APPROVED,
+          variants: {
+            create: variantData,
           },
-        });
+        },
+      });
 
   await prisma.platformProductSubmission.update({
     where: { id: submission.id },
@@ -350,6 +357,10 @@ export default async function AdminProductsPage() {
                       <div>{submission.presentation || "Sin dato"}</div>
                     </div>
                     <div>
+                      <div style={{ fontSize: "12px", color: "#94a3b8" }}>Categoria</div>
+                      <div>{submission.categoryName || "Sin categoria"}</div>
+                    </div>
+                    <div>
                       <div style={{ fontSize: "12px", color: "#94a3b8" }}>Descripcion</div>
                       <div>{submission.description || "Sin descripcion"}</div>
                     </div>
@@ -406,6 +417,7 @@ export default async function AdminProductsPage() {
             barcode: product.barcode,
             name: product.name,
             brand: product.brand,
+            categoryName: product.categoryName,
             presentation: product.presentation,
             description: product.description,
             image: product.image,
@@ -456,6 +468,7 @@ export default async function AdminProductsPage() {
                   <input name="barcode" className="input" defaultValue={product.barcode ?? ""} />
                   <input name="name" className="input" defaultValue={product.name} />
                   <input name="brand" className="input" defaultValue={product.brand ?? ""} />
+                  <input name="categoryName" className="input" defaultValue={product.categoryName ?? ""} placeholder="Categoria" />
                   <input name="presentation" className="input" defaultValue={product.presentation ?? ""} />
                   <input name="image" className="input" defaultValue={product.image ?? ""} />
                   <select name="status" className="input" defaultValue={product.status}>

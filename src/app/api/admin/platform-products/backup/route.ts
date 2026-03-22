@@ -51,13 +51,14 @@ export async function GET() {
   });
 
   const payload = {
-    version: 1,
+    version: 2,
     exportedAt: new Date().toISOString(),
     products: products.map((product) => ({
       id: product.id,
       barcode: product.barcode,
       name: product.name,
       brand: product.brand,
+      categoryName: product.categoryName,
       presentation: product.presentation,
       description: product.description,
       image: product.image,
@@ -104,6 +105,7 @@ export async function POST(req: Request) {
     const name = cleanText(rawProduct?.name);
     const barcode = cleanText(rawProduct?.barcode);
     const brand = cleanText(rawProduct?.brand);
+    const categoryName = cleanText(rawProduct?.categoryName);
     const presentation = cleanText(rawProduct?.presentation);
     const description = cleanText(rawProduct?.description);
     const image = cleanText(rawProduct?.image);
@@ -159,6 +161,7 @@ export async function POST(req: Request) {
       update: {
         name,
         brand,
+        categoryName,
         presentation,
         description,
         image,
@@ -193,6 +196,7 @@ export async function POST(req: Request) {
         barcode: effectiveBarcode,
         name,
         brand,
+        categoryName,
         presentation,
         description,
         image,
@@ -212,6 +216,7 @@ export async function POST(req: Request) {
           barcode: effectiveBarcode,
           name,
           brand,
+          categoryName,
           presentation,
           description,
           image,

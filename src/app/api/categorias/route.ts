@@ -39,14 +39,30 @@ export async function POST(req: Request) {
   }
 
   const data = await req.json();
+  const normalizedName = typeof data.name === "string" ? data.name.trim() : "";
 
-  if (!data.name) {
+  if (!normalizedName) {
     return NextResponse.json({ error: "Name is required" }, { status: 400 });
+  }
+
+  const existingCategories = await prisma.category.findMany({
+    where: { kioscoId: kiosco.id },
+    orderBy: { name: "asc" },
+  });
+  const existingCategory =
+    existingCategories.find(
+      (category) =>
+        category.name.trim().toLocaleLowerCase("es-AR") ===
+        normalizedName.toLocaleLowerCase("es-AR"),
+    ) ?? null;
+
+  if (existingCategory) {
+    return NextResponse.json(existingCategory);
   }
 
   const category = await prisma.category.create({
     data: {
-      name: data.name,
+      name: normalizedName,
       color: data.color || null,
       showInGrid: data.showInGrid !== undefined ? data.showInGrid : true,
       kioscoId: kiosco.id,

@@ -63,6 +63,22 @@ function normalizeVariantPayload(variants: unknown): VariantPayload[] {
     .filter((variant) => variant.name);
 }
 
+async function resolveCategorySelection(kioscoId: string, categoryId: unknown) {
+  if (typeof categoryId !== "string" || !categoryId) {
+    return { categoryId: null, categoryName: null };
+  }
+
+  const category = await prisma.category.findFirst({
+    where: { id: categoryId, kioscoId },
+    select: { id: true, name: true },
+  });
+
+  return {
+    categoryId: category?.id ?? null,
+    categoryName: category?.name ?? null,
+  };
+}
+
 export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user?.id) {
@@ -173,6 +189,7 @@ export async function POST(req: Request) {
 
   try {
     const normalizedVariants = normalizeVariantPayload(variants);
+    const resolvedCategory = await resolveCategorySelection(kioscoId, categoryId);
     const normalizedBarcode =
       normalizedVariants.length > 0 || typeof barcode !== "string" ? null : barcode.trim() || null;
     const lookupBarcode =
@@ -193,7 +210,7 @@ export async function POST(req: Request) {
         presentation: typeof presentation === "string" ? presentation.trim() || null : null,
         supplierName: typeof supplierName === "string" ? supplierName.trim() || null : null,
         notes: typeof notes === "string" ? notes.trim() || null : null,
-        categoryId: typeof categoryId === "string" && categoryId ? categoryId : null,
+        categoryId: resolvedCategory.categoryId,
         platformProductId: platformProduct?.id ?? null,
         kioscoId,
         variants: normalizedVariants.length
@@ -255,6 +272,7 @@ export async function POST(req: Request) {
         barcode: normalizedBarcode,
         name: typeof name === "string" ? name.trim() : "",
         brand,
+        categoryName: resolvedCategory.categoryName,
         description,
         presentation,
         image,
@@ -271,6 +289,7 @@ export async function POST(req: Request) {
         barcode: normalizedBarcode,
         name: typeof name === "string" ? name.trim() : "",
         brand,
+        categoryName: resolvedCategory.categoryName,
         description,
         presentation,
         image,

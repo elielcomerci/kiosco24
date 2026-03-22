@@ -42,7 +42,11 @@ function parseLine(line: string) {
     return null;
   }
 
-  const [barcode, name, brand, presentation, description, image, status] = line.split(separator);
+  const cells = line.split(separator);
+  const [barcode, name, brand, categoryName, presentation, description, image, status] =
+    cells.length >= 8
+      ? cells
+      : [cells[0], cells[1], cells[2], undefined, cells[3], cells[4], cells[5], cells[6]];
   const cleanedBarcode = cleanCell(barcode);
   const cleanedName = cleanCell(name);
 
@@ -54,6 +58,7 @@ function parseLine(line: string) {
     barcode: cleanedBarcode,
     name: cleanedName,
     brand: cleanCell(brand),
+    categoryName: cleanCell(categoryName),
     presentation: cleanCell(presentation),
     description: cleanCell(description),
     image: cleanCell(image),
@@ -116,6 +121,7 @@ export async function POST(req: Request) {
       update: {
         name: parsed.name,
         brand: parsed.brand,
+        categoryName: parsed.categoryName,
         presentation: parsed.presentation,
         description: parsed.description,
         image: parsed.image,
@@ -125,6 +131,7 @@ export async function POST(req: Request) {
         barcode: parsed.barcode,
         name: parsed.name,
         brand: parsed.brand,
+        categoryName: parsed.categoryName,
         presentation: parsed.presentation,
         description: parsed.description,
         image: parsed.image,

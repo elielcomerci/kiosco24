@@ -163,6 +163,7 @@ model PlatformProduct {
   barcode      String?                    @unique
   name         String
   brand        String?
+  categoryName String?
   description  String?
   presentation String?
   image        String?
@@ -193,6 +194,7 @@ model PlatformProductSubmission {
   barcode              String?
   name                 String
   brand                String?
+  categoryName         String?
   description          String?
   presentation         String?
   image                String?

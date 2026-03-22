@@ -58,6 +58,22 @@ function normalizeVariantPayload(variants: unknown): VariantPayload[] {
     .filter((variant) => variant.name);
 }
 
+async function resolveCategorySelection(kioscoId: string, categoryId: unknown) {
+  if (typeof categoryId !== "string" || !categoryId) {
+    return { categoryId: null, categoryName: null };
+  }
+
+  const category = await prisma.category.findFirst({
+    where: { id: categoryId, kioscoId },
+    select: { id: true, name: true },
+  });
+
+  return {
+    categoryId: category?.id ?? null,
+    categoryName: category?.name ?? null,
+  };
+}
+
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -162,6 +178,13 @@ export async function PATCH(
 
   const product = await prisma.product.findFirst({
     where: { id, kioscoId },
+    include: {
+      category: {
+        select: {
+          name: true,
+        },
+      },
+    },
   });
 
   if (!product) {
@@ -169,6 +192,13 @@ export async function PATCH(
   }
 
   const normalizedVariants = normalizeVariantPayload(variants);
+  const resolvedCategory =
+    categoryId !== undefined
+      ? await resolveCategorySelection(kioscoId, categoryId)
+      : {
+          categoryId: product.categoryId,
+          categoryName: product.category?.name ?? null,
+        };
   const normalizedBarcode = typeof barcode === "string" ? barcode.trim() || null : null;
   const effectiveBarcode =
     variants !== undefined && normalizedVariants.length > 0
@@ -204,7 +234,7 @@ export async function PATCH(
       }),
       ...(notes !== undefined && { notes: typeof notes === "string" ? notes.trim() || null : null }),
       ...(categoryId !== undefined && {
-        categoryId: typeof categoryId === "string" && categoryId ? categoryId : null,
+        categoryId: resolvedCategory.categoryId,
       }),
       ...((barcode !== undefined || variants !== undefined) && {
         platformProductId: platformProduct?.id ?? null,
@@ -298,6 +328,7 @@ export async function PATCH(
       barcode: effectiveBarcode,
       name: typeof name === "string" ? name.trim() : product.name,
       brand: brand ?? product.brand,
+      categoryName: resolvedCategory.categoryName,
       description: description ?? product.description,
       presentation: presentation ?? product.presentation,
       image: image ?? product.image,
@@ -317,6 +348,7 @@ export async function PATCH(
       barcode: effectiveBarcode,
       name: typeof name === "string" ? name.trim() : product.name,
       brand: brand ?? product.brand,
+      categoryName: resolvedCategory.categoryName,
       description: description ?? product.description,
       presentation: presentation ?? product.presentation,
       image: image ?? product.image,

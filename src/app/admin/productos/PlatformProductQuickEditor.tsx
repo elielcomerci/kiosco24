@@ -17,6 +17,7 @@ export interface PlatformProductQuickEditorItem {
   barcode: string | null;
   name: string;
   brand: string | null;
+  categoryName: string | null;
   presentation: string | null;
   description: string | null;
   image: string | null;
@@ -29,6 +30,7 @@ interface DraftState {
   barcode: string;
   name: string;
   brand: string;
+  categoryName: string;
   presentation: string;
   description: string;
   image: string;
@@ -44,6 +46,7 @@ function buildDraft(product?: PlatformProductQuickEditorItem | null, barcodeHint
     barcode: usesVariants ? "" : product?.barcode ?? barcodeHint ?? "",
     name: product?.name ?? "",
     brand: product?.brand ?? "",
+    categoryName: product?.categoryName ?? "",
     presentation: product?.presentation ?? "",
     description: product?.description ?? "",
     image: product?.image ?? "",
@@ -90,6 +93,7 @@ export default function PlatformProductQuickEditor({
           product.barcode ?? "",
           product.name,
           product.brand ?? "",
+          product.categoryName ?? "",
           product.presentation ?? "",
           variantHaystack,
         ]
@@ -293,6 +297,7 @@ export default function PlatformProductQuickEditor({
                     <div style={{ color: "#94a3b8", fontSize: "13px" }}>
                       {product.barcode || product.variants[0]?.barcode || "Sin barcode base"}
                       {product.brand ? ` · ${product.brand}` : ""}
+                      {product.categoryName ? ` · ${product.categoryName}` : ""}
                     </div>
                     {product.variants.length > 0 && (
                       <div style={{ color: "#94a3b8", fontSize: "12px" }}>
@@ -344,6 +349,12 @@ export default function PlatformProductQuickEditor({
                 placeholder="Marca"
                 value={draft.brand}
                 onChange={(e) => handleChange("brand", e.target.value)}
+              />
+              <input
+                className="input"
+                placeholder="Categoria"
+                value={draft.categoryName}
+                onChange={(e) => handleChange("categoryName", e.target.value)}
               />
               <input
                 className="input"

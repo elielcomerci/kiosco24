@@ -7,6 +7,7 @@ export interface BarcodeSuggestion {
   code: string;
   name: string;
   brand: string | null;
+  categoryName: string | null;
   description: string | null;
   presentation: string | null;
   image: string | null;

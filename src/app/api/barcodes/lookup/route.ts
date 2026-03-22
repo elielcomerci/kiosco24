@@ -37,6 +37,7 @@ function pickSuggestion(code: string, data: OpenFoodFactsResponse): BarcodeSugge
     code,
     name,
     brand: brands ? brands.split(",")[0]?.trim() || brands : null,
+    categoryName: null,
     description: cleanText(data.product.generic_name),
     presentation: cleanText(data.product.quantity),
     image: cleanText(data.product.image_front_url) ?? cleanText(data.product.image_url),

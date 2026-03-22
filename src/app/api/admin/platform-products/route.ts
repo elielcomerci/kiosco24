@@ -39,6 +39,7 @@ export async function POST(req: Request) {
   const barcode = cleanText(body.barcode);
   const name = cleanText(body.name);
   const brand = cleanText(body.brand);
+  const categoryName = cleanText(body.categoryName);
   const presentation = cleanText(body.presentation);
   const description = cleanText(body.description);
   const image = cleanText(body.image);
@@ -72,6 +73,7 @@ export async function POST(req: Request) {
           barcode: effectiveBarcode,
           name,
           brand,
+          categoryName,
           presentation,
           description,
           image,
@@ -107,6 +109,7 @@ export async function POST(req: Request) {
           update: {
             name,
             brand,
+            categoryName,
             presentation,
             description,
             image,
@@ -123,6 +126,7 @@ export async function POST(req: Request) {
             barcode: effectiveBarcode,
             name,
             brand,
+            categoryName,
             presentation,
             description,
             image,
@@ -145,6 +149,7 @@ export async function POST(req: Request) {
             barcode: effectiveBarcode,
             name,
             brand,
+            categoryName,
             presentation,
             description,
             image,

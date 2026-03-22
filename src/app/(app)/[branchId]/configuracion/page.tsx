@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import BackButton from "@/components/ui/BackButton";
 import ThemeEditor from "@/components/ui/ThemeEditor";
 import {
@@ -556,6 +556,7 @@ function CategoryModal({
 // ─── Main Config Page ─────────────────────────────────────────────────────────
 export default function ConfiguracionPage() {
   const { branchId } = useParams() as { branchId: string };
+  const router = useRouter();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -579,6 +580,8 @@ export default function ConfiguracionPage() {
   const [editBgColor, setEditBgColor] = useState("#0f172a");
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [savingBranch, setSavingBranch] = useState(false);
+  const [branchSettingsMessage, setBranchSettingsMessage] = useState<string | null>(null);
+  const [branchSettingsError, setBranchSettingsError] = useState<string | null>(null);
 
   // MercadoPago
   const [mpSetupLoading, setMpSetupLoading] = useState(false);
@@ -637,6 +640,21 @@ export default function ConfiguracionPage() {
     setLoadingCategories(false);
   }, []);
 
+  const applyBranchDraft = useCallback((branch: Branch) => {
+    setCurrentBranch(branch);
+    setEditBranchName(branch.name);
+    setEditLogoUrl(branch.logoUrl || "");
+    setEditPrimaryColor(branch.primaryColor || "#22c55e");
+    setEditBgColor(branch.bgColor || "#0f172a");
+    setBranches((prev) => {
+      if (prev.some((candidate) => candidate.id === branch.id)) {
+        return prev.map((candidate) => (candidate.id === branch.id ? branch : candidate));
+      }
+
+      return prev;
+    });
+  }, []);
+
   const fetchCurrentBranch = useCallback(async () => {
     setLoadingCurrentBranch(true);
     const res = await fetch(`/api/branches`); // Reuse GET all or specific if needed
@@ -644,15 +662,11 @@ export default function ConfiguracionPage() {
       const data = await res.json();
       const b = (data.branches as Branch[]).find(v => v.id === branchId);
       if (b) {
-        setCurrentBranch(b);
-        setEditBranchName(b.name);
-        setEditLogoUrl(b.logoUrl || "");
-        setEditPrimaryColor(b.primaryColor || "#22c55e");
-        setEditBgColor(b.bgColor || "#0f172a");
+        applyBranchDraft(b);
       }
     }
     setLoadingCurrentBranch(false);
-  }, [branchId]);
+  }, [applyBranchDraft, branchId]);
 
   const copyAccessValue = async (value: string, successMessage: string) => {
     if (!value) return;
@@ -686,22 +700,45 @@ export default function ConfiguracionPage() {
   }, [fetchEmployees, fetchBranches, fetchCategories, fetchCurrentBranch, fetchSubscription]);
 
   const handleSaveBranchSettings = async () => {
+    if (!editBranchName.trim()) {
+      setBranchSettingsError("El nombre de la sucursal es obligatorio.");
+      return;
+    }
+
+    setBranchSettingsError(null);
+    setBranchSettingsMessage(null);
     setSavingBranch(true);
-    await fetch(`/api/branches/${branchId}`, {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        "x-branch-id": branchId,
-      },
-      body: JSON.stringify({
-        name: editBranchName,
-        logoUrl: editLogoUrl || null,
-        primaryColor: editPrimaryColor,
-        bgColor: editBgColor,
-      }),
-    });
-    setSavingBranch(false);
-    window.location.reload();
+
+    try {
+      const res = await fetch(`/api/branches/${branchId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "x-branch-id": branchId,
+        },
+        body: JSON.stringify({
+          name: editBranchName.trim(),
+          logoUrl: editLogoUrl || null,
+          primaryColor: editPrimaryColor,
+          bgColor: editBgColor,
+        }),
+      });
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        setBranchSettingsError(data?.error || "No se pudo guardar el logo.");
+        return;
+      }
+
+      applyBranchDraft(data as Branch);
+      setBranchSettingsMessage("Nombre y logo guardados.");
+      router.refresh();
+    } catch (error) {
+      console.error(error);
+      setBranchSettingsError("No se pudo guardar la identidad visual.");
+    } finally {
+      setSavingBranch(false);
+    }
   };
 
   const handleEmployeeModalClose = () => setEmployeeModal(null);
@@ -791,15 +828,31 @@ export default function ConfiguracionPage() {
                 onChange={async (e) => {
                   const file = e.target.files?.[0];
                   if (!file) return;
+                  setBranchSettingsError(null);
+                  setBranchSettingsMessage(null);
                   setUploadingLogo(true);
                   const formData = new FormData();
                   formData.append("file", file);
                   try {
                     const res = await fetch("/api/upload", { method: "POST", body: formData });
-                    const data = await res.json();
-                    if (data.secure_url) setEditLogoUrl(data.secure_url);
-                  } catch (err) { console.error(err); }
-                  setUploadingLogo(false);
+                    const data = await res.json().catch(() => null);
+                    if (!res.ok) {
+                      setBranchSettingsError(data?.error || "No se pudo subir el logo.");
+                      return;
+                    }
+                    if (typeof data?.secure_url !== "string" || !data.secure_url) {
+                      setBranchSettingsError("La subida no devolvio una URL valida para el logo.");
+                      return;
+                    }
+                    setEditLogoUrl(data.secure_url);
+                    setBranchSettingsMessage("Logo cargado. Guarda nombre y logo para aplicarlo.");
+                  } catch (err) {
+                    console.error(err);
+                    setBranchSettingsError("No se pudo subir el logo.");
+                  } finally {
+                    setUploadingLogo(false);
+                    e.target.value = "";
+                  }
                 }}
               />
             </div>
@@ -819,10 +872,13 @@ export default function ConfiguracionPage() {
             className="btn btn-ghost btn-sm" 
             style={{ alignSelf: "flex-start" }}
             onClick={handleSaveBranchSettings}
-            disabled={savingBranch || !editBranchName.trim()}
+            disabled={savingBranch || uploadingLogo || !editBranchName.trim()}
           >
-            {savingBranch ? "Guardando..." : "Guardar nombre"}
+            {savingBranch ? "Guardando..." : "Guardar nombre y logo"}
           </button>
+          <div style={{ fontSize: "12px", color: branchSettingsError ? "var(--red)" : branchSettingsMessage ? "var(--green)" : "var(--text-3)" }}>
+            {branchSettingsError || branchSettingsMessage || "El logo se previsualiza al subirlo y queda aplicado cuando guardas los cambios."}
+          </div>
         </div>
       </section>
 

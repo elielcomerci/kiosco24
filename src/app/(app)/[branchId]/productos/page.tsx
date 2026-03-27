@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useParams } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { formatARS, applyPercentage } from "@/lib/utils";
 import {
   BarcodeLookupResponse,
@@ -1004,8 +1006,592 @@ function ProductModal({
   );
 }
 
+// ─── StockLoadingModal ────────────────────────────────────────────────────────
+function StockLoadingModal({
+  products,
+  branchId,
+  onClose,
+  onSaved,
+}: {
+  products: Product[];
+  branchId: string;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [search, setSearch] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [mode, setMode] = useState<"sumar" | "corregir">("sumar");
+  // Map productId -> input value (simple products)
+  const [inputs, setInputs] = useState<Record<string, string>>({});
+  // Map variantId -> input value
+  const [variantInputs, setVariantInputs] = useState<Record<string, string>>({});
+
+  const eligible = products.filter((p) => {
+    const q = search.toLowerCase();
+    if (!q) return true;
+    return (
+      p.name.toLowerCase().includes(q) ||
+      (p.barcode || "").includes(q) ||
+      (p.internalCode || "").includes(q) ||
+      (p.brand || "").toLowerCase().includes(q) ||
+      (p.supplierName || "").toLowerCase().includes(q)
+    );
+  });
+
+  const setQty = (
+    key: string,
+    val: string,
+    setter: React.Dispatch<React.SetStateAction<Record<string, string>>>
+  ) => setter((prev) => ({ ...prev, [key]: val }));
+
+  const computeResult = (currentStock: number | null, inputVal: string) => {
+    const n = parseFloat(inputVal);
+    if (isNaN(n) || inputVal.trim() === "") return null;
+    return mode === "sumar" ? (currentStock ?? 0) + n : n;
+  };
+
+  // Count how many products/variants have a pending change
+  const changesCount = (() => {
+    let count = 0;
+    for (const p of products) {
+      if (p.variants && p.variants.length > 0) {
+        for (const v of p.variants) {
+          if (v.id && variantInputs[v.id] && variantInputs[v.id].trim() !== "") count++;
+        }
+      } else {
+        if (inputs[p.id] && inputs[p.id].trim() !== "") count++;
+      }
+    }
+    return count;
+    })();
+
+  const handleSaveAll = async () => {
+    setSaving(true);
+    try {
+      const savePromises: Promise<Response>[] = [];
+      for (const p of products) {
+        if (p.variants && p.variants.length > 0) {
+          // Only save if at least one variant has a value
+          const anyChanged = p.variants.some((v) => v.id && variantInputs[v.id]?.trim());
+          if (!anyChanged) continue;
+          const updatedVariants = p.variants.map((v) => {
+            const val = v.id ? (variantInputs[v.id] ?? "") : "";
+            const result = v.id ? computeResult(v.stock, val) : null;
+            return {
+              id: v.id,
+              name: v.name,
+              barcode: v.barcode,
+              stock: result !== null ? result : (v.stock ?? 0),
+              minStock: v.minStock ?? 0,
+            };
+          });
+          savePromises.push(
+            fetch(`/api/productos/${p.id}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json", "x-branch-id": branchId },
+              body: JSON.stringify({ variants: updatedVariants }),
+            })
+          );
+        } else {
+          const val = inputs[p.id] ?? "";
+          const result = computeResult(p.stock, val);
+          if (result === null) continue;
+          savePromises.push(
+            fetch(`/api/productos/${p.id}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json", "x-branch-id": branchId },
+              body: JSON.stringify({ stock: result }),
+            })
+          );
+        }
+      }
+      await Promise.all(savePromises);
+      onSaved();
+      onClose();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div
+      className="modal-overlay animate-fade-in"
+      onClick={onClose}
+      style={{ zIndex: 9999, alignItems: "flex-end", padding: "16px", paddingBottom: "max(16px, env(safe-area-inset-bottom))" }}
+    >
+      <div
+        className="modal animate-slide-up"
+        onClick={(e) => e.stopPropagation()}
+        style={{ maxHeight: "92dvh", width: "100%", maxWidth: "520px", display: "flex", flexDirection: "column", gap: "0", padding: "0", overflow: "hidden" }}
+      >
+        {/* Header */}
+        <div style={{ padding: "16px 20px 12px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--border)" }}>
+          <h2 style={{ fontSize: "18px", fontWeight: 800 }}>📦 Cargar Stock</h2>
+          <button className="btn btn-sm btn-ghost" onClick={onClose}>✕</button>
+        </div>
+
+        {/* Filter + mode */}
+        <div style={{ padding: "12px 20px", display: "flex", flexDirection: "column", gap: "8px", borderBottom: "1px solid var(--border)" }}>
+          <input
+            className="input"
+            placeholder="🔍 Filtrar por nombre, marca, código, proveedor..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            autoFocus
+          />
+          <div style={{ display: "flex", gap: "8px" }}>
+            {(["sumar", "corregir"] as const).map((m) => (
+              <button
+                key={m}
+                className={`btn btn-sm ${mode === m ? "btn-green" : "btn-ghost"}`}
+                style={{ flex: 1, fontWeight: 600 }}
+                onClick={() => setMode(m)}
+              >
+                {m === "sumar" ? "➕ Sumar" : "✏️ Establecer"}
+              </button>
+            ))}
+          </div>
+          {mode === "sumar" ? (
+            <div style={{ fontSize: "11px", color: "var(--text-3)" }}>Ingresá cuántas unidades llegaron. Se suman al stock actual.</div>
+          ) : (
+            <div style={{ fontSize: "11px", color: "var(--text-3)" }}>Ingresá el stock correcto total. Reemplaza el valor actual.</div>
+          )}
+        </div>
+
+        {/* Product list */}
+        <div style={{ flex: 1, overflowY: "auto", padding: "8px 20px", display: "flex", flexDirection: "column", gap: "6px" }}>
+          {eligible.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "32px", color: "var(--text-3)" }}>Sin resultados para &quot;{search}&quot;</div>
+          ) : (
+            eligible.map((p) => (
+              <div
+                key={p.id}
+                style={{
+                  border: "1px solid var(--border)",
+                  borderRadius: "var(--radius)",
+                  padding: "10px 14px",
+                  background: "var(--surface)",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  {p.emoji && <span style={{ fontSize: "18px" }}>{p.emoji}</span>}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, fontSize: "14px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</div>
+                    {(p.brand || p.supplierName) && (
+                      <div style={{ fontSize: "11px", color: "var(--text-3)" }}>{[p.brand, p.supplierName].filter(Boolean).join(" · ")}</div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Simple product */}
+                {(!p.variants || p.variants.length === 0) && (
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "8px" }}>
+                    <span style={{ fontSize: "12px", color: "var(--text-3)", flex: 1 }}>
+                      {mode === "sumar" ? `Stock actual: ${p.stock ?? 0}` : `Stock actual: ${p.stock ?? 0}`}
+                    </span>
+                    <input
+                      className="input"
+                      type="number"
+                      inputMode="numeric"
+                      placeholder={mode === "sumar" ? "+0" : "nuevo"}
+                      value={inputs[p.id] ?? ""}
+                      onChange={(e) => setQty(p.id, e.target.value, setInputs)}
+                      style={{ width: "80px", textAlign: "right" }}
+                    />
+                    {(() => {
+                      const result = computeResult(p.stock, inputs[p.id] ?? "");
+                      return result !== null ? (
+                        <span style={{ fontSize: "14px", fontWeight: 800, color: "var(--green)", minWidth: "48px" }}>= {result}</span>
+                      ) : null;
+                    })()}
+                  </div>
+                )}
+
+                {/* Variants */}
+                {p.variants && p.variants.length > 0 && (
+                  <div style={{ marginTop: "8px", display: "flex", flexDirection: "column", gap: "6px" }}>
+                    {p.variants.map((v) => {
+                      const val = v.id ? (variantInputs[v.id] ?? "") : "";
+                      const result = v.id ? computeResult(v.stock, val) : null;
+                      return (
+                        <div key={v.id} style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                          <span style={{ flex: 1, fontSize: "13px", color: "var(--text-2)" }}>
+                            {v.name} <span style={{ color: "var(--text-3)", fontSize: "11px" }}>({v.stock ?? 0})</span>
+                          </span>
+                          <input
+                            className="input"
+                            type="number"
+                            inputMode="numeric"
+                            placeholder={mode === "sumar" ? "+0" : "nuevo"}
+                            value={val}
+                            onChange={(e) => setQty(v.id ?? "", e.target.value, setVariantInputs)}
+                            style={{ width: "72px", textAlign: "right" }}
+                          />
+                          {result !== null && (
+                            <span style={{ fontSize: "13px", fontWeight: 700, color: "var(--green)", minWidth: "40px" }}>= {result}</span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Footer */}
+        <div style={{ padding: "12px 20px", borderTop: "1px solid var(--border)", display: "flex", gap: "10px", alignItems: "center" }}>
+          <span style={{ fontSize: "13px", color: "var(--text-3)", flex: 1 }}>
+            {changesCount > 0 ? `${changesCount} cambio${changesCount !== 1 ? "s" : ""} pendiente${changesCount !== 1 ? "s" : ""}` : "Sin cambios"}
+          </span>
+          <button className="btn btn-ghost" style={{ flexShrink: 0 }} onClick={onClose}>Cancelar</button>
+          <button
+            className="btn btn-green"
+            style={{ flexShrink: 0 }}
+            onClick={handleSaveAll}
+            disabled={saving || changesCount === 0}
+          >
+            {saving ? "Guardando..." : `Guardar${changesCount > 0 ? ` (${changesCount})` : ""}`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── ReplicarModal ────────────────────────────────────────────────────────────
+type Collision = { productId: string; branchId: string; productName: string; branchName: string; emoji: string | null };
+
+function ReplicarModal({
+  products,
+  branches,
+  sourceBranchId,
+  onClose,
+  onDone,
+}: {
+  products: Product[];
+  branches: { id: string; name: string }[];
+  sourceBranchId: string;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [selectedBranches, setSelectedBranches] = useState<Set<string>>(new Set());
+  const [copyPrice, setCopyPrice] = useState(true);
+  const [copyStock, setCopyStock] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [done, setDone] = useState(false);
+
+  const [collisions, setCollisions] = useState<Collision[]>([]);
+  const [overwriteConfig, setOverwriteConfig] = useState<Record<string, "overwrite" | "skip">>({});
+
+  const toggleBranch = (id: string) => {
+    setSelectedBranches((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const handleReplicar = async () => {
+    if (selectedBranches.size === 0) return;
+    setLoading(true);
+    try {
+      const res = await fetch("/api/inventario/replicar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-branch-id": sourceBranchId },
+        body: JSON.stringify({
+          productIds: products.map((p) => p.id),
+          targetBranchIds: Array.from(selectedBranches),
+          copyPrice,
+          copyStock,
+          overwriteConfig: Object.keys(overwriteConfig).length > 0 ? overwriteConfig : undefined,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        alert(data?.error || "Error al replicar");
+        return;
+      }
+      
+      const data = await res.json();
+      if (data.requiresConfirmation && data.collisions) {
+        setCollisions(data.collisions);
+        // Pre-fill everything with 'skip' by default to prevent accidental overrides
+        const initialConfig: Record<string, "overwrite" | "skip"> = {};
+        for (const c of data.collisions as Collision[]) {
+          initialConfig[`${c.productId}:${c.branchId}`] = "skip";
+        }
+        setOverwriteConfig((prev) => ({ ...initialConfig, ...prev }));
+      } else {
+        setDone(true);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (collisions.length > 0 && !done) {
+    return (
+      <div className="modal-overlay animate-fade-in" onClick={onClose} style={{ zIndex: 9999, alignItems: "flex-end", padding: "16px", paddingBottom: "max(16px, env(safe-area-inset-bottom))" }}>
+        <div className="modal animate-slide-up" onClick={(e) => e.stopPropagation()} style={{ maxHeight: "90dvh", overflowY: "auto", padding: "20px", width: "100%", maxWidth: "520px", display: "flex", flexDirection: "column", gap: "16px" }}>
+          <div>
+            <h2 style={{ fontSize: "18px", fontWeight: 800, color: "var(--red)" }}>⚠️ Algunos ya existen</h2>
+            <p style={{ fontSize: "13px", color: "var(--text-3)", marginTop: "4px", lineHeight: 1.4 }}>
+              Intentás enviar productos que ya existen en la base de datos de destino. ¿Qué hacemos con ellos?
+            </p>
+          </div>
+          
+          <div style={{ display: "flex", flexDirection: "column", gap: "8px", overflowY: "auto", maxHeight: "40dvh", paddingRight: "4px" }}>
+            {collisions.map((c) => {
+              const key = `${c.productId}:${c.branchId}`;
+              const action = overwriteConfig[key] || "skip";
+              return (
+                <div key={key} style={{ border: `2px solid ${action === "overwrite" ? "var(--red)" : "var(--border)"}`, borderRadius: "var(--radius)", padding: "12px", background: "var(--surface)", display: "flex", flexDirection: "column", gap: "8px", transition: "all 0.2s" }}>
+                  <div style={{ fontSize: "14px", lineHeight: 1.3 }}>
+                    <span style={{ fontWeight: 600 }}>{c.emoji ? `${c.emoji} ` : ""}{c.productName}</span> 
+                    <span style={{ color: "var(--text-3)" }}> en </span> 
+                    <span style={{ fontWeight: 600 }}>{c.branchName}</span>
+                  </div>
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    <button 
+                      className={`btn btn-sm ${action === "skip" ? "btn-outline" : "btn-ghost"}`} 
+                      style={{ flex: 1, borderColor: action === "skip" ? "var(--text-2)" : undefined, color: action === "skip" ? "var(--text-1)" : "var(--text-3)" }}
+                      onClick={() => setOverwriteConfig(prev => ({ ...prev, [key]: "skip" }))}
+                    >
+                      Saltar (Conservar)
+                    </button>
+                    <button 
+                      className={`btn btn-sm ${action === "overwrite" ? "btn-outline" : "btn-ghost"}`} 
+                      style={{ flex: 1, borderColor: action === "overwrite" ? "var(--red)" : undefined, color: action === "overwrite" ? "var(--red)" : "var(--text-3)" }}
+                      onClick={() => setOverwriteConfig(prev => ({ ...prev, [key]: "overwrite" }))}
+                    >
+                      Sobrescribir
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          
+          <div style={{ display: "flex", gap: "10px", marginTop: "8px" }}>
+            <button className="btn btn-ghost" style={{ flex: 1 }} onClick={() => setCollisions([])}>Volver</button>
+            <button className="btn btn-green" style={{ flex: 2 }} onClick={handleReplicar} disabled={loading}>
+              {loading ? "Replicando..." : "Confirmar y Replicar"}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="modal-overlay animate-fade-in" onClick={onClose} style={{ zIndex: 9999, alignItems: "flex-end", padding: "16px", paddingBottom: "max(16px, env(safe-area-inset-bottom))" }}>
+      <div className="modal animate-slide-up" onClick={(e) => e.stopPropagation()} style={{ maxHeight: "85dvh", overflowY: "auto", padding: "20px", width: "100%", maxWidth: "480px", display: "flex", flexDirection: "column", gap: "12px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <h2 style={{ fontSize: "18px", fontWeight: 800 }}>↗ Replicar catálogo</h2>
+          <button className="btn btn-sm btn-ghost" onClick={onClose}>✕</button>
+        </div>
+
+        {done ? (
+          <div style={{ textAlign: "center", padding: "24px" }}>
+            <div style={{ fontSize: "32px", marginBottom: "12px" }}>✅</div>
+            <div style={{ fontWeight: 700 }}>{products.length} productos procesados</div>
+            <div style={{ fontSize: "13px", color: "var(--text-3)", marginTop: "8px" }}>Las sucursales seleccionadas han sido actualizadas.</div>
+            <button className="btn btn-green" style={{ marginTop: "16px", width: "100%" }} onClick={onDone}>Cerrar</button>
+          </div>
+        ) : (
+          <>
+            <div style={{ fontSize: "14px", color: "var(--text-2)" }}>
+              Replicar <strong>{products.length}</strong> producto{products.length !== 1 ? "s" : ""} a:
+            </div>
+
+            {branches.map((b) => (
+              <label key={b.id} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "12px", border: `2px solid ${selectedBranches.has(b.id) ? "var(--primary)" : "var(--border)"}`, borderRadius: "var(--radius)", cursor: "pointer", background: selectedBranches.has(b.id) ? "rgba(var(--primary-rgb,34,197,94),.08)" : "var(--surface)" }}>
+                <input type="checkbox" checked={selectedBranches.has(b.id)} onChange={() => toggleBranch(b.id)} />
+                <span style={{ fontWeight: 600 }}>{b.name}</span>
+              </label>
+            ))}
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px", padding: "12px 0" }}>
+              <label style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }}>
+                <input type="checkbox" checked={copyPrice} onChange={(e) => setCopyPrice(e.target.checked)} />
+                <span style={{ fontSize: "14px", fontWeight: 500 }}>{copyPrice ? "✅ Sincronizar" : "❌ No sincronizar"} precio actual</span>
+              </label>
+              
+              <label style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }}>
+                <input type="checkbox" checked={copyStock} onChange={(e) => setCopyStock(e.target.checked)} />
+                <span style={{ fontSize: "14px", fontWeight: 500 }}>{copyStock ? "✅ Usar" : "❌ Empezará en 0"} stock actual como valor inicial</span>
+              </label>
+            </div>
+
+            <div style={{ display: "flex", gap: "10px", marginTop: "12px" }}>
+              <button className="btn btn-ghost" style={{ flex: 1 }} onClick={onClose}>Cancelar</button>
+              <button className="btn btn-green" style={{ flex: 2 }} onClick={handleReplicar} disabled={loading || selectedBranches.size === 0}>
+                {loading ? "Replicando..." : `Replicar a ${selectedBranches.size} sucursal${selectedBranches.size !== 1 ? "es" : ""}`}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── TransferirStockModal ─────────────────────────────────────────────────────
+function TransferirStockModal({
+  products,
+  branches,
+  sourceBranchId,
+  onClose,
+  onDone,
+}: {
+  products: Product[];
+  branches: { id: string; name: string }[];
+  sourceBranchId: string;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [targetBranchId, setTargetBranchId] = useState(branches[0]?.id ?? "");
+  const [quantities, setQuantities] = useState<Record<string, string>>({});
+  const [variantQty, setVariantQty] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const setQty = (key: string, val: string, setter: React.Dispatch<React.SetStateAction<Record<string, string>>>) =>
+    setter((prev) => ({ ...prev, [key]: val }));
+
+  const buildItems = () => {
+    const items: { productId: string; variantId?: string; quantity: number }[] = [];
+    for (const p of products) {
+      if (p.variants && p.variants.length > 0) {
+        for (const v of p.variants) {
+          const qty = parseInt(variantQty[v.id ?? ""] ?? "0");
+          if (qty > 0) items.push({ productId: p.id, variantId: v.id, quantity: qty });
+        }
+      } else {
+        const qty = parseInt(quantities[p.id] ?? "0");
+        if (qty > 0) items.push({ productId: p.id, quantity: qty });
+      }
+    }
+    return items;
+  };
+
+  const totalItems = buildItems().length;
+
+  const handleTransferir = async () => {
+    const items = buildItems();
+    if (items.length === 0 || !targetBranchId) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/inventario/transferencia", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-branch-id": sourceBranchId },
+        body: JSON.stringify({ items, targetBranchId }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        setError(data?.error || "Error al transferir");
+      } else {
+        onDone();
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const productsWithStock = products.filter((p) => {
+    if (p.variants && p.variants.length > 0) return p.variants.some((v) => (v.stock ?? 0) > 0);
+    return (p.stock ?? 0) > 0;
+  });
+
+  return (
+    <div className="modal-overlay animate-fade-in" onClick={onClose} style={{ zIndex: 9999, alignItems: "flex-end", padding: "16px", paddingBottom: "max(16px, env(safe-area-inset-bottom))" }}>
+      <div className="modal animate-slide-up" onClick={(e) => e.stopPropagation()} style={{ maxHeight: "90dvh", overflowY: "auto", padding: "20px", width: "100%", maxWidth: "480px", display: "flex", flexDirection: "column", gap: "12px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <h2 style={{ fontSize: "18px", fontWeight: 800 }}>⇄ Transferir Stock</h2>
+          <button className="btn btn-sm btn-ghost" onClick={onClose}>✕</button>
+        </div>
+
+        <div>
+          <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase" }}>Sucursal destino</label>
+          <select className="input" value={targetBranchId} onChange={(e) => setTargetBranchId(e.target.value)} style={{ width: "100%", background: "var(--surface)", cursor: "pointer" }}>
+            {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+          </select>
+        </div>
+
+        <div style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase" }}>Cantidad a transferir</div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: "8px", overflowY: "auto", maxHeight: "320px" }}>
+          {productsWithStock.map((p) => (
+            <div key={p.id} style={{ border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: "10px 14px", background: "var(--surface)" }}>
+              <div style={{ fontWeight: 600, fontSize: "14px", marginBottom: "6px" }}>{p.emoji ? `${p.emoji} ` : ""}{p.name}</div>
+              {p.variants && p.variants.length > 0 ? (
+                p.variants.filter((v) => (v.stock ?? 0) > 0).map((v) => {
+                  const qty = parseInt(variantQty[v.id ?? ""] ?? "0");
+                  const maxStock = v.stock ?? 0;
+                  const isOver = qty > maxStock;
+                  return (
+                    <div key={v.id} style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
+                      <span style={{ flex: 1, fontSize: "13px", color: "var(--text-2)" }}>{v.name} <span style={{ color: "var(--text-3)" }}>(stock: {maxStock})</span></span>
+                      <input
+                        className="input"
+                        type="number"
+                        inputMode="numeric"
+                        min="0"
+                        max={maxStock}
+                        placeholder="0"
+                        value={variantQty[v.id ?? ""] ?? ""}
+                        onChange={(e) => setQty(v.id ?? "", e.target.value, setVariantQty)}
+                        style={{ width: "72px", textAlign: "right", borderColor: isOver ? "var(--red)" : undefined }}
+                      />
+                    </div>
+                  );
+                })
+              ) : (
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span style={{ flex: 1, fontSize: "13px", color: "var(--text-3)" }}>Stock disponible: {p.stock}</span>
+                  <input
+                    className="input"
+                    type="number"
+                    inputMode="numeric"
+                    min="0"
+                    max={p.stock ?? 0}
+                    placeholder="0"
+                    value={quantities[p.id] ?? ""}
+                    onChange={(e) => setQty(p.id, e.target.value, setQuantities)}
+                    style={{ width: "72px", textAlign: "right", borderColor: parseInt(quantities[p.id] ?? "0") > (p.stock ?? 0) ? "var(--red)" : undefined }}
+                  />
+                </div>
+              )}
+            </div>
+          ))}
+          {productsWithStock.length === 0 && (
+            <div style={{ textAlign: "center", padding: "24px", color: "var(--text-3)" }}>No hay productos con stock para transferir</div>
+          )}
+        </div>
+
+        {error && <div style={{ color: "var(--red)", fontSize: "13px", padding: "8px 12px", background: "rgba(239,68,68,.1)", borderRadius: "var(--radius-sm)" }}>{error}</div>}
+
+        <div style={{ display: "flex", gap: "10px" }}>
+          <button className="btn btn-ghost" style={{ flex: 1 }} onClick={onClose}>Cancelar</button>
+          <button className="btn btn-green" style={{ flex: 2 }} onClick={handleTransferir} disabled={loading || totalItems === 0 || !targetBranchId}>
+            {loading ? "Transfiriendo..." : `Transferir ${totalItems > 0 ? `(${totalItems} ítem${totalItems !== 1 ? "s" : ""})` : ""}`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Products Page ────────────────────────────────────────────────────────
 export default function ProductosPage() {
+  const params = useParams();
+  const branchId = params.branchId as string;
+  const { data: session } = useSession();
+  const isOwner = session?.user?.role === "OWNER";
+
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1023,6 +1609,29 @@ export default function ProductosPage() {
   const [bulking, setBulking] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // ─── Multi-branch state
+  interface Branch { id: string; name: string; }
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [branchesLoaded, setBranchesLoaded] = useState(false);
+  const [showStockModal, setShowStockModal] = useState(false);
+  const [showReplicarModal, setShowReplicarModal] = useState(false);
+  const [showTransferirModal, setShowTransferirModal] = useState(false);
+
+  const fetchBranches = useCallback(async () => {
+    if (branchesLoaded) return;
+    try {
+      const res = await fetch("/api/branches", { headers: { "x-branch-id": branchId } });
+      if (res.ok) {
+        const data = await res.json();
+        setBranches(Array.isArray(data) ? data : []);
+      }
+    } finally {
+      setBranchesLoaded(true);
+    }
+  }, [branchId, branchesLoaded]);
+
+  useEffect(() => { void fetchBranches(); }, [fetchBranches]);
 
   const pctMatch = parseInt(percentStr, 10);
   const percent = isNaN(pctMatch) ? 0 : pctMatch;
@@ -1195,9 +1804,31 @@ export default function ProductosPage() {
           <BackButton />
         )}
         <h1 style={{ fontSize: "20px", fontWeight: 800 }}>Productos</h1>
-        <div style={{ display: "flex", gap: "8px" }}>
+        <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", justifyContent: "flex-end" }}>
           {!selectionMode && (
             <>
+              <button
+                className="btn btn-sm btn-ghost"
+                style={{ border: "1px solid var(--border)", fontWeight: 600 }}
+                onClick={() => { setShowStockModal(true); }}
+                title="Cargar stock"
+              >📦 Stock</button>
+              {isOwner && branches.length > 1 && (
+                <>
+                  <button
+                    className="btn btn-sm btn-ghost"
+                    style={{ border: "1px solid var(--border)", fontWeight: 600 }}
+                    onClick={() => setShowReplicarModal(true)}
+                    title="Replicar productos a otra sucursal"
+                  >↗ Replicar</button>
+                  <button
+                    className="btn btn-sm btn-ghost"
+                    style={{ border: "1px solid var(--border)", fontWeight: 600 }}
+                    onClick={() => setShowTransferirModal(true)}
+                    title="Transferir stock entre sucursales"
+                  >⇄ Transferir</button>
+                </>
+              )}
               <button className="btn btn-sm btn-ghost" onClick={() => setShowUpdateModal(true)}>+%</button>
               <button className="btn btn-sm btn-ghost" style={{ border: "1px solid var(--border)" }} onClick={toggleSelectionMode}>☑</button>
               <button className="btn btn-sm btn-green" onClick={() => setModal("new")}>+ Nuevo</button>
@@ -1523,6 +2154,42 @@ export default function ProductosPage() {
           onClose={() => setModal(null)}
           onSave={() => { setModal(null); fetchProducts(); }}
           onCategoriesChange={setCategories}
+        />
+      )}
+
+      {/* ─── StockLoadingModal ──────────────────────────────────────────────── */}
+      {showStockModal && (() => {
+        // Products eligible: all visible (+ those with stock even if hidden)
+        const stockProducts = products;
+        return (
+          <StockLoadingModal
+            products={stockProducts}
+            branchId={branchId}
+            onClose={() => setShowStockModal(false)}
+            onSaved={fetchProducts}
+          />
+        );
+      })()}
+
+      {/* ─── ReplicarModal ──────────────────────────────────────────────────── */}
+      {showReplicarModal && (
+        <ReplicarModal
+          products={selectionMode && selected.size > 0 ? products.filter(p => selected.has(p.id)) : filtered}
+          branches={branches.filter(b => b.id !== branchId)}
+          sourceBranchId={branchId}
+          onClose={() => setShowReplicarModal(false)}
+          onDone={() => { setShowReplicarModal(false); fetchProducts(); }}
+        />
+      )}
+
+      {/* ─── TransferirStockModal ───────────────────────────────────────────── */}
+      {showTransferirModal && (
+        <TransferirStockModal
+          products={selectionMode && selected.size > 0 ? products.filter(p => selected.has(p.id)) : filtered}
+          branches={branches.filter(b => b.id !== branchId)}
+          sourceBranchId={branchId}
+          onClose={() => setShowTransferirModal(false)}
+          onDone={() => { setShowTransferirModal(false); fetchProducts(); }}
         />
       )}
     </div>

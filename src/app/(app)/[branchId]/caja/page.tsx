@@ -15,7 +15,7 @@ import OpenShiftModal, { type ShiftAssignee } from "@/components/turnos/OpenShif
 import CloseShiftModal from "@/components/turnos/CloseShiftModal";
 import TransferShiftModal from "@/components/turnos/TransferShiftModal";
 import BarcodeScanner from "@/components/caja/BarcodeScanner";
-import QuickRestockModal from "@/components/caja/QuickRestockModal";
+
 import { savePendingSale } from "@/lib/offline/db";
 import { useOnlineStatus } from "@/lib/offline/sync";
 import { useIsDesktop } from "@/lib/hooks";
@@ -173,7 +173,7 @@ export default function CajaPage() {
   const [showTransferShift, setShowTransferShift] = useState(false);
   const [showTotalsBreakdown, setShowTotalsBreakdown] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
-  const [showRestockModal, setShowRestockModal] = useState(false);
+
   const [cajaSearch, setCajaSearch] = useState("");
   const [categories, setCategories] = useState<Category[]>([]);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
@@ -244,7 +244,7 @@ export default function CajaPage() {
         showOpenShift ||
         showCloseShift ||
         showScanner ||
-        showRestockModal ||
+
         variantSelector ||
         showCashNumpad ||
         confirmedSale;
@@ -337,7 +337,7 @@ export default function CajaPage() {
     };
   }, [
     showGasto, showOtro, showRetiro, showCredit, showOpenShift, showCloseShift, 
-    showScanner, showRestockModal, variantSelector, showCashNumpad, confirmedSale
+    showScanner, variantSelector, showCashNumpad, confirmedSale
   ]);
 
   // ─── Startup Logic: Onboarding & Shift ──────────────────────────────────
@@ -990,18 +990,7 @@ export default function CajaPage() {
              </span>
              📷
            </button>
-           <button 
-             className="btn btn-sm btn-ghost" 
-             style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "8px", padding: "10px 14px", minHeight: "42px", minWidth: "150px", fontSize: 0, color: "var(--text)", fontWeight: 700 }} 
-             onClick={() => setShowRestockModal(true)}
-              disabled={operationsDisabled}
-           >
-             <span style={{ display: "inline-flex", alignItems: "center", gap: "8px", fontSize: "13px", lineHeight: 1, color: "var(--text)" }}>
-               <AddStockActionIcon />
-               Agregar stock
-             </span>
-             📦 Recepción
-           </button>
+
            {activeShift && canManageCurrentShift && (
              <button className="btn btn-sm btn-ghost" style={{ padding: "4px 8px", fontSize: "12px" }} onClick={() => setShowTransferShift(true)}>
                Transferir
@@ -1475,18 +1464,7 @@ export default function CajaPage() {
           </div>
         </div>
       )}
-      {showRestockModal && (
-          <QuickRestockModal
-            products={products}
-            branchId={branchId}
-            employeeId={employeeId}
-            onClose={() => setShowRestockModal(false)}
-            onSuccess={() => {
-            setShowRestockModal(false);
-            fetchProducts(); // Refresh stock immediately
-          }}
-        />
-      )}
+
       <MpIncomingPaymentToasts
         branchId={branchId}
         enabled={Boolean(activeShift && (userRole === "OWNER" || canOperateCurrentShift))}

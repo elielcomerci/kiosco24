@@ -13,9 +13,9 @@ export default async function LandingPage() {
   if (!branchId && session?.user?.role === "EMPLOYEE" && session.user.employeeId) {
     const employee = await prisma.employee.findUnique({
       where: { id: session.user.employeeId },
-      select: { branchId: true },
+      select: { branches: { take: 1, select: { id: true } } },
     });
-    branchId = employee?.branchId ?? null;
+    branchId = employee?.branches[0]?.id ?? null;
   }
 
   if (session?.user?.id && !branchId) {

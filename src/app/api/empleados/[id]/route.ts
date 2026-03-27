@@ -1,5 +1,6 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { EmployeeRole } from "@prisma/client";
 import { NextResponse } from "next/server";
 
 import { getBranchContext } from "@/lib/branch";
@@ -18,15 +19,19 @@ export async function PATCH(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const { branchId } = await getBranchContext(req, session.user.id);
+  const { kioscoId } = await getBranchContext(req, session.user.id);
   const { id } = await params;
 
-  const employee = await prisma.employee.findUnique({ where: { id } });
-  if (!employee || employee.branchId !== branchId) {
+  const employee = await prisma.employee.findUnique({ 
+    where: { id },
+    include: { branches: { select: { id: true } } }
+  });
+
+  if (!employee || employee.kioscoId !== kioscoId) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  const { name, pin, active, suspendedUntil } = await req.json();
+  const { name, pin, active, suspendedUntil, role, branchIds } = await req.json();
   const parsedSuspendedUntil =
     suspendedUntil === undefined
       ? undefined
@@ -59,25 +64,26 @@ export async function PATCH(
   const updated = await prisma.$transaction(async (tx) => {
     const nextEmployee = await tx.employee.update({
       where: { id },
-      select: {
-        id: true,
-        name: true,
-        active: true,
-        suspendedUntil: true,
-        pin: true,
+      include: {
+        branches: { select: { id: true, name: true } }
       },
       data: {
         ...(name !== undefined && { name: name.trim() }),
         ...(hashedPin !== undefined && { pin: hashedPin }),
         ...(active !== undefined && { active }),
         ...(parsedSuspendedUntil !== undefined && { suspendedUntil: parsedSuspendedUntil }),
-      },
+        ...(role !== undefined && { role: role as EmployeeRole }),
+        ...(branchIds !== undefined && Array.isArray(branchIds) && {
+          branches: {
+            set: branchIds.map((bid: string) => ({ id: bid }))
+          }
+        }),
+      } as any,
     });
 
     if (shouldSuspendNow) {
       const openShifts = await tx.shift.findMany({
         where: {
-          branchId: branchId ?? undefined,
           employeeId: id,
           closedAt: null,
         },
@@ -112,6 +118,8 @@ export async function PATCH(
   return NextResponse.json({
     id: updated.id,
     name: updated.name,
+    role: updated.role,
+    branches: updated.branches,
     active: updated.active,
     suspendedUntil: updated.suspendedUntil,
     hasPin: Boolean(updated.pin),
@@ -131,11 +139,11 @@ export async function DELETE(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const { branchId } = await getBranchContext(req, session.user.id);
+  const { kioscoId } = await getBranchContext(req, session.user.id);
   const { id } = await params;
 
   const employee = await prisma.employee.findUnique({ where: { id } });
-  if (!employee || employee.branchId !== branchId) {
+  if (!employee || employee.kioscoId !== kioscoId) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 

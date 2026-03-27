@@ -7,7 +7,7 @@ import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import { getKioscoAccessContextByAccessKey } from "@/lib/access-control";
 import { InvalidEmployeePinError, verifyEmployeePinValue } from "@/lib/employee-pin";
-import { UserRole } from "@prisma/client";
+import { UserRole, EmployeeRole } from "@prisma/client";
 
 const authSecret =
   process.env.AUTH_SECRET?.trim() ||
@@ -23,6 +23,7 @@ declare module "next-auth" {
       id: string;
       role?: UserRole;
       employeeId?: string;
+      employeeRole?: EmployeeRole;
       branchId?: string;
     } & DefaultSession["user"];
   }
@@ -30,6 +31,7 @@ declare module "next-auth" {
   interface User {
     role?: UserRole;
     employeeId?: string;
+    employeeRole?: EmployeeRole;
     branchId?: string;
   }
 }
@@ -39,6 +41,7 @@ declare module "next-auth/jwt" {
     id?: string;
     role?: UserRole;
     employeeId?: string;
+    employeeRole?: EmployeeRole;
     branchId?: string;
   }
 }
@@ -117,11 +120,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             pin: true,
             active: true,
             suspendedUntil: true,
-            branchId: true,
+            role: true,
+            branches: {
+              where: { id: branch.id },
+              select: { id: true }
+            }
           },
         });
 
-        if (!employee || !employee.active || employee.branchId !== branch.id) {
+        if (!employee || !employee.active || employee.branches.length === 0) {
           return null;
         }
 
@@ -157,6 +164,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           name: employee.name,
           role: UserRole.EMPLOYEE,
           employeeId: employee.id,
+          employeeRole: employee.role,
           branchId: branch.id,
         };
       },
@@ -169,9 +177,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.role = user.role ?? UserRole.OWNER;
         if ((user.role ?? UserRole.OWNER) === UserRole.EMPLOYEE) {
           token.employeeId = user.employeeId;
+          token.employeeRole = user.employeeRole;
           token.branchId = user.branchId;
         } else {
           delete token.employeeId;
+          delete token.employeeRole;
           delete token.branchId;
         }
         return token;
@@ -182,12 +192,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           typeof token.id === "string" &&
           token.id.startsWith("emp_") &&
           typeof token.employeeId === "string" &&
+          typeof token.employeeRole === "string" &&
           typeof token.branchId === "string";
 
         if (!isValidEmployeeToken) {
           delete token.id;
           delete token.role;
           delete token.employeeId;
+          delete token.employeeRole;
           delete token.branchId;
         }
         return token;
@@ -204,6 +216,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.id = token.id as string;
         session.user.role = (token.role as UserRole) ?? UserRole.OWNER;
         session.user.employeeId = token.employeeId as string | undefined;
+        session.user.employeeRole = token.employeeRole as EmployeeRole | undefined;
         session.user.branchId = token.branchId as string | undefined;
       }
 

@@ -17,6 +17,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "No branch" }, { status: 404 });
   }
 
+  if (session.user.employeeRole === "CASHIER") {
+    return NextResponse.json({ error: "No tenés permiso para registrar retiros." }, { status: 403 });
+  }
+
   const { amount, note } = await req.json();
   const amountNumber = Number(amount);
 

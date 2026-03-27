@@ -40,9 +40,9 @@ export default async function BranchLayout({
   if (isEmployee && !effectiveBranchId && session.user.employeeId) {
     const employee = await prisma.employee.findUnique({
       where: { id: session.user.employeeId },
-      select: { branchId: true },
+      select: { branches: { take: 1, select: { id: true } } },
     });
-    effectiveBranchId = employee?.branchId ?? null;
+    effectiveBranchId = employee?.branches[0]?.id ?? null;
   }
 
   if (!effectiveBranchId) {

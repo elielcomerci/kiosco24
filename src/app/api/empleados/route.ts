@@ -1,5 +1,6 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { EmployeeRole } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { getBranchContext } from "@/lib/branch";
 import { InvalidEmployeePinError, isEmployeePinHash, prepareEmployeePinForStorage } from "@/lib/employee-pin";
@@ -19,12 +20,19 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const { branchId } = await getBranchContext(req, session.user.id);
-  if (!branchId) return NextResponse.json([], { status: 200 });
+  const { branchId, kioscoId } = await getBranchContext(req, session.user.id);
+  if (!kioscoId) return NextResponse.json([], { status: 200 });
+
+  // If it's the POS calling (activeOnly=true), we usually want to filter by the current branch
+  // If it's the Admin panel, we want all employees of the Kiosco.
+  const filterByBranch = activeOnly && branchId;
 
   const employees = await prisma.employee.findMany({
     where: { 
-      branchId,
+      kioscoId,
+      ...(filterByBranch ? {
+        branches: { some: { id: branchId } }
+      } : {}),
       ...(activeOnly ? {
         active: true,
         OR: [
@@ -33,12 +41,8 @@ export async function GET(req: Request) {
         ],
       } : {})
     },
-    select: {
-      id: true,
-      name: true,
-      pin: true,
-      active: true,
-      suspendedUntil: true,
+    include: {
+      branches: { select: { id: true, name: true } }
     },
     orderBy: [{ active: "desc" }, { name: "asc" }],
   });
@@ -63,6 +67,8 @@ export async function GET(req: Request) {
     employees.map((employee) => ({
       id: employee.id,
       name: employee.name,
+      role: employee.role,
+      branches: employee.branches,
       ...(session.user.role === "OWNER"
         ? {
             active: employee.active,
@@ -83,34 +89,42 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const { branchId } = await getBranchContext(req, session.user.id);
-  if (!branchId)
-    return NextResponse.json({ error: "No branch" }, { status: 404 });
+  const { kioscoId } = await getBranchContext(req, session.user.id);
+  if (!kioscoId)
+    return NextResponse.json({ error: "No kiosco found" }, { status: 404 });
 
   try {
-    const { name, pin } = await req.json();
+    const { name, pin, role, branchIds } = await req.json();
 
     if (!name?.trim())
       return NextResponse.json({ error: "Name required" }, { status: 400 });
+    
+    if (!branchIds || !Array.isArray(branchIds) || branchIds.length === 0) {
+      return NextResponse.json({ error: "At least one branch is required" }, { status: 400 });
+    }
 
     const employee = await prisma.employee.create({
       data: {
         name: name.trim(),
         pin: await prepareEmployeePinForStorage(pin),
-        branchId,
-      },
-      select: {
-        id: true,
-        name: true,
-        active: true,
-        suspendedUntil: true,
-        pin: true,
+        role: (role as EmployeeRole) || EmployeeRole.CASHIER,
+        kiosco: {
+          connect: { id: kioscoId },
+        },
+        branches: {
+          connect: branchIds.map((id: string) => ({ id })),
+        },
+      } as any,
+      include: {
+        branches: { select: { id: true, name: true } }
       },
     });
 
     return NextResponse.json({
       id: employee.id,
       name: employee.name,
+      role: employee.role,
+      branches: employee.branches,
       active: employee.active,
       suspendedUntil: employee.suspendedUntil,
       hasPin: Boolean(employee.pin),

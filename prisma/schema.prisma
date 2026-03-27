@@ -1,5 +1,5 @@
 generator client {
-  provider        = "prisma-client-js"
+  provider = "prisma-client-js"
 }
 
 datasource db {
@@ -7,22 +7,22 @@ datasource db {
 }
 
 model User {
-  id            String    @id @default(cuid())
-  name          String?
-  email         String    @unique
-  password      String?
-  emailVerified DateTime?
-  image         String?
-  role          UserRole  @default(OWNER)
-  accounts      Account[]
-  sessions      Session[]
-  kiosco        Kiosco?
-  createdAccessGrants AccessGrant[] @relation("AccessGrantCreator")
-  accessOverrideChanges Kiosco[] @relation("KioscoAccessOverrideBy")
+  id                        String                      @id @default(cuid())
+  name                      String?
+  email                     String                      @unique
+  password                  String?
+  emailVerified             DateTime?
+  image                     String?
+  role                      UserRole                    @default(OWNER)
+  accounts                  Account[]
+  sessions                  Session[]
+  kiosco                    Kiosco?
+  createdAccessGrants       AccessGrant[]               @relation("AccessGrantCreator")
+  accessOverrideChanges     Kiosco[]                    @relation("KioscoAccessOverrideBy")
   submittedPlatformProducts PlatformProductSubmission[] @relation("PlatformProductSubmissionSubmitter")
-  reviewedPlatformProducts PlatformProductSubmission[] @relation("PlatformProductSubmissionReviewer")
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  reviewedPlatformProducts  PlatformProductSubmission[] @relation("PlatformProductSubmissionReviewer")
+  createdAt                 DateTime                    @default(now())
+  updatedAt                 DateTime                    @updatedAt
 }
 
 enum UserRole {
@@ -58,23 +58,24 @@ model Session {
 }
 
 model Kiosco {
-  id                    String               @id @default(cuid())
-  name                  String
-  ownerId               String               @unique
-  owner                 User                 @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  branches              Branch[]
-  products              Product[]
-  categories            Category[]
-  subscription          Subscription?
-  accessGrants          AccessGrant[]
-  accessOverride        KioscoAccessOverride @default(INHERIT)
-  accessOverrideNote    String?              @db.Text
-  accessOverrideAt      DateTime?
-  accessOverrideById    String?
-  accessOverrideBy      User?                @relation("KioscoAccessOverrideBy", fields: [accessOverrideById], references: [id], onDelete: SetNull)
+  id                         String                      @id @default(cuid())
+  name                       String
+  ownerId                    String                      @unique
+  owner                      User                        @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  branches                   Branch[]
+  products                   Product[]
+  categories                 Category[]
+  subscription               Subscription?
+  employees                  Employee[]
+  accessGrants               AccessGrant[]
+  accessOverride             KioscoAccessOverride        @default(INHERIT)
+  accessOverrideNote         String?                     @db.Text
+  accessOverrideAt           DateTime?
+  accessOverrideById         String?
+  accessOverrideBy           User?                       @relation("KioscoAccessOverrideBy", fields: [accessOverrideById], references: [id], onDelete: SetNull)
   platformProductSubmissions PlatformProductSubmission[]
-  createdAt             DateTime             @default(now())
-  updatedAt             DateTime             @updatedAt
+  createdAt                  DateTime                    @default(now())
+  updatedAt                  DateTime                    @updatedAt
 }
 
 model Branch {
@@ -101,14 +102,14 @@ model Branch {
   variantInventories VariantInventory[]
 
   // MercadoPago OAuth — tokens de la cuenta MP de esta sucursal
-  mpUserId         String? // ID numérico de la cuenta MP del dueño
-  mpAccessToken    String?        @db.Text
-  mpRefreshToken   String?        @db.Text
-  mpTokenExpiresAt DateTime? // access_token dura 180 días
-  mpStoreId        String? // ID de sucursal creada en MP
-  mpPosId          String? // external_id del punto de venta en MP
+  mpUserId                 String? // ID numérico de la cuenta MP del dueño
+  mpAccessToken            String?                   @db.Text
+  mpRefreshToken           String?                   @db.Text
+  mpTokenExpiresAt         DateTime? // access_token dura 180 días
+  mpStoreId                String? // ID de sucursal creada en MP
+  mpPosId                  String? // external_id del punto de venta en MP
   mpIncomingPaymentNotices MpIncomingPaymentNotice[]
-  restockEvents    RestockEvent[]
+  restockEvents            RestockEvent[]
 
   @@index([kioscoId])
 }
@@ -128,51 +129,51 @@ model Category {
 }
 
 model Product {
-    id         String            @id @default(cuid())
-    name       String
-    barcode    String?
-    internalCode String?
-    emoji      String?
-    image      String? // Cloudinary URL
-    brand      String?
-    description String?
-    presentation String?
-    supplierName String?
-    notes      String?           @db.Text
-    categoryId String?
-    category   Category?         @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-    platformProductId String?
-    platformProduct PlatformProduct? @relation(fields: [platformProductId], references: [id], onDelete: SetNull)
-  kioscoId   String
-  kiosco     Kiosco            @relation(fields: [kioscoId], references: [id], onDelete: Cascade)
-  inventory  InventoryRecord[]
-  variants   Variant[]
-  restocks   RestockItem[]
-  createdAt  DateTime          @default(now())
-  updatedAt  DateTime          @updatedAt
+  id                String            @id @default(cuid())
+  name              String
+  barcode           String?
+  internalCode      String?
+  emoji             String?
+  image             String? // Cloudinary URL
+  brand             String?
+  description       String?
+  presentation      String?
+  supplierName      String?
+  notes             String?           @db.Text
+  categoryId        String?
+  category          Category?         @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  platformProductId String?
+  platformProduct   PlatformProduct?  @relation(fields: [platformProductId], references: [id], onDelete: SetNull)
+  kioscoId          String
+  kiosco            Kiosco            @relation(fields: [kioscoId], references: [id], onDelete: Cascade)
+  inventory         InventoryRecord[]
+  variants          Variant[]
+  restocks          RestockItem[]
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
 
-    @@index([kioscoId])
-    @@index([categoryId])
-    @@index([barcode])
-    @@index([internalCode])
-    @@index([platformProductId])
-  }
+  @@index([kioscoId])
+  @@index([categoryId])
+  @@index([barcode])
+  @@index([internalCode])
+  @@index([platformProductId])
+}
 
 model PlatformProduct {
-  id           String                     @id @default(cuid())
-  barcode      String?                    @unique
+  id           String                      @id @default(cuid())
+  barcode      String?                     @unique
   name         String
   brand        String?
   categoryName String?
   description  String?
   presentation String?
   image        String?
-  status       PlatformProductStatus      @default(APPROVED)
+  status       PlatformProductStatus       @default(APPROVED)
   products     Product[]
   variants     PlatformProductVariant[]
   submissions  PlatformProductSubmission[]
-  createdAt    DateTime                   @default(now())
-  updatedAt    DateTime                   @updatedAt
+  createdAt    DateTime                    @default(now())
+  updatedAt    DateTime                    @updatedAt
 
   @@index([status])
 }
@@ -190,28 +191,28 @@ model PlatformProductVariant {
 }
 
 model PlatformProductSubmission {
-  id                   String                          @id @default(cuid())
-  barcode              String?
-  name                 String
-  brand                String?
-  categoryName         String?
-  description          String?
-  presentation         String?
-  image                String?
-  status               PlatformProductSubmissionStatus @default(PENDING)
-  reviewNote           String?                         @db.Text
-  platformProductId    String?
-  platformProduct      PlatformProduct?                @relation(fields: [platformProductId], references: [id], onDelete: SetNull)
-  submittedByUserId    String?
-  submittedByUser      User?                           @relation("PlatformProductSubmissionSubmitter", fields: [submittedByUserId], references: [id], onDelete: SetNull)
+  id                    String                             @id @default(cuid())
+  barcode               String?
+  name                  String
+  brand                 String?
+  categoryName          String?
+  description           String?
+  presentation          String?
+  image                 String?
+  status                PlatformProductSubmissionStatus    @default(PENDING)
+  reviewNote            String?                            @db.Text
+  platformProductId     String?
+  platformProduct       PlatformProduct?                   @relation(fields: [platformProductId], references: [id], onDelete: SetNull)
+  submittedByUserId     String?
+  submittedByUser       User?                              @relation("PlatformProductSubmissionSubmitter", fields: [submittedByUserId], references: [id], onDelete: SetNull)
   submittedFromKioscoId String?
-  submittedFromKiosco  Kiosco?                         @relation(fields: [submittedFromKioscoId], references: [id], onDelete: SetNull)
-  reviewedById         String?
-  reviewedBy           User?                           @relation("PlatformProductSubmissionReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
-  reviewedAt           DateTime?
-  variants             PlatformProductSubmissionVariant[]
-  createdAt            DateTime                        @default(now())
-  updatedAt            DateTime                        @updatedAt
+  submittedFromKiosco   Kiosco?                            @relation(fields: [submittedFromKioscoId], references: [id], onDelete: SetNull)
+  reviewedById          String?
+  reviewedBy            User?                              @relation("PlatformProductSubmissionReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt            DateTime?
+  variants              PlatformProductSubmissionVariant[]
+  createdAt             DateTime                           @default(now())
+  updatedAt             DateTime                           @updatedAt
 
   @@index([barcode, status])
   @@index([submittedByUserId])
@@ -278,98 +279,105 @@ model VariantInventory {
   @@index([branchId])
 }
 
-model Employee {
-  id            String         @id @default(cuid())
-  name          String
-  pin           String?
-  active        Boolean        @default(true)
-  suspendedUntil  DateTime?         // Suspensión temporal
-  branchId      String
-  branch        Branch         @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  shifts          Shift[]
-  restockEvents   RestockEvent[]
-  sales           Sale[]            @relation("CreatedBy")
-  expenses        Expense[]         @relation("CreatedBy")
-  withdrawals     Withdrawal[]      @relation("CreatedBy")
+enum EmployeeRole {
+  CASHIER
+  MANAGER
+}
 
-  @@index([branchId])
+model Employee {
+  id             String         @id @default(cuid())
+  name           String
+  pin            String?
+  active         Boolean        @default(true)
+  suspendedUntil DateTime? // Suspensión temporal
+  role           EmployeeRole   @default(CASHIER)
+  kioscoId       String
+  kiosco         Kiosco         @relation(fields: [kioscoId], references: [id], onDelete: Cascade)
+  branches       Branch[]
+  shifts         Shift[]
+  restockEvents  RestockEvent[]
+  sales          Sale[]         @relation("CreatedBy")
+  expenses       Expense[]      @relation("CreatedBy")
+  withdrawals    Withdrawal[]   @relation("CreatedBy")
+
+  @@index([kioscoId])
 }
 
 model Shift {
-  id             String       @id @default(cuid())
-  employeeId     String?
-  employee       Employee?    @relation(fields: [employeeId], references: [id])
-  employeeName   String
-  branchId       String
-  branch         Branch       @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  activeForBranch Branch?     @relation("BranchActiveShift")
-  openingAmount  Float
-  closingAmount  Float?
-  expectedAmount Float?
-  difference     Float?
-  note           String?
-  openedAt       DateTime     @default(now())
-  closedAt       DateTime?
-  sales          Sale[]
-  expenses       Expense[]
-  withdrawals    Withdrawal[]
+  id              String       @id @default(cuid())
+  employeeId      String?
+  employee        Employee?    @relation(fields: [employeeId], references: [id])
+  employeeName    String
+  branchId        String
+  branch          Branch       @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  activeForBranch Branch?      @relation("BranchActiveShift")
+  openingAmount   Float
+  closingAmount   Float?
+  expectedAmount  Float?
+  difference      Float?
+  note            String?
+  openedAt        DateTime     @default(now())
+  closedAt        DateTime?
+  sales           Sale[]
+  expenses        Expense[]
+  withdrawals     Withdrawal[]
 
   @@index([branchId, openedAt])
 }
 
 model Expense {
-  id        String        @id @default(cuid())
-  amount    Float
-  reason    ExpenseReason
-  note      String?
-  shiftId   String?
-  shift     Shift?        @relation(fields: [shiftId], references: [id], onDelete: SetNull)
-  branchId              String
-  branch                Branch         @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  createdByEmployeeId   String?
-  createdByEmployee     Employee?      @relation("CreatedBy", fields: [createdByEmployeeId], references: [id], onDelete: SetNull)
-  createdAt             DateTime       @default(now())
+  id                  String        @id @default(cuid())
+  amount              Float
+  reason              ExpenseReason
+  note                String?
+  shiftId             String?
+  shift               Shift?        @relation(fields: [shiftId], references: [id], onDelete: SetNull)
+  branchId            String
+  branch              Branch        @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  createdByEmployeeId String?
+  createdByEmployee   Employee?     @relation("CreatedBy", fields: [createdByEmployeeId], references: [id], onDelete: SetNull)
+  createdAt           DateTime      @default(now())
 
   @@index([branchId, createdAt])
 }
 
 model Withdrawal {
-  id        String   @id @default(cuid())
-  amount    Float
-  note      String?
-  shiftId   String?
-  shift     Shift?   @relation(fields: [shiftId], references: [id], onDelete: SetNull)
-  branchId              String
-  branch                Branch         @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  createdByEmployeeId   String?
-  createdByEmployee     Employee?      @relation("CreatedBy", fields: [createdByEmployeeId], references: [id], onDelete: SetNull)
-  createdAt             DateTime       @default(now())
+  id                  String    @id @default(cuid())
+  amount              Float
+  note                String?
+  shiftId             String?
+  shift               Shift?    @relation(fields: [shiftId], references: [id], onDelete: SetNull)
+  branchId            String
+  branch              Branch    @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  createdByEmployeeId String?
+  createdByEmployee   Employee? @relation("CreatedBy", fields: [createdByEmployeeId], references: [id], onDelete: SetNull)
+  createdAt           DateTime  @default(now())
 
   @@index([branchId, createdAt])
 }
 
 model Sale {
-  id               String          @id @default(cuid())
-  clientSaleId     String?
-  total            Float
-  paymentMethod    PaymentMethod
-  receivedAmount   Float?
-  shiftId          String?
-  shift            Shift?          @relation(fields: [shiftId], references: [id], onDelete: SetNull)
+  id                  String          @id @default(cuid())
+  clientSaleId        String?
+  total               Float
+  paymentMethod       PaymentMethod
+  receivedAmount      Float?
+  shiftId             String?
+  shift               Shift?          @relation(fields: [shiftId], references: [id], onDelete: SetNull)
   branchId            String
   branch              Branch          @relation(fields: [branchId], references: [id], onDelete: Cascade)
   createdByEmployeeId String?
   createdByEmployee   Employee?       @relation("CreatedBy", fields: [createdByEmployeeId], references: [id], onDelete: SetNull)
   items               SaleItem[]
-  creditCustomerId String?
-  creditCustomer   CreditCustomer? @relation(fields: [creditCustomerId], references: [id], onDelete: SetNull)
-  voided           Boolean         @default(false)
-  voidedAt         DateTime?
-  createdAt        DateTime        @default(now())
+  creditCustomerId    String?
+  creditCustomer      CreditCustomer? @relation(fields: [creditCustomerId], references: [id], onDelete: SetNull)
+  voided              Boolean         @default(false)
+  voidedAt            DateTime?
+  createdAt           DateTime        @default(now())
 
+  @@unique([branchId, clientSaleId])
   @@index([branchId, createdAt])
   @@index([shiftId])
-  @@unique([branchId, clientSaleId])
 }
 
 model SaleItem {

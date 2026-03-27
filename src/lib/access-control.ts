@@ -310,13 +310,14 @@ export async function getKioscoAccessContextForSession(user: SessionUserLike | n
       ? await prisma.employee.findUnique({
           where: { id: user.employeeId },
           select: {
-            branchId: true,
-            branch: {
-              select: {
-                kiosco: {
-                  select: kioscoAccessSelect,
-                },
-              },
+            kioscoId: true,
+            branches: {
+              where: user.branchId ? { id: user.branchId } : undefined,
+              take: 1,
+              select: { id: true },
+            },
+            kiosco: {
+              select: kioscoAccessSelect,
             },
           },
         })
@@ -337,11 +338,12 @@ export async function getKioscoAccessContextForSession(user: SessionUserLike | n
       };
     }
 
-    const kiosco = employee.branch.kiosco;
+    const kiosco = employee.kiosco;
+    const activeBranchId = user.branchId || employee.branches[0]?.id || kiosco.branches[0]?.id || null;
     return buildContext({
       kioscoId: kiosco.id,
       kioscoName: kiosco.name,
-      firstBranchId: employee.branchId ?? kiosco.branches[0]?.id ?? null,
+      firstBranchId: activeBranchId,
       subscriptionStatus: kiosco.subscription?.status ?? null,
       managementUrl: kiosco.subscription?.managementUrl ?? null,
       activeGrant: activeGrant(kiosco.accessGrants),

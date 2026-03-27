@@ -1,4 +1,4 @@
-import { type UserRole } from "@prisma/client";
+import { type UserRole, type EmployeeRole } from "@prisma/client";
 import { NextResponse } from "next/server";
 
 import { Prisma, prisma, type Shift } from "@/lib/prisma";
@@ -6,6 +6,7 @@ import { Prisma, prisma, type Shift } from "@/lib/prisma";
 type SessionUserLike = {
   role?: UserRole | null;
   employeeId?: string | null;
+  employeeRole?: EmployeeRole | null;
 };
 
 type ShiftDbClient = Prisma.TransactionClient | typeof prisma;
@@ -31,6 +32,10 @@ export function canOperateShift(user: SessionUserLike, shift: { employeeId: stri
 
 export function canManageShiftLifecycle(user: SessionUserLike, shift: { employeeId: string | null }) {
   if (user.role === "EMPLOYEE") {
+    // Managers can manage any shift (override empty or other employees)
+    if (user.employeeRole === "MANAGER") return true;
+    
+    // Others can only manage their own
     return Boolean(user.employeeId && shift.employeeId && user.employeeId === shift.employeeId);
   }
 

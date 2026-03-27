@@ -54,11 +54,11 @@ export async function POST(
 
   if (typeof employeeId === "string" && employeeId) {
     const employee = await prisma.employee.findFirst({
-      where: {
-        id: employeeId,
-        branchId,
-        active: true,
-      },
+        where: {
+          id: employeeId,
+          branches: { some: { id: { equals: branchId } } },
+          active: true,
+        } as any,
       select: {
         id: true,
         name: true,

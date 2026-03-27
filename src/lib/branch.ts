@@ -31,17 +31,21 @@ export async function getBranchContext(req: Request, userId: string): Promise<{ 
     const employee = await prisma.employee.findUnique({
       where: { id: realId },
       include: {
-        branch: { select: { id: true, kioscoId: true } },
+        branches: { 
+          where: preferredBranchId ? { id: preferredBranchId } : undefined,
+          take: 1,
+          select: { id: true, kioscoId: true } 
+        },
       },
     });
 
-    if (!employee) {
+    if (!employee || employee.branches.length === 0) {
       return { branchId: null, kioscoId: null };
     }
 
     return {
-      branchId: employee.branchId,
-      kioscoId: employee.branch.kioscoId,
+      branchId: employee.branches[0].id,
+      kioscoId: employee.branches[0].kioscoId,
     };
   }
 

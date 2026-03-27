@@ -13,6 +13,8 @@ import {
 interface Employee {
   id: string;
   name: string;
+  role: "CASHIER" | "MANAGER";
+  branches: { id: string; name: string }[];
   hasPin: boolean;
   active: boolean;
   suspendedUntil: string | null; // ISO string for form state
@@ -40,11 +42,13 @@ interface Branch {
 // ─── Employee Form Modal ───────────────────────────────────────────────────────
 function EmployeeModal({
   branchId,
+  allBranches,
   employee,
   onClose,
   onSave,
 }: {
   branchId: string;
+  allBranches: Branch[];
   employee: Employee | null;
   onClose: () => void;
   onSave: () => void;
@@ -52,12 +56,24 @@ function EmployeeModal({
   const isNew = !employee;
   const [name, setName] = useState(employee?.name || "");
   const [pin, setPin] = useState("");
+  const [role, setRole] = useState<"CASHIER" | "MANAGER">(employee?.role || "CASHIER");
+  const [selectedBranchIds, setSelectedBranchIds] = useState<string[]>(
+    employee?.branches.map(b => b.id) || [branchId]
+  );
   const [active, setActive] = useState(employee?.active ?? true);
   const [suspendedUntil, setSuspendedUntil] = useState(employee?.suspendedUntil || "");
   const [removePin, setRemovePin] = useState(false);
   const [loading, setLoading] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const hasStoredPin = Boolean(employee?.hasPin);
+
+  const toggleBranch = (id: string) => {
+    setSelectedBranchIds(prev => 
+      prev.includes(id) 
+        ? (prev.length > 1 ? prev.filter(bid => bid !== id) : prev) 
+        : [...prev, id]
+    );
+  };
 
   const handleSave = async () => {
     if (!name.trim()) return;
@@ -69,7 +85,12 @@ function EmployeeModal({
           "Content-Type": "application/json",
           "x-branch-id": branchId,
         },
-        body: JSON.stringify({ name, pin: pin || null }),
+        body: JSON.stringify({ 
+          name, 
+          pin: pin || null, 
+          role, 
+          branchIds: selectedBranchIds 
+        }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => null);
@@ -87,6 +108,8 @@ function EmployeeModal({
         name,
         active,
         suspendedUntil: suspendedUntil || null,
+        role,
+        branchIds: selectedBranchIds,
       };
 
       if (removePin) {
@@ -239,6 +262,59 @@ function EmployeeModal({
             )}
           </div>
 
+          <div>
+            <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: "8px" }}>
+              Rol
+            </label>
+            <div style={{ display: "flex", gap: "8px" }}>
+              {(["CASHIER", "MANAGER"] as const).map((r) => (
+                <button
+                  key={r}
+                  type="button"
+                  className={`btn btn-sm ${role === r ? "btn-green" : "btn-ghost"}`}
+                  style={{ flex: 1, textTransform: "capitalize", border: "1px solid var(--border)" }}
+                  onClick={() => setRole(r)}
+                >
+                  {r === "CASHIER" ? "Cajero" : "Encargado"}
+                </button>
+              ))}
+            </div>
+            <p style={{ fontSize: "11px", color: "var(--text-3)", marginTop: "6px" }}>
+              {role === "CASHIER" 
+                ? "Solo puede abrir caja y vender." 
+                : "Tiene acceso a retiros, gastos y estadísticas de la sucursal."}
+            </p>
+          </div>
+
+          <div>
+            <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: "8px" }}>
+              Sucursales asignadas
+            </label>
+            <div style={{ 
+              display: "flex", 
+              flexDirection: "column", 
+              gap: "4px",
+              maxHeight: "120px",
+              overflowY: "auto",
+              padding: "8px",
+              background: "var(--surface-2)",
+              borderRadius: "var(--radius)",
+              border: "1px solid var(--border)"
+            }}>
+              {allBranches.map((b) => (
+                <label key={b.id} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "6px", cursor: "pointer" }}>
+                  <input 
+                    type="checkbox" 
+                    checked={selectedBranchIds.includes(b.id)} 
+                    onChange={() => toggleBranch(b.id)}
+                    style={{ width: "16px", height: "16px" }}
+                  />
+                  <span style={{ fontSize: "14px" }}>{b.name}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
           {!isNew && (
             <div
               style={{
@@ -251,7 +327,7 @@ function EmployeeModal({
                 border: "1px solid var(--border)",
               }}
             >
-              <span style={{ fontWeight: 600 }}>Activo</span>
+              <span style={{ fontWeight: 600 }}>Caja Habilitada</span>
               <button
                 style={{
                   width: "44px",
@@ -1379,8 +1455,16 @@ export default function ConfiguracionPage() {
                       </span>
                     )}
                   </div>
-                  <div style={{ fontSize: "12px", color: "var(--text-3)" }}>
-                    {emp.hasPin ? "PIN configurado" : "Sin PIN"}
+                  <div style={{ fontSize: "12px", color: "var(--text-3)", display: "flex", flexDirection: "column", gap: 2 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <span style={{ color: "var(--primary)", fontWeight: 700, fontSize: "10px", background: "rgba(34,197,94,0.1)", padding: "1px 4px", borderRadius: "4px" }}>
+                        {emp.role === "MANAGER" ? "ENCARGADO" : "CAJERO"}
+                      </span>
+                      {emp.hasPin ? "PIN configurado" : "Sin PIN"}
+                    </div>
+                    <div style={{ opacity: 0.8 }}>
+                      📍 {emp.branches.map(b => b.name).join(", ")}
+                    </div>
                   </div>
                 </div>
                 <span style={{ color: "var(--text-3)", fontSize: "18px" }}>›</span>
@@ -1394,6 +1478,7 @@ export default function ConfiguracionPage() {
       {employeeModal && (
         <EmployeeModal
           branchId={branchId}
+          allBranches={branches}
           employee={employeeModal === "new" ? null : employeeModal}
           onClose={handleEmployeeModalClose}
           onSave={handleEmployeeModalSave}

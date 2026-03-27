@@ -140,6 +140,7 @@ export default function CajaPage() {
   const { data: session, status } = useSession();
   const userRole = session?.user?.role;
   const employeeId = session?.user?.employeeId;
+  const isCashier = userRole === "EMPLOYEE" && session?.user?.employeeRole === "CASHIER";
   
   const [products, setProducts] = useState<Product[]>([]);
   const [ticket, setTicket] = useState<TicketItem[]>([]);
@@ -195,23 +196,38 @@ export default function CajaPage() {
   const canOperateCurrentShift = useMemo(() => {
     if (!activeShift) return false;
     if (userRole === "EMPLOYEE") {
+      // Solo el responsable puede operar (vender/gastar)
       return Boolean(employeeId && activeShift.employeeId && activeShift.employeeId === employeeId);
     }
     return true;
   }, [activeShift, employeeId, userRole]);
+
   const canManageCurrentShift = useMemo(() => {
     if (!activeShift) return false;
+    if (userRole === "OWNER") return true;
     if (userRole === "EMPLOYEE") {
+      // El responsable O un encargado pueden gestionar el turno (cerrar/transferir)
+      if (session?.user?.employeeRole === "MANAGER") return true;
       return Boolean(employeeId && activeShift.employeeId && activeShift.employeeId === employeeId);
     }
-    return true;
-  }, [activeShift, employeeId, userRole]);
+    return false;
+  }, [activeShift, employeeId, userRole, session?.user?.employeeRole]);
   const shiftLocked = Boolean(activeShift && !canOperateCurrentShift);
   const operationsDisabled = !activeShift || shiftLocked;
-  const shiftLockMessage =
-    userRole === "EMPLOYEE"
-      ? `La caja esta a nombre de ${shiftResponsibleName}. Pedile al responsable que te transfiera el turno para poder operar.`
-      : `La caja esta a nombre de ${shiftResponsibleName}. Transferi o cerra el turno para operar desde esta sesion.`;
+  
+  const shiftLockMessage = useMemo(() => {
+    if (!activeShift || !shiftLocked) return null;
+    
+    if (session?.user?.employeeRole === "MANAGER") {
+      return `La caja esta a nombre de ${shiftResponsibleName}. Sos Encargado, podés cerrar o transferir este turno si es necesario.`;
+    }
+    
+    if (userRole === "EMPLOYEE") {
+      return `La caja esta a nombre de ${shiftResponsibleName}. Pedile al responsable que te transfiera el turno para poder operar.`;
+    }
+    
+    return `La caja esta a nombre de ${shiftResponsibleName}. Transferí o cerrá el turno para operar desde esta sesión.`;
+  }, [activeShift, shiftLocked, session?.user?.employeeRole, userRole, shiftResponsibleName]);
 
   // ─── WakeLock Logic ───────────────────────────────────────────────────────
   const wakeLockRef = useRef<WakeLockSentinelLike | null>(null);
@@ -948,9 +964,12 @@ export default function CajaPage() {
         <button
           type="button"
           className="status-bar-item"
-          onClick={() => setShowTotalsBreakdown(true)}
-          style={{ background: "transparent", border: "none", cursor: "pointer" }}
-          title="Ver desglose de caja"
+          onClick={() => {
+            if (isCashier) return;
+            setShowTotalsBreakdown(true);
+          }}
+          style={{ background: "transparent", border: "none", cursor: !isCashier ? "pointer" : "default" }}
+          title={isCashier ? "" : "Ver desglose de caja"}
         >
           <span className="status-bar-label">En Caja</span>
           <span className="status-bar-value" style={{ color: "var(--primary)" }}>
@@ -958,7 +977,7 @@ export default function CajaPage() {
           </span>
         </button>
         <div className="separator" style={{ width: "1px", height: "32px", background: "var(--border-2)" }} />
-        <div className="status-bar-item" style={{ alignItems: "flex-end" }}>
+        <div className="status-bar-item" style={{ alignItems: "flex-end", opacity: isCashier ? 0 : 1 }}>
           <span className="status-bar-label">Ganancia estimada</span>
           <span className="status-bar-value" style={{ color: cajaStats.ganancia !== null && cajaStats.ganancia >= 0 ? "var(--primary)" : "var(--red)" }}>
             {cajaStats.ganancia !== null ? formatARS(cajaStats.ganancia) : "—"}
@@ -1257,7 +1276,7 @@ export default function CajaPage() {
         {/* Secondary Actions: OTRO, GASTO, RETIRO */}
         <div style={{ 
           display: "grid", 
-          gridTemplateColumns: "repeat(3, 1fr)", 
+          gridTemplateColumns: isCashier ? "1fr" : "repeat(3, 1fr)", 
           gap: "8px", 
           padding: "8px 12px",
           background: "var(--surface)"

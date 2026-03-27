@@ -7,10 +7,10 @@ export default auth((req: NextAuthRequest) => {
   const { nextUrl } = req;
   const isLoggedIn = !!req.auth?.user?.id;
   const isEmployeeAccessLink = /^\/KIOSCO-[A-Z0-9]{8}-[A-Z0-9]{8}$/i.test(nextUrl.pathname);
-  const isInternalEmployeeAccess = nextUrl.pathname.startsWith("/_employee-access/");
+  const isInternalEmployeeAccess = nextUrl.pathname.startsWith("/employee-access/");
 
   if (isEmployeeAccessLink) {
-    const rewriteUrl = new URL(`/_employee-access${nextUrl.pathname}`, nextUrl);
+    const rewriteUrl = new URL(`/employee-access${nextUrl.pathname}`, nextUrl);
     return NextResponse.rewrite(rewriteUrl);
   }
 

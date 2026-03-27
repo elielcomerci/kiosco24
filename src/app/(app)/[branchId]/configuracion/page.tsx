@@ -104,6 +104,8 @@ function EmployeeModal({
         active: boolean;
         suspendedUntil: string | null;
         pin?: string | null;
+        role?: string;
+        branchIds?: string[];
       } = {
         name,
         active,

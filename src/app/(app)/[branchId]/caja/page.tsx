@@ -839,7 +839,7 @@ export default function CajaPage() {
     setTicket((prev) => {
       const newTicket = [...prev];
       const item = newTicket[index];
-      
+
       if (delta > 0 && item.maxStock !== undefined && item.quantity >= item.maxStock) {
         alert("Stock máximo alcanzado");
         return prev;
@@ -851,12 +851,27 @@ export default function CajaPage() {
     });
   };
 
-  // ─── Cash numpad ──────────────────────────────────────────────────────────
-  const handleCashButton = () => {
-    if (!ensureCanOperateCurrentShift()) {
+  const [editingQty, setEditingQty] = useState<{ index: number; draft: string } | null>(null);
+
+  const commitQtyEdit = (index: number, rawValue: string) => {
+    const parsed = parseInt(rawValue, 10);
+    setEditingQty(null);
+    if (!rawValue.trim() || isNaN(parsed) || parsed <= 0) {
+      setTicket((prev) => prev.filter((_, i) => i !== index));
       return;
     }
+    setTicket((prev) => {
+      const newTicket = [...prev];
+      const item = newTicket[index];
+      const clamped = item.maxStock !== undefined ? Math.min(parsed, item.maxStock) : parsed;
+      newTicket[index] = { ...item, quantity: clamped };
+      return newTicket;
+    });
+  };
 
+  // ─── Cash numpad ───────────────────────────────────────────────
+  const handleCashButton = () => {
+    if (!ensureCanOperateCurrentShift()) return;
     if (total === 0) return;
     setShowCashNumpad(true);
   };
@@ -865,6 +880,7 @@ export default function CajaPage() {
     setShowCashNumpad(false);
     handlePay("CASH");
   };
+
 
   const change = receivedAmount
     ? parseFloat(receivedAmount) - total
@@ -1242,7 +1258,55 @@ export default function CajaPage() {
                   >
                     −
                   </button>
-                  <span style={{ minWidth: "20px", textAlign: "center", fontWeight: 600 }}>{item.quantity}</span>
+                  {editingQty?.index === idx ? (
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      value={editingQty.draft}
+                      autoFocus
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={(e) => setEditingQty({ index: idx, draft: e.target.value })}
+                      onBlur={(e) => { e.stopPropagation(); commitQtyEdit(idx, editingQty.draft); }}
+                      onKeyDown={(e) => {
+                        e.stopPropagation();
+                        if (e.key === "Enter") commitQtyEdit(idx, editingQty.draft);
+                        if (e.key === "Escape") setEditingQty(null);
+                      }}
+                      style={{
+                        width: "48px",
+                        textAlign: "center",
+                        fontWeight: 700,
+                        fontSize: "15px",
+                        background: "var(--surface)",
+                        border: "1.5px solid var(--primary)",
+                        borderRadius: "6px",
+                        color: "var(--text)",
+                        padding: "2px 4px",
+                        outline: "none",
+                      }}
+                    />
+                  ) : (
+                    <span
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (!operationsDisabled) setEditingQty({ index: idx, draft: String(item.quantity) });
+                      }}
+                      title="Tocá para editar cantidad"
+                      style={{
+                        minWidth: "28px",
+                        textAlign: "center",
+                        fontWeight: 700,
+                        cursor: operationsDisabled ? "default" : "text",
+                        padding: "2px 4px",
+                        borderRadius: "4px",
+                        border: operationsDisabled ? "none" : "1px dashed var(--border)",
+                        fontSize: "15px",
+                        userSelect: "none",
+                      }}
+                    >
+                      {item.quantity}
+                    </span>
+                  )}
                   <button
                     onClick={(e) => { e.stopPropagation(); changeQty(idx, 1); }}
                     disabled={operationsDisabled}

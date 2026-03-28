@@ -1036,18 +1036,158 @@ export default function ConfiguracionPage() {
     fetchCurrentBranch();
   };
 
+  const currentBranchName = currentBranch?.name || editBranchName || "Sucursal actual";
+  const activeEmployees = employees.filter((employee) => employee.active).length;
+  const mpStatusLabel = loadingCurrentBranch
+    ? "Cargando"
+    : !currentBranch?.mpUserId
+      ? "Sin conectar"
+      : !currentBranch?.mpPosId
+        ? "Falta terminal"
+        : "Listo";
+  const pricingModeLabel = pricingMode === "SHARED" ? "Compartidos" : "Por sucursal";
+  const branchAccent = currentBranch?.primaryColor || "var(--primary)";
+  const sectionGridStyle = {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+    gap: "18px",
+    alignItems: "start",
+  };
+  const groupCardStyle = {
+    border: "1px solid var(--border)",
+    borderRadius: "24px",
+    padding: "22px",
+    background: "linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0))",
+    boxShadow: "0 18px 40px rgba(0,0,0,0.14)",
+  };
+  const heroMetricStyle = {
+    borderRadius: "18px",
+    padding: "14px 16px",
+    background: "rgba(255,255,255,0.06)",
+    border: "1px solid rgba(255,255,255,0.08)",
+    display: "flex",
+    flexDirection: "column" as const,
+    gap: "4px",
+    minWidth: "140px",
+  };
+  const heroBadgeStyle = {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "8px",
+    padding: "8px 12px",
+    borderRadius: "999px",
+    background: "rgba(255,255,255,0.08)",
+    border: "1px solid rgba(255,255,255,0.1)",
+    fontSize: "12px",
+    fontWeight: 600,
+    color: "rgba(255,255,255,0.92)",
+  };
+
 
   return (
-    <div style={{ padding: "24px 16px", minHeight: "100dvh", paddingBottom: "100px" }}>
+    <div style={{ minHeight: "100dvh", padding: "24px 16px 110px" }}>
       {/* Header */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
+      <div style={{ maxWidth: "1180px", margin: "0 auto 24px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <BackButton />
         <h1 style={{ fontSize: "20px", fontWeight: 800 }}>Configuración</h1>
         <div style={{ width: "60px" }} />{/* spacer to center title */}
       </div>
 
+      <div style={{ maxWidth: "1180px", margin: "0 auto", display: "flex", flexDirection: "column", gap: "28px" }}>
+        <div
+          style={{
+            borderRadius: "28px",
+            padding: "24px",
+            background: `radial-gradient(circle at top right, ${branchAccent}33, transparent 32%), linear-gradient(135deg, rgba(9,15,28,0.96), rgba(17,24,39,0.92))`,
+            border: "1px solid rgba(255,255,255,0.08)",
+            boxShadow: "0 24px 50px rgba(0,0,0,0.28)",
+            display: "flex",
+            flexDirection: "column",
+            gap: "20px",
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "16px", flexWrap: "wrap" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+                <span style={heroBadgeStyle}>{isOwner ? "Owner" : "Empleado"}</span>
+                <span style={heroBadgeStyle}>{currentBranchName}</span>
+              </div>
+              <div>
+                <h2 style={{ fontSize: "32px", lineHeight: 1.05, fontWeight: 800, margin: 0, color: "#fff" }}>
+                  Configuracion clara para operar mejor
+                </h2>
+                <p style={{ margin: "10px 0 0", maxWidth: "740px", color: "rgba(255,255,255,0.78)", fontSize: "14px", lineHeight: 1.6 }}>
+                  Ordenamos identidad, reglas del negocio, cobros y equipo en bloques mas faciles de revisar para que cualquier cambio importante se encuentre rapido.
+                </p>
+              </div>
+            </div>
+
+            <div
+              style={{
+                width: "72px",
+                height: "72px",
+                borderRadius: "22px",
+                overflow: "hidden",
+                border: "1px solid rgba(255,255,255,0.12)",
+                background: "rgba(255,255,255,0.08)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                flexShrink: 0,
+              }}
+            >
+              {editLogoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={editLogoUrl} alt="Logo actual" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              ) : (
+                <span style={{ fontSize: "28px" }}>⚙️</span>
+              )}
+            </div>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "12px" }}>
+            <div style={heroMetricStyle}>
+              <span style={{ fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.08em", color: "rgba(255,255,255,0.62)" }}>Sucursal</span>
+              <span style={{ fontSize: "18px", fontWeight: 800, color: "#fff" }}>{currentBranchName}</span>
+            </div>
+            <div style={heroMetricStyle}>
+              <span style={{ fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.08em", color: "rgba(255,255,255,0.62)" }}>Equipo activo</span>
+              <span style={{ fontSize: "18px", fontWeight: 800, color: "#fff" }}>{loadingEmployees ? "..." : activeEmployees}</span>
+            </div>
+            <div style={heroMetricStyle}>
+              <span style={{ fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.08em", color: "rgba(255,255,255,0.62)" }}>Sucursales</span>
+              <span style={{ fontSize: "18px", fontWeight: 800, color: "#fff" }}>{loadingBranches ? "..." : branches.length}</span>
+            </div>
+            <div style={heroMetricStyle}>
+              <span style={{ fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.08em", color: "rgba(255,255,255,0.62)" }}>Mercado Pago</span>
+              <span style={{ fontSize: "18px", fontWeight: 800, color: "#fff" }}>{mpStatusLabel}</span>
+            </div>
+            <div style={heroMetricStyle}>
+              <span style={{ fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.08em", color: "rgba(255,255,255,0.62)" }}>Precios</span>
+              <span style={{ fontSize: "18px", fontWeight: 800, color: "#fff" }}>{pricingModeLabel}</span>
+            </div>
+            <div style={heroMetricStyle}>
+              <span style={{ fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.08em", color: "rgba(255,255,255,0.62)" }}>Alerta venc.</span>
+              <span style={{ fontSize: "18px", fontWeight: 800, color: "#fff" }}>{expiryAlertDays || "0"} dias</span>
+            </div>
+          </div>
+        </div>
+
+        <section style={groupCardStyle}>
+          <div style={{ marginBottom: "18px", display: "flex", flexDirection: "column", gap: "6px" }}>
+            <span style={{ fontSize: "11px", letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-3)", fontWeight: 700 }}>
+              Sucursal actual
+            </span>
+            <h2 style={{ margin: 0, fontSize: "26px", fontWeight: 800 }}>Identidad, caja y acceso</h2>
+            <p style={{ margin: 0, color: "var(--text-3)", fontSize: "14px", lineHeight: 1.6 }}>
+              Los cambios de esta seccion afectan como se presenta la sucursal, como cobra y que reglas operativas tiene activas.
+            </p>
+          </div>
+
+          <div style={sectionGridStyle}>
+
       {/* Identidad Visual Section */}
-      <section style={{ marginBottom: "32px" }}>
+      <section style={{ marginBottom: 0 }}>
         <div style={{ marginBottom: "12px" }}>
           <h2 style={{ fontSize: "16px", fontWeight: 700, color: "var(--text-2)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
             🎨 Identidad Visual
@@ -1137,7 +1277,7 @@ export default function ConfiguracionPage() {
       </section>
 
       {/* Theme Editor Section */}
-      <section style={{ marginBottom: "32px" }}>
+      <section style={{ marginBottom: 0, gridColumn: "1 / -1" }}>
         <div style={{ marginBottom: "12px" }}>
           <h2 style={{ fontSize: "16px", fontWeight: 700, color: "var(--text-2)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
             🎨 Tema
@@ -1159,8 +1299,24 @@ export default function ConfiguracionPage() {
         </div>
       </section>
 
+          </div>
+        </section>
+
+        <section style={groupCardStyle}>
+          <div style={{ marginBottom: "18px", display: "flex", flexDirection: "column", gap: "6px" }}>
+            <span style={{ fontSize: "11px", letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-3)", fontWeight: 700 }}>
+              Catalogo y operacion
+            </span>
+            <h2 style={{ margin: 0, fontSize: "26px", fontWeight: 800 }}>Reglas del negocio y estructura</h2>
+            <p style={{ margin: 0, color: "var(--text-3)", fontSize: "14px", lineHeight: 1.6 }}>
+              Acá quedan juntos los criterios de precios, vencimientos, stock, cobro y organización del kiosco para que sea más fácil auditar todo.
+            </p>
+          </div>
+
+          <div style={sectionGridStyle}>
+
       {isOwner && (
-        <section style={{ marginBottom: "32px" }}>
+        <section style={{ marginBottom: 0 }}>
           <div style={{ marginBottom: "12px" }}>
             <h2 style={{ fontSize: "16px", fontWeight: 700, color: "var(--text-2)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
               💸 Precios
@@ -1246,7 +1402,7 @@ export default function ConfiguracionPage() {
       )}
 
       {/* Expiry Alerts Section */}
-      <section style={{ marginBottom: "32px" }}>
+      <section style={{ marginBottom: 0 }}>
         <div style={{ marginBottom: "12px" }}>
           <h2 style={{ fontSize: "16px", fontWeight: 700, color: "var(--text-2)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
             📅 Vencimientos
@@ -1307,7 +1463,7 @@ export default function ConfiguracionPage() {
       </section>
 
       {isOwner && (
-        <section style={{ marginBottom: "32px" }}>
+        <section style={{ marginBottom: 0 }}>
           <div style={{ marginBottom: "12px" }}>
             <h2 style={{ fontSize: "16px", fontWeight: 700, color: "var(--text-2)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
               📦 Reglas de Stock
@@ -1396,7 +1552,7 @@ export default function ConfiguracionPage() {
       )}
 
       {/* MercadoPago Section */}
-      <section style={{ marginBottom: "32px" }}>
+      <section style={{ marginBottom: 0 }}>
         <div style={{ marginBottom: "12px" }}>
           <h2 style={{ fontSize: "16px", fontWeight: 700, color: "var(--text-2)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
             💳 MercadoPago
@@ -1519,7 +1675,7 @@ export default function ConfiguracionPage() {
       </section>
 
       {/* Sucursales Section */}
-      <section style={{ marginBottom: "32px" }}>
+      <section style={{ marginBottom: 0 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
           <h2 style={{ fontSize: "16px", fontWeight: 700, color: "var(--text-2)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
             🏪 Mis Sucursales
@@ -1578,7 +1734,7 @@ export default function ConfiguracionPage() {
       </section>
 
       {/* Categorías Section */}
-      <section style={{ marginBottom: "32px" }}>
+      <section style={{ marginBottom: 0 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
           <h2 style={{ fontSize: "16px", fontWeight: 700, color: "var(--text-2)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
             🏷️ Categorías
@@ -1624,7 +1780,7 @@ export default function ConfiguracionPage() {
       </section>
 
       {/* Branch Access Key Section (Phase 7) */}
-      <section style={{ marginBottom: "32px" }}>
+      <section style={{ marginBottom: 0 }}>
         <div style={{ marginBottom: "12px" }}>
           <h2 style={{ fontSize: "16px", fontWeight: 700, color: "var(--text-2)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
             🔑 Acceso de Dispositivos (Solo Empleados)
@@ -1742,8 +1898,24 @@ export default function ConfiguracionPage() {
         </div>
       </section>
 
+          </div>
+        </section>
+
+        <section style={groupCardStyle}>
+          <div style={{ marginBottom: "18px", display: "flex", flexDirection: "column", gap: "6px" }}>
+            <span style={{ fontSize: "11px", letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-3)", fontWeight: 700 }}>
+              Cuenta y equipo
+            </span>
+            <h2 style={{ margin: 0, fontSize: "26px", fontWeight: 800 }}>Suscripcion, accesos y personas</h2>
+            <p style={{ margin: 0, color: "var(--text-3)", fontSize: "14px", lineHeight: 1.6 }}>
+              Unificamos lo administrativo y el equipo para que las tareas del owner queden en un solo lugar y sea mas rapido revisar estado y permisos.
+            </p>
+          </div>
+
+          <div style={sectionGridStyle}>
+
       {/* Subscription Section */}
-      <section style={{ marginBottom: "32px" }}>
+      <section style={{ marginBottom: 0 }}>
         <div style={{ marginBottom: "12px" }}>
           <h2 style={{ fontSize: "16px", fontWeight: 700, color: "var(--text-2)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
             💎 Mi Suscripción
@@ -1796,7 +1968,7 @@ export default function ConfiguracionPage() {
       </section>
 
       {/* Empleados Section */}
-      <section>
+      <section style={{ gridColumn: "1 / -1" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
           <h2 style={{ fontSize: "16px", fontWeight: 700, color: "var(--text-2)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
             👤 Empleados
@@ -1887,6 +2059,10 @@ export default function ConfiguracionPage() {
           </div>
         )}
       </section>
+
+          </div>
+        </section>
+      </div>
 
       {/* Modals */}
       {employeeModal && (

@@ -341,6 +341,7 @@ function ProductModal({
   const [price, setPrice] = useState(product?.price?.toString() || "");
   const [cost, setCost] = useState(product?.cost?.toString() || "");
   const [stock, setStock] = useState(product?.stock?.toString() || "");
+  const [quickStockAdd, setQuickStockAdd] = useState("");
   const [minStock, setMinStock] = useState(product?.minStock?.toString() || "");
   const [showInGrid, setShowInGrid] = useState(product?.showInGrid ?? true);
   const [loading, setLoading] = useState(false);
@@ -351,6 +352,7 @@ function ProductModal({
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [applyingSuggestion, setApplyingSuggestion] = useState(false);
   const [variants, setVariants] = useState<Variant[]>(product?.variants || []);
+  const [variantQuickAdds, setVariantQuickAdds] = useState<Record<string, string>>({});
   const [hasVariants, setHasVariants] = useState((product?.variants?.length ?? 0) > 0);
   const [suggestion, setSuggestion] = useState<BarcodeSuggestion | null>(null);
   const [lookupState, setLookupState] = useState<"idle" | "loading" | "ready">("idle");
@@ -359,6 +361,10 @@ function ProductModal({
   const barcodeRef = useRef<HTMLInputElement>(null);
   const normalizedBarcode = normalizeBarcodeCode(barcode);
   const productHasTrackedLots = Boolean(product?.hasTrackedLots);
+  const originalSimpleStock = product?.stock ?? 0;
+  const parsedQuickStockAdd = parseStockQuantity(quickStockAdd);
+  const projectedSimpleStock =
+    parsedQuickStockAdd === null ? null : originalSimpleStock + parsedQuickStockAdd;
   const lookupCode =
     !hasVariants &&
     canLookupBarcode(normalizedBarcode) &&
@@ -519,6 +525,33 @@ function ProductModal({
       window.clearTimeout(timeoutId);
     };
   }, [lookupCode]);
+
+  const applyQuickSimpleStock = () => {
+    if (projectedSimpleStock === null || parsedQuickStockAdd === null || parsedQuickStockAdd <= 0) {
+      return;
+    }
+
+    setStock(String(projectedSimpleStock));
+    setQuickStockAdd("");
+  };
+
+  const applyQuickVariantStock = (index: number, currentStock: number) => {
+    const variantKey = variants[index]?.id || `index-${index}`;
+    const addition = parseStockQuantity(variantQuickAdds[variantKey] ?? "");
+
+    if (addition === null || addition <= 0) {
+      return;
+    }
+
+    setVariants((prev) =>
+      prev.map((variant, variantIndex) =>
+        variantIndex === index
+          ? { ...variant, stock: currentStock + addition }
+          : variant,
+      ),
+    );
+    setVariantQuickAdds((prev) => ({ ...prev, [variantKey]: "" }));
+  };
 
   const handleSave = async (openStockAfter = false) => {
     if (!name.trim()) return;
@@ -1019,7 +1052,14 @@ function ProductModal({
 
         {hasVariants ? (
           <div style={{ marginBottom: "12px", display: "flex", flexDirection: "column", gap: "10px" }}>
-            {variants.map((v, i) => (
+            {variants.map((v, i) => {
+              const variantQuickKey = v.id || `index-${i}`;
+              const variantQuickAdd = parseStockQuantity(variantQuickAdds[variantQuickKey] ?? "");
+              const currentVariantStock = v.stock ?? 0;
+              const projectedVariantStock =
+                variantQuickAdd === null ? null : currentVariantStock + variantQuickAdd;
+
+              return (
               <div key={i} style={{ border: "1px solid var(--border)", padding: "10px", borderRadius: "8px", background: "var(--surface)" }}>
                  <div style={{ display: "flex", gap: "8px", marginBottom: "8px" }}>
                    <input 
@@ -1077,13 +1117,57 @@ function ProductModal({
                       />
                     </div>
                  </div>
+                 {!isNew && !v.hasTrackedLots && currentVariantStock < 0 && (
+                   <div
+                     style={{
+                       marginTop: "8px",
+                       padding: "10px",
+                       borderRadius: "10px",
+                       border: "1px solid rgba(239,68,68,0.18)",
+                       background: "rgba(239,68,68,0.08)",
+                       display: "flex",
+                       flexDirection: "column",
+                       gap: "8px",
+                     }}
+                   >
+                     <div style={{ fontSize: "11px", fontWeight: 700, color: "var(--red)" }}>
+                       Esta variante esta en negativo ({currentVariantStock}).
+                     </div>
+                     <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+                       <input
+                         className="input"
+                         type="number"
+                         inputMode="numeric"
+                         min={0}
+                         placeholder="Entraron ahora"
+                         value={variantQuickAdds[variantQuickKey] ?? ""}
+                         onChange={(e) => setVariantQuickAdds((prev) => ({ ...prev, [variantQuickKey]: e.target.value.startsWith("-") ? "" : e.target.value }))}
+                         style={{ width: "140px", textAlign: "right" }}
+                       />
+                       <span style={{ fontSize: "11px", color: projectedVariantStock !== null && projectedVariantStock >= 0 ? "var(--green)" : "var(--text-2)", fontWeight: 700 }}>
+                         {projectedVariantStock === null
+                           ? `Faltan ${Math.abs(currentVariantStock)} para volver a 0`
+                           : `Queda en ${projectedVariantStock}`}
+                       </span>
+                       <button
+                         type="button"
+                         className="btn btn-sm btn-ghost"
+                         style={{ border: "1px solid var(--border)" }}
+                         onClick={() => applyQuickVariantStock(i, currentVariantStock)}
+                         disabled={projectedVariantStock === null || variantQuickAdd === null || variantQuickAdd <= 0}
+                       >
+                         Usar resultado
+                       </button>
+                     </div>
+                   </div>
+                 )}
                  {v.id && v.hasTrackedLots && (
                    <div style={{ marginTop: "8px", fontSize: "11px", color: "var(--amber)" }}>
                      Esta variante tiene vencimientos cargados. Ajustá su stock desde Cargar stock.
                    </div>
                  )}
               </div>
-            ))}
+            )})}
             <button 
               className="btn btn-sm btn-ghost" 
               style={{ border: "1px dashed var(--border)", padding: "8px" }}
@@ -1122,6 +1206,56 @@ function ProductModal({
                 />
               </div>
             </div>
+            {!isNew && !productHasTrackedLots && originalSimpleStock < 0 && (
+              <div
+                style={{
+                  marginTop: "-2px",
+                  marginBottom: "12px",
+                  padding: "12px",
+                  borderRadius: "12px",
+                  border: "1px solid rgba(239,68,68,0.18)",
+                  background: "rgba(239,68,68,0.08)",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "10px",
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: "12px", fontWeight: 700, color: "var(--red)" }}>
+                    Este producto esta en negativo ({originalSimpleStock}).
+                  </div>
+                  <div style={{ fontSize: "12px", color: "var(--text-2)", marginTop: "4px", lineHeight: 1.5 }}>
+                    Si te llegaron unidades ahora, escribi solo lo que entro fisicamente y te dejamos listo el stock final sin hacer cuentas.
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+                  <input
+                    className="input"
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    placeholder="Entraron ahora"
+                    value={quickStockAdd}
+                    onChange={(e) => setQuickStockAdd(e.target.value.startsWith("-") ? "" : e.target.value)}
+                    style={{ width: "150px", textAlign: "right" }}
+                  />
+                  <span style={{ fontSize: "12px", color: projectedSimpleStock !== null && projectedSimpleStock >= 0 ? "var(--green)" : "var(--text-2)", fontWeight: 700 }}>
+                    {projectedSimpleStock === null
+                      ? `Faltan ${Math.abs(originalSimpleStock)} para volver a 0`
+                      : `Queda en ${projectedSimpleStock}`}
+                  </span>
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-ghost"
+                    style={{ border: "1px solid var(--border)" }}
+                    onClick={applyQuickSimpleStock}
+                    disabled={projectedSimpleStock === null || parsedQuickStockAdd === null || parsedQuickStockAdd <= 0}
+                  >
+                    Usar resultado
+                  </button>
+                </div>
+              </div>
+            )}
             {!isNew && productHasTrackedLots && (
               <div style={{ marginTop: "-4px", marginBottom: "12px", fontSize: "12px", color: "var(--amber)" }}>
                 Este producto tiene vencimientos cargados. Ajustá el stock desde Cargar stock para no romper el desglose por lotes.
@@ -1418,6 +1552,14 @@ function StockLoadingModal({
       return 0;
     });
 
+  const visibleNegativeCount = eligible.reduce((count, product) => {
+    if (product.variants && product.variants.length > 0) {
+      return count + product.variants.filter((variant) => (variant.stock ?? 0) < 0).length;
+    }
+
+    return count + ((product.stock ?? 0) < 0 ? 1 : 0);
+  }, 0);
+
   const setQty = (
     key: string,
     val: string,
@@ -1457,6 +1599,65 @@ function StockLoadingModal({
     }
 
     return null;
+  };
+
+  const getIncomingQuantity = (productId: string, variantId?: string | null) => {
+    const inputVal = getInputValue(productId, variantId);
+    const parsedInput = parseStockQuantity(inputVal) ?? 0;
+    return parsedInput + getLotSum(productId, variantId);
+  };
+
+  const getStockProjection = (currentStock: number | null, productId: string, variantId?: string | null) => {
+    if (mode !== "sumar") {
+      return null;
+    }
+
+    const current = currentStock ?? 0;
+    const incoming = getIncomingQuantity(productId, variantId);
+
+    if (incoming <= 0 && current >= 0) {
+      return null;
+    }
+
+    const next = current + incoming;
+
+    if (current < 0 && incoming <= 0) {
+      return {
+        tone: "negative" as const,
+        text: `Debe ${Math.abs(current)} para volver a 0.`,
+      };
+    }
+
+    if (current < 0) {
+      const coveredDebt = Math.min(incoming, Math.abs(current));
+      if (next < 0) {
+        return {
+          tone: "negative" as const,
+          text: `Entran ${incoming}. Cubren ${coveredDebt} y todavia quedan ${Math.abs(next)} en negativo.`,
+        };
+      }
+
+      if (next === 0) {
+        return {
+          tone: "warning" as const,
+          text: `Entran ${incoming}. Alcanzan justo para salir del negativo.`,
+        };
+      }
+
+      return {
+        tone: "positive" as const,
+        text: `Entran ${incoming}. Cubren ${Math.abs(current)} y quedan ${next} disponibles.`,
+      };
+    }
+
+    if (incoming <= 0) {
+      return null;
+    }
+
+    return {
+      tone: "neutral" as const,
+      text: `Entran ${incoming}. Queda en ${next}.`,
+    };
   };
 
   const getRowError = (currentStock: number | null, productId: string, variantId?: string | null) => {
@@ -1801,6 +2002,23 @@ function StockLoadingModal({
             <div style={{ fontSize: "11px", color: "var(--text-3)" }}>Ingresá el stock correcto total. Reemplaza el valor actual.</div>
           )}
         </div>
+
+        {mode === "sumar" && visibleNegativeCount > 0 && (
+          <div
+            style={{
+              margin: "0 20px",
+              fontSize: "11px",
+              color: "var(--amber)",
+              background: "rgba(245,158,11,0.08)",
+              border: "1px solid rgba(245,158,11,0.18)",
+              borderRadius: "10px",
+              padding: "8px 10px",
+              lineHeight: 1.5,
+            }}
+          >
+            Hay {visibleNegativeCount} item{visibleNegativeCount === 1 ? "" : "s"} en negativo. CargÃ¡ solo lo que entrÃ³ fÃ­sicamente y te mostramos cuÃ¡nto cubre el faltante y cuÃ¡nto queda disponible.
+          </div>
+        )}
 
         {/* Product list */}
         <div style={{ flex: 1, overflowY: "auto", padding: "8px 20px", display: "flex", flexDirection: "column", gap: "6px" }}>

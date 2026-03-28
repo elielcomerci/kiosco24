@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { auth } from "@/lib/auth";
 import { getBranchContext } from "@/lib/branch";
+import { hasBlockingStockLots, summarizeTrackedLots } from "@/lib/inventory-expiry";
 import { Prisma, prisma } from "@/lib/prisma";
 import {
   findApprovedPlatformProductByBarcode,
@@ -74,6 +75,12 @@ async function resolveCategorySelection(kioscoId: string, categoryId: unknown) {
   };
 }
 
+function minDate(left: Date | null, right: Date | null) {
+  if (!left) return right;
+  if (!right) return left;
+  return left < right ? left : right;
+}
+
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -110,7 +117,47 @@ export async function GET(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
+  const lots = await prisma.stockLot.findMany({
+    where: {
+      branchId,
+      productId: id,
+      quantity: { gt: 0 },
+    },
+    select: {
+      variantId: true,
+      quantity: true,
+      expiresOn: true,
+    },
+  });
+
+  const expirySettings = await prisma.branch.findUnique({
+    where: { id: branchId },
+    select: { kiosco: { select: { expiryAlertDays: true } } },
+  });
+  const expiryAlertDays = expirySettings?.kiosco?.expiryAlertDays ?? 30;
   const mappedInventory = inventory as ProductInventoryPayload;
+  const baseSummary = summarizeTrackedLots(
+    mappedInventory.stock,
+    lots.filter((lot) => lot.variantId === null),
+    expiryAlertDays,
+  );
+  const variants = mappedInventory.product.variants.map((variant) => {
+    const variantLots = lots.filter((lot) => lot.variantId === variant.id);
+    const variantSummary = summarizeTrackedLots(variant.inventory[0]?.stock ?? 0, variantLots, expiryAlertDays);
+
+    return {
+      id: variant.id,
+      name: variant.name,
+      barcode: variant.barcode,
+      stock: variant.inventory[0]?.stock ?? 0,
+      availableStock: variantSummary.availableStock ?? (variant.inventory[0]?.stock ?? 0),
+      minStock: variant.inventory[0]?.minStock ?? 0,
+      expiredQuantity: variantSummary.expiredQuantity,
+      expiringSoonQuantity: variantSummary.expiringSoonQuantity,
+      nextExpiryOn: variantSummary.nextExpiryOn,
+      hasTrackedLots: variantSummary.hasTrackedLots,
+    };
+  });
 
   return NextResponse.json({
     id: mappedInventory.product.id,
@@ -128,15 +175,22 @@ export async function GET(
     price: mappedInventory.price,
     cost: mappedInventory.cost,
     stock: mappedInventory.stock,
+    availableStock: baseSummary.availableStock ?? mappedInventory.stock,
     minStock: mappedInventory.minStock,
     showInGrid: mappedInventory.showInGrid,
-    variants: mappedInventory.product.variants.map((variant) => ({
-      id: variant.id,
-      name: variant.name,
-      barcode: variant.barcode,
-      stock: variant.inventory[0]?.stock ?? 0,
-      minStock: variant.inventory[0]?.minStock ?? 0,
-    })),
+    expiredQuantity: variants.length > 0
+      ? variants.reduce((sum, variant) => sum + variant.expiredQuantity, 0)
+      : baseSummary.expiredQuantity,
+    expiringSoonQuantity: variants.length > 0
+      ? variants.reduce((sum, variant) => sum + variant.expiringSoonQuantity, 0)
+      : baseSummary.expiringSoonQuantity,
+    nextExpiryOn: variants.length > 0
+      ? variants.reduce<Date | null>((current, variant) => minDate(current, variant.nextExpiryOn), null)
+      : baseSummary.nextExpiryOn,
+    hasTrackedLots: variants.length > 0
+      ? variants.some((variant) => variant.hasTrackedLots)
+      : baseSummary.hasTrackedLots,
+    variants,
   });
 }
 
@@ -184,6 +238,12 @@ export async function PATCH(
           name: true,
         },
       },
+      variants: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
     },
   });
 
@@ -191,7 +251,119 @@ export async function PATCH(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
+  const currentInventory = await prisma.inventoryRecord.findUnique({
+    where: {
+      productId_branchId: {
+        productId: id,
+        branchId,
+      },
+    },
+    select: { stock: true },
+  });
+
+  const currentVariantInventories = await prisma.variantInventory.findMany({
+    where: {
+      branchId,
+      variant: {
+        productId: id,
+      },
+    },
+    select: {
+      variantId: true,
+      stock: true,
+    },
+  });
+  const currentVariantStockById = new Map(
+    currentVariantInventories.map((inventory) => [inventory.variantId, inventory.stock ?? 0]),
+  );
+
   const normalizedVariants = normalizeVariantPayload(variants);
+  const simpleStockChanged = stock !== undefined && typeof stock === "number" && stock !== (currentInventory?.stock ?? 0);
+  const currentVariantIds = product.variants.map((variant) => variant.id);
+  const submittedVariantIds = normalizedVariants
+    .filter((variant): variant is VariantPayload & { id: string } => Boolean(variant.id))
+    .map((variant) => variant.id);
+  const deletedVariantIds = currentVariantIds.filter((variantId) => !submittedVariantIds.includes(variantId));
+
+  if (simpleStockChanged && await hasBlockingStockLots(prisma, { branchId, productId: id })) {
+    return NextResponse.json(
+      { error: "Este producto tiene vencimientos cargados. Ajusta el stock desde Cargar stock." },
+      { status: 409 },
+    );
+  }
+
+  for (const variant of normalizedVariants) {
+    if (!variant.id || typeof variant.stock !== "number") {
+      continue;
+    }
+
+    const currentVariantStock = currentVariantStockById.get(variant.id) ?? 0;
+    if (variant.stock === currentVariantStock) {
+      continue;
+    }
+
+    if (await hasBlockingStockLots(prisma, { branchId, productId: id, variantId: variant.id })) {
+      return NextResponse.json(
+        { error: `La variante ${variant.name} tiene vencimientos cargados. Ajusta el stock desde Cargar stock.` },
+        { status: 409 },
+      );
+    }
+  }
+
+  if (variants !== undefined) {
+    const isSwitchingFromSimpleToVariants = currentVariantIds.length === 0 && normalizedVariants.length > 0;
+    const isSwitchingFromVariantsToSimple = currentVariantIds.length > 0 && normalizedVariants.length === 0;
+
+    if (isSwitchingFromSimpleToVariants && await hasBlockingStockLots(prisma, { branchId, productId: id })) {
+      return NextResponse.json(
+        { error: "Este producto tiene vencimientos cargados. No puedes pasarlo a variantes hasta vaciar esos lotes." },
+        { status: 409 },
+      );
+    }
+
+    if (isSwitchingFromVariantsToSimple) {
+      const blockingVariantLot = await prisma.stockLot.findFirst({
+        where: {
+          branchId,
+          productId: id,
+          quantity: { gt: 0 },
+          NOT: { variantId: null },
+        },
+        select: { id: true },
+      });
+
+      if (blockingVariantLot) {
+        return NextResponse.json(
+          { error: "Este producto tiene variantes con vencimientos cargados. No puedes quitar las variantes todavía." },
+          { status: 409 },
+        );
+      }
+    }
+
+    if (deletedVariantIds.length > 0) {
+      const blockingDeletedVariantLot = await prisma.stockLot.findFirst({
+        where: {
+          branchId,
+          productId: id,
+          variantId: { in: deletedVariantIds },
+          quantity: { gt: 0 },
+        },
+        select: { variantId: true },
+      });
+
+      if (blockingDeletedVariantLot?.variantId) {
+        const blockingVariantName =
+          product.variants.find((variant) => variant.id === blockingDeletedVariantLot.variantId)?.name ??
+          "una variante";
+
+        return NextResponse.json(
+          { error: `No puedes eliminar ${blockingVariantName} porque tiene vencimientos cargados.` },
+          { status: 409 },
+        );
+      }
+    }
+  }
+
   const resolvedCategory =
     categoryId !== undefined
       ? await resolveCategorySelection(kioscoId, categoryId)

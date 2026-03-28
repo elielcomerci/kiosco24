@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { auth } from "@/lib/auth";
 import { getBranchContext } from "@/lib/branch";
+import { hasBlockingStockLots } from "@/lib/inventory-expiry";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 
@@ -67,6 +68,19 @@ export async function POST(req: Request) {
         return NextResponse.json(
           { error: `Especificá la variante a transferir para el producto ${item.productId}` },
           { status: 400 }
+        );
+      }
+
+      const hasLots = await hasBlockingStockLots(prisma, {
+        branchId,
+        productId: item.productId,
+        variantId: item.variantId || null,
+      });
+
+      if (hasLots) {
+        return NextResponse.json(
+          { error: "No se puede transferir stock con vencimientos cargados en esta versión." },
+          { status: 409 }
         );
       }
 

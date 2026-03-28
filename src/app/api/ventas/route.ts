@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { guardOperationalAccess } from "@/lib/access-control";
 import { getBranchId } from "@/lib/branch";
+import { consumeTrackedLotsFefo, getOpenStockLots, summarizeTrackedLots } from "@/lib/inventory-expiry";
 import { PaymentMethod, Prisma, prisma } from "@/lib/prisma";
 import { todayRange } from "@/lib/utils";
 import { UserRole } from "@prisma/client";
@@ -246,14 +247,32 @@ async function buildSaleSnapshot(
     if (adjustment.type === "variant") {
       const inventory = await tx.variantInventory.findUnique({
         where: { id: adjustment.id },
-        select: { stock: true, variant: { select: { name: true, product: { select: { name: true } } } } },
+        select: {
+          stock: true,
+          branchId: true,
+          variantId: true,
+          variant: {
+            select: {
+              name: true,
+              productId: true,
+              product: { select: { name: true } },
+            },
+          },
+        },
       });
 
       if (!inventory) {
         throw new RouteError("No se pudo validar el stock de una variante.");
       }
 
-      if (typeof inventory.stock === "number" && adjustment.requestedQuantity > inventory.stock) {
+      const lots = await getOpenStockLots(tx, {
+        branchId: inventory.branchId,
+        productId: inventory.variant.productId,
+        variantId: inventory.variantId,
+      });
+      const availableStock = summarizeTrackedLots(inventory.stock, lots, 0).availableStock;
+
+      if (typeof availableStock === "number" && adjustment.requestedQuantity > availableStock) {
         throw new RouteError(
           `No hay stock suficiente para ${inventory.variant.product.name} - ${inventory.variant.name}.`,
           409,
@@ -262,14 +281,25 @@ async function buildSaleSnapshot(
     } else {
       const inventory = await tx.inventoryRecord.findUnique({
         where: { id: adjustment.id },
-        select: { stock: true, product: { select: { name: true } } },
+        select: {
+          stock: true,
+          branchId: true,
+          productId: true,
+          product: { select: { name: true } },
+        },
       });
 
       if (!inventory) {
         throw new RouteError("No se pudo validar el stock de un producto.");
       }
 
-      if (typeof inventory.stock === "number" && adjustment.requestedQuantity > inventory.stock) {
+      const lots = await getOpenStockLots(tx, {
+        branchId: inventory.branchId,
+        productId: inventory.productId,
+      });
+      const availableStock = summarizeTrackedLots(inventory.stock, lots, 0).availableStock;
+
+      if (typeof availableStock === "number" && adjustment.requestedQuantity > availableStock) {
         throw new RouteError(`No hay stock suficiente para ${inventory.product.name}.`, 409);
       }
     }
@@ -441,6 +471,20 @@ export async function POST(req: Request) {
         include: { items: true },
       });
 
+      for (const item of createdSale.items) {
+        if (!item.productId || item.quantity <= 0) {
+          continue;
+        }
+
+        await consumeTrackedLotsFefo(tx, {
+          branchId,
+          productId: item.productId,
+          variantId: item.variantId,
+          quantity: item.quantity,
+          saleItemId: item.id,
+        });
+      }
+
       if (creditCustomerId) {
         await tx.creditCustomer.update({
           where: { id: creditCustomerId },
@@ -455,6 +499,10 @@ export async function POST(req: Request) {
   } catch (error) {
     if (error instanceof RouteError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+
+    if (error instanceof Error && error.message.includes("stock con vencimiento")) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
     }
 
     console.error("[Ventas] Error creando venta", error);

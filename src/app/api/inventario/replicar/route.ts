@@ -30,6 +30,24 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "targetBranchIds requeridos" }, { status: 400 });
     }
 
+    if (copyStock) {
+      const trackedLots = await prisma.stockLot.findMany({
+        where: {
+          branchId,
+          productId: { in: productIds },
+          quantity: { gt: 0 },
+        },
+        select: { productId: true },
+      });
+
+      if (trackedLots.length > 0) {
+        return NextResponse.json(
+          { error: "No se puede replicar stock de productos con vencimientos cargados en esta versión." },
+          { status: 409 },
+        );
+      }
+    }
+
     // Validar que todas las sucursales destino pertenecen al mismo kiosco
     const targetBranches = await prisma.branch.findMany({
       where: { id: { in: targetBranchIds }, kioscoId },

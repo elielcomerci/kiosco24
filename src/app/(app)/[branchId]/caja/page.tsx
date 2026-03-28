@@ -27,6 +27,7 @@ interface Variant {
   name: string;
   barcode?: string | null;
   stock: number;
+  availableStock?: number | null;
   minStock: number;
 }
 
@@ -38,6 +39,7 @@ interface Product {
   emoji?: string | null;
   categoryId?: string | null;
   stock?: number | null;
+  availableStock?: number | null;
   minStock?: number | null;
   showInGrid?: boolean;
   readyForSale?: boolean;
@@ -584,7 +586,9 @@ export default function CajaPage() {
     }
 
     const targetName = variant ? `${product.name} - ${variant.name}` : product.name;
-    const targetStock = variant ? variant.stock : (product.stock ?? 999999);
+    const targetStock = variant
+      ? (variant.availableStock ?? variant.stock)
+      : (product.availableStock ?? product.stock ?? 999999);
 
     setTicket((prev) => {
       const existing = prev.find((i) => (variant ? i.variantId === variant.id : i.productId === product.id));
@@ -1531,11 +1535,13 @@ export default function CajaPage() {
                   className="btn btn-ghost"
                   style={{ justifyContent: "space-between", padding: "16px", borderRadius: "12px", background: "var(--surface-2)", border: "1px solid var(--border)" }}
                   onClick={() => handleProductTap(variantSelector.product, v)}
-                  disabled={v.stock <= 0}
+                  disabled={(v.availableStock ?? v.stock) <= 0}
                 >
                   <div style={{ textAlign: "left" }}>
                     <div style={{ fontWeight: 600 }}>{v.name}</div>
-                    <div style={{ fontSize: "12px", color: "var(--text-3)" }}>Stock: {v.stock}</div>
+                    <div style={{ fontSize: "12px", color: "var(--text-3)" }}>
+                      Stock: {v.availableStock ?? v.stock}
+                    </div>
                   </div>
                   <div style={{ fontWeight: 700, color: "var(--primary)" }}>{formatARS(variantSelector.product.price)}</div>
                 </button>

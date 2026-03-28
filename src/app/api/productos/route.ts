@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { auth } from "@/lib/auth";
 import { getBranchContext } from "@/lib/branch";
+import { summarizeTrackedLots } from "@/lib/inventory-expiry";
 import { Prisma, prisma } from "@/lib/prisma";
 import {
   findApprovedPlatformProductByBarcode,
@@ -79,16 +80,41 @@ async function resolveCategorySelection(kioscoId: string, categoryId: unknown) {
   };
 }
 
+type StockLotSummaryItem = {
+  productId: string;
+  variantId: string | null;
+  quantity: number;
+  expiresOn: Date;
+};
+
+function lotKey(productId: string, variantId?: string | null) {
+  return `${productId}:${variantId ?? "base"}`;
+}
+
+function minDate(left: Date | null, right: Date | null) {
+  if (!left) return right;
+  if (!right) return left;
+  return left < right ? left : right;
+}
+
 export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json([], { status: 401 });
   }
 
-  const { branchId } = await getBranchContext(req, session.user.id);
+  const { branchId, kioscoId } = await getBranchContext(req, session.user.id);
   if (!branchId) {
     return NextResponse.json([], { status: 200 });
   }
+
+  const expirySettings = kioscoId
+    ? await prisma.kiosco.findUnique({
+        where: { id: kioscoId },
+        select: { expiryAlertDays: true },
+      })
+    : null;
+  const expiryAlertDays = expirySettings?.expiryAlertDays ?? 30;
 
   const inventory = await prisma.inventoryRecord.findMany({
     where: { branchId },
@@ -109,9 +135,52 @@ export async function GET(req: Request) {
     orderBy: { product: { name: "asc" } },
   });
 
+  const lots = await prisma.stockLot.findMany({
+    where: {
+      branchId,
+      quantity: { gt: 0 },
+    },
+    select: {
+      productId: true,
+      variantId: true,
+      quantity: true,
+      expiresOn: true,
+    },
+  });
+
+  const lotsByKey = lots.reduce<Map<string, StockLotSummaryItem[]>>((map, lot) => {
+    const key = lotKey(lot.productId, lot.variantId);
+    const current = map.get(key) ?? [];
+    current.push(lot);
+    map.set(key, current);
+    return map;
+  }, new Map());
+
   const products = inventory.map((record: ProductListInventory) => {
-    const hasVariantStock = record.product.variants.some((variant) => (variant.inventory[0]?.stock ?? 0) > 0);
-    const hasBaseStock = (record.stock ?? 0) > 0;
+    const baseLots = lotsByKey.get(lotKey(record.product.id)) ?? [];
+    const baseSummary = summarizeTrackedLots(record.stock, baseLots, expiryAlertDays);
+    const mappedVariants = record.product.variants.map((variant) => {
+      const variantInventory = variant.inventory[0];
+      const variantStock = variantInventory?.stock ?? 0;
+      const variantLots = lotsByKey.get(lotKey(record.product.id, variant.id)) ?? [];
+      const variantSummary = summarizeTrackedLots(variantStock, variantLots, expiryAlertDays);
+
+      return {
+        id: variant.id,
+        name: variant.name,
+        barcode: variant.barcode,
+        stock: variantStock,
+        availableStock: variantSummary.availableStock ?? variantStock,
+        minStock: variantInventory?.minStock ?? 0,
+        expiredQuantity: variantSummary.expiredQuantity,
+        expiringSoonQuantity: variantSummary.expiringSoonQuantity,
+        nextExpiryOn: variantSummary.nextExpiryOn,
+        hasTrackedLots: variantSummary.hasTrackedLots,
+      };
+    });
+
+    const hasVariantStock = mappedVariants.some((variant) => (variant.availableStock ?? 0) > 0);
+    const hasBaseStock = (baseSummary.availableStock ?? record.stock ?? 0) > 0;
     const hasStock = record.product.variants.length > 0 ? hasVariantStock : hasBaseStock;
     const readyForSale =
       record.showInGrid &&
@@ -138,17 +207,24 @@ export async function GET(req: Request) {
       price: record.price,
       cost: record.cost,
       stock: record.stock,
+      availableStock: baseSummary.availableStock ?? record.stock,
       minStock: record.minStock,
       showInGrid: record.showInGrid,
       readyForSale,
       categoryShowInGrid: record.product.category?.showInGrid ?? true,
-      variants: record.product.variants.map((variant) => ({
-        id: variant.id,
-        name: variant.name,
-        barcode: variant.barcode,
-        stock: variant.inventory[0]?.stock ?? 0,
-        minStock: variant.inventory[0]?.minStock ?? 0,
-      })),
+      expiredQuantity: record.product.variants.length > 0
+        ? mappedVariants.reduce((sum, variant) => sum + variant.expiredQuantity, 0)
+        : baseSummary.expiredQuantity,
+      expiringSoonQuantity: record.product.variants.length > 0
+        ? mappedVariants.reduce((sum, variant) => sum + variant.expiringSoonQuantity, 0)
+        : baseSummary.expiringSoonQuantity,
+      nextExpiryOn: record.product.variants.length > 0
+        ? mappedVariants.reduce<Date | null>((current, variant) => minDate(current, variant.nextExpiryOn), null)
+        : baseSummary.nextExpiryOn,
+      hasTrackedLots: record.product.variants.length > 0
+        ? mappedVariants.some((variant) => variant.hasTrackedLots)
+        : baseSummary.hasTrackedLots,
+      variants: mappedVariants,
     };
   });
 

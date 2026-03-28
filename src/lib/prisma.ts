@@ -9,6 +9,8 @@ export type {
   Branch,
   Product,
   InventoryRecord,
+  StockLot,
+  SaleLotConsumption,
   Employee,
   Shift,
   Expense,

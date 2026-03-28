@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { guardOperationalAccess } from "@/lib/access-control";
 import { getBranchContext } from "@/lib/branch";
+import { restoreLotConsumptions } from "@/lib/inventory-expiry";
 import { prisma } from "@/lib/prisma";
 import { createShiftForbiddenResponse, getActiveShift } from "@/lib/shift-access";
 
@@ -31,7 +32,7 @@ export async function POST(
         ? { branchId: branchId ?? "__blocked__" }
         : { branch: { kiosco: { ownerId: session.user.id } } }),
     },
-    include: { items: true },
+    include: { items: { include: { lotConsumptions: true } } },
   });
 
   if (!sale) {
@@ -52,7 +53,7 @@ export async function POST(
   await prisma.$transaction(async (tx) => {
     const currentSale = await tx.sale.findUnique({
       where: { id: sale.id },
-      include: { items: true },
+      include: { items: { include: { lotConsumptions: true } } },
     });
 
     if (!currentSale || currentSale.voided) {
@@ -84,6 +85,15 @@ export async function POST(
             data: { stock: { increment: item.quantity } },
           });
         }
+
+        if (item.productId) {
+          await restoreLotConsumptions(tx, {
+            branchId: currentSale.branchId,
+            productId: item.productId,
+            variantId: item.variantId,
+            consumptions: item.lotConsumptions,
+          });
+        }
         continue;
       }
 
@@ -99,6 +109,12 @@ export async function POST(
             data: { stock: { increment: item.quantity } },
           });
         }
+
+        await restoreLotConsumptions(tx, {
+          branchId: currentSale.branchId,
+          productId: item.productId,
+          consumptions: item.lotConsumptions,
+        });
       }
     }
 

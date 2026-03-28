@@ -645,8 +645,13 @@ export default function ConfiguracionPage() {
   const [loadingCategories, setLoadingCategories] = useState(true);
   const [loadingCurrentBranch, setLoadingCurrentBranch] = useState(true);
   const [loadingSubscription, setLoadingSubscription] = useState(true);
+  const [loadingExpirySettings, setLoadingExpirySettings] = useState(true);
 
   const [subscription, setSubscription] = useState<{status: string, managementUrl: string | null} | null>(null);
+  const [expiryAlertDays, setExpiryAlertDays] = useState("30");
+  const [savingExpirySettings, setSavingExpirySettings] = useState(false);
+  const [expirySettingsMessage, setExpirySettingsMessage] = useState<string | null>(null);
+  const [expirySettingsError, setExpirySettingsError] = useState<string | null>(null);
 
   const [employeeModal, setEmployeeModal] = useState<"new" | Employee | null>(null);
   const [branchModal, setBranchModal] = useState(false);
@@ -769,13 +774,31 @@ export default function ConfiguracionPage() {
     setLoadingSubscription(false);
   }, []);
 
+  const fetchExpirySettings = useCallback(async () => {
+    setLoadingExpirySettings(true);
+    try {
+      const res = await fetch("/api/kiosco/settings", {
+        headers: {
+          "x-branch-id": branchId,
+        },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setExpiryAlertDays(String(data?.expiryAlertDays ?? 30));
+      }
+    } finally {
+      setLoadingExpirySettings(false);
+    }
+  }, [branchId]);
+
   useEffect(() => {
     fetchEmployees();
     fetchBranches();
     fetchCategories();
     fetchCurrentBranch();
     fetchSubscription();
-  }, [fetchEmployees, fetchBranches, fetchCategories, fetchCurrentBranch, fetchSubscription]);
+    fetchExpirySettings();
+  }, [fetchEmployees, fetchBranches, fetchCategories, fetchCurrentBranch, fetchSubscription, fetchExpirySettings]);
 
   const handleSaveBranchSettings = async () => {
     if (!editBranchName.trim()) {
@@ -816,6 +839,44 @@ export default function ConfiguracionPage() {
       setBranchSettingsError("No se pudo guardar la identidad visual.");
     } finally {
       setSavingBranch(false);
+    }
+  };
+
+  const handleSaveExpirySettings = async () => {
+    const normalizedValue = Number(expiryAlertDays);
+    if (!Number.isInteger(normalizedValue) || normalizedValue < 0 || normalizedValue > 365) {
+      setExpirySettingsError("Ingresá una cantidad de días entre 0 y 365.");
+      setExpirySettingsMessage(null);
+      return;
+    }
+
+    setSavingExpirySettings(true);
+    setExpirySettingsError(null);
+    setExpirySettingsMessage(null);
+
+    try {
+      const res = await fetch("/api/kiosco/settings", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "x-branch-id": branchId,
+        },
+        body: JSON.stringify({ expiryAlertDays: normalizedValue }),
+      });
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        setExpirySettingsError(data?.error || "No se pudo guardar la alerta de vencimientos.");
+        return;
+      }
+
+      setExpiryAlertDays(String(data?.expiryAlertDays ?? normalizedValue));
+      setExpirySettingsMessage("Alerta de vencimientos actualizada.");
+    } catch (error) {
+      console.error(error);
+      setExpirySettingsError("No se pudo guardar la alerta de vencimientos.");
+    } finally {
+      setSavingExpirySettings(false);
     }
   };
 
@@ -980,6 +1041,67 @@ export default function ConfiguracionPage() {
               onChangeAccent={setEditPrimaryColor}
             />
           )}
+        </div>
+      </section>
+
+      {/* Expiry Alerts Section */}
+      <section style={{ marginBottom: "32px" }}>
+        <div style={{ marginBottom: "12px" }}>
+          <h2 style={{ fontSize: "16px", fontWeight: 700, color: "var(--text-2)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+            📅 Vencimientos
+          </h2>
+        </div>
+
+        <div
+          style={{
+            background: "var(--surface)",
+            border: "1px solid var(--border)",
+            borderRadius: "var(--radius)",
+            padding: "20px",
+            display: "flex",
+            flexDirection: "column",
+            gap: "14px",
+          }}
+        >
+          <div>
+            <div style={{ fontWeight: 700, marginBottom: "4px" }}>Alerta de vencimiento próximo</div>
+            <div style={{ fontSize: "13px", color: "var(--text-3)", lineHeight: 1.5 }}>
+              Define cuántos días antes querés ver el badge en el catálogo. El detalle fino sigue apareciendo solo dentro de Cargar stock.
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: "10px", alignItems: "flex-end", flexWrap: "wrap" }}>
+            <div style={{ minWidth: "120px" }}>
+              <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, display: "block", marginBottom: "4px" }}>
+                Días de alerta
+              </label>
+              <input
+                className="input"
+                type="number"
+                min={0}
+                max={365}
+                inputMode="numeric"
+                value={expiryAlertDays}
+                onChange={(e) => setExpiryAlertDays(e.target.value)}
+                disabled={loadingExpirySettings || savingExpirySettings}
+              />
+            </div>
+
+            <button
+              className="btn btn-ghost"
+              style={{ border: "1px solid var(--border)" }}
+              onClick={handleSaveExpirySettings}
+              disabled={loadingExpirySettings || savingExpirySettings}
+            >
+              {savingExpirySettings ? "Guardando..." : "Guardar alerta"}
+            </button>
+          </div>
+
+          <div style={{ fontSize: "12px", color: expirySettingsError ? "var(--red)" : expirySettingsMessage ? "var(--green)" : "var(--text-3)" }}>
+            {loadingExpirySettings
+              ? "Cargando configuración..."
+              : expirySettingsError || expirySettingsMessage || "Usa 0 para avisar solo los lotes que vencen hoy, sin anticipación extra."}
+          </div>
         </div>
       </section>
 

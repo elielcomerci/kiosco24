@@ -21,7 +21,12 @@ interface Variant {
   name: string;
   barcode: string | null;
   stock: number | null;
+  availableStock?: number | null;
   minStock: number | null;
+  expiredQuantity?: number;
+  expiringSoonQuantity?: number;
+  nextExpiryOn?: string | null;
+  hasTrackedLots?: boolean;
 }
 
 interface Product {
@@ -40,17 +45,106 @@ interface Product {
   notes: string | null;
   categoryId: string | null;
   stock: number | null;
+  availableStock?: number | null;
   minStock: number | null;
   showInGrid: boolean;
   readyForSale?: boolean;
   platformProductId?: string | null;
+  expiredQuantity?: number;
+  expiringSoonQuantity?: number;
+  nextExpiryOn?: string | null;
+  hasTrackedLots?: boolean;
   variants?: Variant[];
 }
+
+type LotDraft = {
+  id?: string;
+  quantity: string;
+  expiresOn: string;
+  existing?: boolean;
+};
 
 type Category = CategoryRecord;
 const AUTO_SUGGESTED_CATEGORY_COLOR = "#64748b";
 
 const EMOJIS = ["🧃", "🥤", "🍫", "🍬", "🍭", "🥜", "🧀", "🍞", "🥛", "🧹", "🧴", "🪥", "📦", "💊", "🪙", "🎴"];
+
+function lotOwnerKey(productId: string, variantId?: string | null) {
+  return variantId ? `variant:${variantId}` : `product:${productId}`;
+}
+
+function parseStockQuantity(value: string) {
+  const normalized = value.trim();
+  if (!normalized) {
+    return null;
+  }
+
+  const parsed = Number(normalized);
+  return Number.isInteger(parsed) ? parsed : null;
+}
+
+function validLotRows(rows: LotDraft[], includeExisting: boolean) {
+  return rows.filter((row) => {
+    if (!includeExisting && row.existing) {
+      return false;
+    }
+
+    const quantity = parseStockQuantity(row.quantity);
+    return Boolean(quantity && row.expiresOn);
+  });
+}
+
+function serializeLotRows(rows: LotDraft[] | undefined, includeExisting: boolean) {
+  return JSON.stringify(
+    validLotRows(rows ?? [], includeExisting).map((row) => ({
+      quantity: parseStockQuantity(row.quantity),
+      expiresOn: row.expiresOn,
+    })),
+  );
+}
+
+function formatExpiryBadge(product: Product) {
+  if ((product.expiredQuantity ?? 0) > 0) {
+    return `${product.expiredQuantity} vencido${product.expiredQuantity === 1 ? "" : "s"}`;
+  }
+
+  if ((product.expiringSoonQuantity ?? 0) > 0 && product.nextExpiryOn) {
+    const formattedDate = new Date(product.nextExpiryOn).toLocaleDateString("es-AR");
+    return `${product.expiringSoonQuantity} vence${product.expiringSoonQuantity === 1 ? "" : "n"} ${formattedDate}`;
+  }
+
+  return null;
+}
+
+function renderExpiryBadge(product: Product) {
+  const label = formatExpiryBadge(product);
+  if (!label) {
+    return null;
+  }
+
+  const isExpired = (product.expiredQuantity ?? 0) > 0;
+
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "6px",
+        marginTop: "6px",
+        padding: "4px 8px",
+        borderRadius: "999px",
+        fontSize: "11px",
+        fontWeight: 700,
+        color: isExpired ? "var(--red)" : "var(--amber)",
+        background: isExpired ? "rgba(239,68,68,0.12)" : "rgba(245,158,11,0.12)",
+        border: `1px solid ${isExpired ? "rgba(239,68,68,0.25)" : "rgba(245,158,11,0.25)"}`,
+      }}
+    >
+      {isExpired ? "Vencido" : "Próximo"}
+      <span style={{ fontWeight: 600 }}>{label}</span>
+    </span>
+  );
+}
 
 // ─── Product Form Modal ────────────────────────────────────────────────────────
 function ProductModal({
@@ -97,8 +191,10 @@ function ProductModal({
   const [suggestion, setSuggestion] = useState<BarcodeSuggestion | null>(null);
   const [lookupState, setLookupState] = useState<"idle" | "loading" | "ready">("idle");
   const [dismissedSuggestionCode, setDismissedSuggestionCode] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const barcodeRef = useRef<HTMLInputElement>(null);
   const normalizedBarcode = normalizeBarcodeCode(barcode);
+  const productHasTrackedLots = Boolean(product?.hasTrackedLots);
   const lookupCode =
     !hasVariants &&
     canLookupBarcode(normalizedBarcode) &&
@@ -263,6 +359,7 @@ function ProductModal({
   const handleSave = async () => {
     if (!name.trim()) return;
     setLoading(true);
+    setSaveError(null);
 
     const payload = {
       name: name.trim(),
@@ -290,33 +387,57 @@ function ProductModal({
       })).filter(v => v.name) : []
     };
 
-    if (isNew) {
-      await fetch("/api/productos", {
+    try {
+      const res = await (isNew ? fetch("/api/productos", {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-branch-id": branchId },
         body: JSON.stringify(payload),
-      });
-    } else {
-      await fetch(`/api/productos/${product.id}`, {
+      }) : fetch(`/api/productos/${product.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json", "x-branch-id": branchId },
         body: JSON.stringify(payload),
-      });
-    }
+      }));
+      const data = await res.json().catch(() => null);
 
-    setLoading(false);
-    onSave();
+      if (!res.ok) {
+        setSaveError(data?.error || "No se pudo guardar el producto.");
+        return;
+      }
+
+      onSave();
+    } catch (error) {
+      console.error(error);
+      setSaveError("No se pudo guardar el producto.");
+      return;
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleDelete = async () => {
     if (!confirming) { setConfirming(true); return; }
     setLoading(true);
-    await fetch(`/api/productos/${product!.id}`, {
-      method: "DELETE",
-      headers: { "x-branch-id": branchId },
-    });
-    setLoading(false);
-    onSave();
+    setSaveError(null);
+    try {
+      const res = await fetch(`/api/productos/${product!.id}`, {
+        method: "DELETE",
+        headers: { "x-branch-id": branchId },
+      });
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        setSaveError(data?.error || "No se pudo eliminar el producto.");
+        return;
+      }
+
+      onSave();
+    } catch (error) {
+      console.error(error);
+      setSaveError("No se pudo eliminar el producto.");
+      return;
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -711,9 +832,15 @@ function ProductModal({
                   setBarcode("");
                 }
               }}
+              disabled={!isNew && productHasTrackedLots}
             />
             Tiene múltiples sabores/variantes
           </label>
+          {!isNew && productHasTrackedLots && (
+            <div style={{ marginTop: "8px", fontSize: "12px", color: "var(--amber)" }}>
+              Este producto ya tiene vencimientos cargados. La estructura de variantes queda bloqueada en esta versión.
+            </div>
+          )}
         </div>
 
         {hasVariants ? (
@@ -740,6 +867,8 @@ function ProductModal({
                         setVariants(newV);
                      }} 
                      style={{color: "var(--red)", fontSize: "16px"}}
+                     disabled={Boolean(v.id && v.hasTrackedLots)}
+                     title={v.id && v.hasTrackedLots ? "Quitá los vencimientos desde Cargar stock antes de eliminar esta variante." : undefined}
                    >
                      🗑
                    </button>
@@ -770,9 +899,15 @@ function ProductModal({
                           newV[i].stock = e.target.value ? parseInt(e.target.value) : null;
                           setVariants(newV);
                         }} 
+                        disabled={Boolean(v.id && v.hasTrackedLots)}
                       />
                     </div>
                  </div>
+                 {v.id && v.hasTrackedLots && (
+                   <div style={{ marginTop: "8px", fontSize: "11px", color: "var(--amber)" }}>
+                     Esta variante tiene vencimientos cargados. Ajustá su stock desde Cargar stock.
+                   </div>
+                 )}
               </div>
             ))}
             <button 
@@ -797,6 +932,7 @@ function ProductModal({
                   value={stock}
                   onChange={(e) => setStock(e.target.value)}
                   style={{ textAlign: "right" }}
+                  disabled={!isNew && productHasTrackedLots}
                 />
               </div>
               <div>
@@ -812,6 +948,11 @@ function ProductModal({
                 />
               </div>
             </div>
+            {!isNew && productHasTrackedLots && (
+              <div style={{ marginTop: "-4px", marginBottom: "12px", fontSize: "12px", color: "var(--amber)" }}>
+                Este producto tiene vencimientos cargados. Ajustá el stock desde Cargar stock para no romper el desglose por lotes.
+              </div>
+            )}
 
             {false && (
             <>
@@ -965,6 +1106,11 @@ function ProductModal({
         )}
 
         {/* Actions */}
+        {saveError && (
+          <div style={{ fontSize: "12px", color: "var(--red)", marginBottom: "8px" }}>
+            {saveError}
+          </div>
+        )}
         <div style={{ display: "flex", gap: "8px" }}>
           {!isNew && (
             <button
@@ -1028,10 +1174,13 @@ function StockLoadingModal({
   const [search, setSearch] = useState("");
   const [saving, setSaving] = useState(false);
   const [mode, setMode] = useState<"sumar" | "corregir">("sumar");
-  // Map productId -> input value (simple products)
   const [inputs, setInputs] = useState<Record<string, string>>({});
-  // Map variantId -> input value
   const [variantInputs, setVariantInputs] = useState<Record<string, string>>({});
+  const [lotInputs, setLotInputs] = useState<Record<string, LotDraft[]>>({});
+  const [loadedLots, setLoadedLots] = useState<Record<string, LotDraft[]>>({});
+  const [openLotPanels, setOpenLotPanels] = useState<Record<string, boolean>>({});
+  const [lotLoading, setLotLoading] = useState<Record<string, boolean>>({});
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const eligible = products.filter((p) => {
     const q = search.toLowerCase();
@@ -1051,73 +1200,332 @@ function StockLoadingModal({
     setter: React.Dispatch<React.SetStateAction<Record<string, string>>>
   ) => setter((prev) => ({ ...prev, [key]: val }));
 
-  const computeResult = (currentStock: number | null, inputVal: string) => {
-    const n = parseFloat(inputVal);
-    if (isNaN(n) || inputVal.trim() === "") return null;
-    return mode === "sumar" ? (currentStock ?? 0) + n : n;
+  const getInputValue = (productId: string, variantId?: string | null) =>
+    variantId ? (variantInputs[variantId] ?? "") : (inputs[productId] ?? "");
+
+  const getRows = (productId: string, variantId?: string | null) =>
+    lotInputs[lotOwnerKey(productId, variantId)] ?? [];
+
+  const getLotSum = (productId: string, variantId?: string | null) =>
+    validLotRows(getRows(productId, variantId), mode === "corregir")
+      .reduce((sum, row) => sum + (parseStockQuantity(row.quantity) ?? 0), 0);
+
+  const computeTargetStock = (currentStock: number | null, productId: string, variantId?: string | null) => {
+    const inputVal = getInputValue(productId, variantId);
+    const parsedInput = parseStockQuantity(inputVal);
+    const lotSum = getLotSum(productId, variantId);
+
+    if (mode === "sumar") {
+      const additionWithoutExpiry = parsedInput ?? 0;
+      if (additionWithoutExpiry === 0 && lotSum === 0) {
+        return null;
+      }
+
+      return (currentStock ?? 0) + additionWithoutExpiry + lotSum;
+    }
+
+    if (parsedInput !== null) {
+      return parsedInput;
+    }
+
+    if (lotSum > 0) {
+      return currentStock ?? 0;
+    }
+
+    return null;
   };
 
-  // Count how many products/variants have a pending change
-  const changesCount = (() => {
-    let count = 0;
-    for (const p of products) {
-      if (p.variants && p.variants.length > 0) {
-        for (const v of p.variants) {
-          if (v.id && variantInputs[v.id] && variantInputs[v.id].trim() !== "") count++;
-        }
-      } else {
-        if (inputs[p.id] && inputs[p.id].trim() !== "") count++;
-      }
+  const getRowError = (currentStock: number | null, productId: string, variantId?: string | null) => {
+    if (mode !== "corregir") {
+      return null;
     }
-    return count;
-    })();
+
+    const targetStock = computeTargetStock(currentStock, productId, variantId);
+    if (targetStock === null) {
+      return null;
+    }
+
+    const lotSum = getLotSum(productId, variantId);
+    return lotSum > targetStock ? "Los lotes superan el stock final." : null;
+  };
+
+  const hasRowChanges = (currentStock: number | null, productId: string, variantId?: string | null) => {
+    const key = lotOwnerKey(productId, variantId);
+    const inputValue = getInputValue(productId, variantId);
+    const currentRows = lotInputs[key];
+    const baseline = mode === "corregir" ? serializeLotRows(loadedLots[key], true) : JSON.stringify([]);
+    const current = serializeLotRows(currentRows, mode === "corregir");
+
+    return Boolean(
+      inputValue.trim() ||
+      current !== baseline ||
+      (mode === "sumar" && validLotRows(currentRows ?? [], false).length > 0) ||
+      (mode === "corregir" && computeTargetStock(currentStock, productId, variantId) !== null && current !== baseline),
+    );
+  };
+
+  const affectedRows = products.flatMap((product) =>
+    product.variants && product.variants.length > 0
+      ? product.variants.map((variant) => ({
+          product,
+          currentStock: variant.stock,
+          variantId: variant.id ?? null,
+        }))
+      : [{ product, currentStock: product.stock, variantId: null }],
+  );
+
+  const changesCount = affectedRows.filter((row) =>
+    hasRowChanges(row.currentStock, row.product.id, row.variantId),
+  ).length;
+
+  const hasInvalidRows = affectedRows.some((row) =>
+    Boolean(getRowError(row.currentStock, row.product.id, row.variantId)),
+  );
+
+  const loadLots = async (productId: string, variantId?: string | null) => {
+    const key = lotOwnerKey(productId, variantId);
+    if (loadedLots[key]) {
+      setOpenLotPanels((prev) => ({ ...prev, [key]: !prev[key] }));
+      return;
+    }
+
+    setLotLoading((prev) => ({ ...prev, [key]: true }));
+    try {
+      const params = new URLSearchParams({ productId });
+      if (variantId) {
+        params.set("variantId", variantId);
+      }
+
+      const res = await fetch(`/api/inventario/lotes?${params.toString()}`, {
+        headers: { "x-branch-id": branchId },
+      });
+      const data = await res.json().catch(() => null);
+      const mappedLots = Array.isArray(data?.lots)
+        ? data.lots.map((lot: { id: string; quantity: number; expiresOn: string }) => ({
+            id: lot.id,
+            quantity: String(lot.quantity),
+            expiresOn: String(lot.expiresOn).slice(0, 10),
+            existing: true,
+          }))
+        : [];
+
+      setLoadedLots((prev) => ({ ...prev, [key]: mappedLots }));
+      setLotInputs((prev) => ({ ...prev, [key]: mappedLots }));
+      setOpenLotPanels((prev) => ({ ...prev, [key]: true }));
+    } finally {
+      setLotLoading((prev) => ({ ...prev, [key]: false }));
+    }
+  };
+
+  const addLotRow = (productId: string, variantId?: string | null) => {
+    const key = lotOwnerKey(productId, variantId);
+    setLotInputs((prev) => ({
+      ...prev,
+      [key]: [...(prev[key] ?? []), { quantity: "", expiresOn: "", existing: false }],
+    }));
+  };
+
+  const updateLotRow = (
+    productId: string,
+    index: number,
+    field: "quantity" | "expiresOn",
+    value: string,
+    variantId?: string | null,
+  ) => {
+    const key = lotOwnerKey(productId, variantId);
+    setLotInputs((prev) => ({
+      ...prev,
+      [key]: (prev[key] ?? []).map((row, rowIndex) =>
+        rowIndex === index ? { ...row, [field]: value } : row,
+      ),
+    }));
+  };
+
+  const removeLotRow = (productId: string, index: number, variantId?: string | null) => {
+    const key = lotOwnerKey(productId, variantId);
+    setLotInputs((prev) => ({
+      ...prev,
+      [key]: (prev[key] ?? []).filter((_, rowIndex) => rowIndex !== index),
+    }));
+  };
 
   const handleSaveAll = async () => {
+    setSaveError(null);
+    if (hasInvalidRows) {
+      setSaveError("Revisá los productos donde los lotes superan el stock final.");
+      return;
+    }
+
     setSaving(true);
     try {
-      const savePromises: Promise<Response>[] = [];
+      const items: Array<{
+        productId: string;
+        variantId?: string;
+        quantityWithoutExpiry: number;
+        lots: Array<{ quantity: number; expiresOn: string }>;
+      }> = [];
+
       for (const p of products) {
         if (p.variants && p.variants.length > 0) {
-          // Only save if at least one variant has a value
-          const anyChanged = p.variants.some((v) => v.id && variantInputs[v.id]?.trim());
-          if (!anyChanged) continue;
-          const updatedVariants = p.variants.map((v) => {
-            const val = v.id ? (variantInputs[v.id] ?? "") : "";
-            const result = v.id ? computeResult(v.stock, val) : null;
-            return {
-              id: v.id,
-              name: v.name,
-              barcode: v.barcode,
-              stock: result !== null ? result : (v.stock ?? 0),
-              minStock: v.minStock ?? 0,
-            };
-          });
-          savePromises.push(
-            fetch(`/api/productos/${p.id}`, {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json", "x-branch-id": branchId },
-              body: JSON.stringify({ variants: updatedVariants }),
-            })
-          );
+          for (const v of p.variants) {
+            if (!v.id || !hasRowChanges(v.stock, p.id, v.id)) {
+              continue;
+            }
+
+            const targetStock = computeTargetStock(v.stock, p.id, v.id);
+            const rows = getRows(p.id, v.id);
+            const lots = validLotRows(rows, mode === "corregir").map((row) => ({
+              quantity: parseStockQuantity(row.quantity) ?? 0,
+              expiresOn: row.expiresOn,
+            }));
+            const lotQuantity = lots.reduce((sum, lot) => sum + lot.quantity, 0);
+            const quantityWithoutExpiry =
+              mode === "sumar"
+                ? (parseStockQuantity(getInputValue(p.id, v.id)) ?? 0)
+                : Math.max((targetStock ?? (v.stock ?? 0)) - lotQuantity, 0);
+
+            items.push({
+              productId: p.id,
+              variantId: v.id,
+              quantityWithoutExpiry,
+              lots,
+            });
+          }
         } else {
-          const val = inputs[p.id] ?? "";
-          const result = computeResult(p.stock, val);
-          if (result === null) continue;
-          savePromises.push(
-            fetch(`/api/productos/${p.id}`, {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json", "x-branch-id": branchId },
-              body: JSON.stringify({ stock: result }),
-            })
-          );
+          if (!hasRowChanges(p.stock, p.id)) {
+            continue;
+          }
+
+          const targetStock = computeTargetStock(p.stock, p.id);
+          const rows = getRows(p.id);
+          const lots = validLotRows(rows, mode === "corregir").map((row) => ({
+            quantity: parseStockQuantity(row.quantity) ?? 0,
+            expiresOn: row.expiresOn,
+          }));
+          const lotQuantity = lots.reduce((sum, lot) => sum + lot.quantity, 0);
+          const quantityWithoutExpiry =
+            mode === "sumar"
+              ? (parseStockQuantity(getInputValue(p.id)) ?? 0)
+              : Math.max((targetStock ?? (p.stock ?? 0)) - lotQuantity, 0);
+
+          items.push({
+            productId: p.id,
+            quantityWithoutExpiry,
+            lots,
+          });
         }
       }
-      await Promise.all(savePromises);
+
+      if (items.length === 0) {
+        setSaveError("No hay cambios para guardar.");
+        return;
+      }
+
+      const res = await fetch("/api/inventario/ingreso-rapido", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-branch-id": branchId },
+        body: JSON.stringify({ mode, items }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        setSaveError(data?.error || "No se pudieron guardar los cambios de stock.");
+        return;
+      }
+
       onSaved();
       onClose();
     } finally {
       setSaving(false);
     }
+  };
+
+  const renderLotsPanel = (product: Product, currentStock: number | null, variant?: Variant) => {
+    const key = lotOwnerKey(product.id, variant?.id);
+    const rows = getRows(product.id, variant?.id);
+    const existingRows = rows.filter((row) => row.existing);
+    const visibleRows = mode === "sumar" ? rows.filter((row) => !row.existing) : rows;
+    const rowError = getRowError(currentStock, product.id, variant?.id);
+
+    return (
+      <div
+        style={{
+          marginTop: "10px",
+          padding: "12px",
+          borderRadius: "12px",
+          background: "var(--surface-2)",
+          border: "1px solid var(--border)",
+          display: "flex",
+          flexDirection: "column",
+          gap: "8px",
+        }}
+      >
+        {mode === "sumar" && existingRows.length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+            <div style={{ fontSize: "11px", color: "var(--text-3)", textTransform: "uppercase", fontWeight: 700 }}>
+              Lotes actuales
+            </div>
+            {existingRows.map((row, index) => (
+              <div key={`${key}-current-${index}`} style={{ fontSize: "12px", color: "var(--text-2)" }}>
+                {row.quantity} u. → {new Date(`${row.expiresOn}T00:00:00`).toLocaleDateString("es-AR")}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {visibleRows.length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+            {visibleRows.map((row, visibleIndex) => {
+              const rowIndex = mode === "sumar"
+                ? rows.findIndex((candidate) => candidate === row)
+                : visibleIndex;
+              return (
+                <div key={`${key}-${rowIndex}`} style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                  <input
+                    className="input"
+                    type="number"
+                    inputMode="numeric"
+                    placeholder="Cant."
+                    value={row.quantity}
+                    onChange={(e) => updateLotRow(product.id, rowIndex, "quantity", e.target.value, variant?.id)}
+                    style={{ width: "92px", textAlign: "right" }}
+                  />
+                  <input
+                    className="input"
+                    type="date"
+                    value={row.expiresOn}
+                    onChange={(e) => updateLotRow(product.id, rowIndex, "expiresOn", e.target.value, variant?.id)}
+                    style={{ flex: 1 }}
+                  />
+                  <button
+                    className="btn btn-sm btn-ghost"
+                    style={{ padding: "0 10px" }}
+                    onClick={() => removeLotRow(product.id, rowIndex, variant?.id)}
+                  >
+                    ×
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px" }}>
+          <button
+            className="btn btn-sm btn-ghost"
+            style={{ border: "1px solid var(--border)" }}
+            onClick={() => addLotRow(product.id, variant?.id)}
+          >
+            + Fecha
+          </button>
+          <span style={{ fontSize: "11px", color: rowError ? "var(--red)" : "var(--text-3)" }}>
+            {rowError || (mode === "sumar"
+              ? "Los lotes se suman arriba del stock actual."
+              : "Si no tocás el total, se usa el stock físico actual.")}
+          </span>
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -1192,25 +1600,36 @@ function StockLoadingModal({
 
                 {/* Simple product */}
                 {(!p.variants || p.variants.length === 0) && (
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "8px" }}>
-                    <span style={{ fontSize: "12px", color: "var(--text-3)", flex: 1 }}>
-                      {mode === "sumar" ? `Stock actual: ${p.stock ?? 0}` : `Stock actual: ${p.stock ?? 0}`}
-                    </span>
-                    <input
-                      className="input"
-                      type="number"
-                      inputMode="numeric"
-                      placeholder={mode === "sumar" ? "+0" : "nuevo"}
-                      value={inputs[p.id] ?? ""}
-                      onChange={(e) => setQty(p.id, e.target.value, setInputs)}
-                      style={{ width: "80px", textAlign: "right" }}
-                    />
-                    {(() => {
-                      const result = computeResult(p.stock, inputs[p.id] ?? "");
-                      return result !== null ? (
-                        <span style={{ fontSize: "14px", fontWeight: 800, color: "var(--green)", minWidth: "48px" }}>= {result}</span>
-                      ) : null;
-                    })()}
+                  <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginTop: "8px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <span style={{ fontSize: "12px", color: "var(--text-3)", flex: 1 }}>
+                        Stock físico: {p.stock ?? 0}
+                        {typeof p.availableStock === "number" && p.availableStock !== p.stock ? ` · Vendible: ${p.availableStock}` : ""}
+                      </span>
+                      <input
+                        className="input"
+                        type="number"
+                        inputMode="numeric"
+                        placeholder={mode === "sumar" ? "+0" : "nuevo"}
+                        value={inputs[p.id] ?? ""}
+                        onChange={(e) => setQty(p.id, e.target.value, setInputs)}
+                        style={{ width: "80px", textAlign: "right" }}
+                      />
+                      {(() => {
+                        const result = computeTargetStock(p.stock, p.id);
+                        return result !== null ? (
+                          <span style={{ fontSize: "14px", fontWeight: 800, color: "var(--green)", minWidth: "48px" }}>= {result}</span>
+                        ) : null;
+                      })()}
+                      <button
+                        className="btn btn-sm btn-ghost"
+                        style={{ border: "1px solid var(--border)" }}
+                        onClick={() => void loadLots(p.id)}
+                      >
+                        {lotLoading[lotOwnerKey(p.id)] ? "..." : "📅"}
+                      </button>
+                    </div>
+                    {openLotPanels[lotOwnerKey(p.id)] && renderLotsPanel(p, p.stock)}
                   </div>
                 )}
 
@@ -1219,24 +1638,37 @@ function StockLoadingModal({
                   <div style={{ marginTop: "8px", display: "flex", flexDirection: "column", gap: "6px" }}>
                     {p.variants.map((v) => {
                       const val = v.id ? (variantInputs[v.id] ?? "") : "";
-                      const result = v.id ? computeResult(v.stock, val) : null;
+                      const result = v.id ? computeTargetStock(v.stock, p.id, v.id) : null;
                       return (
-                        <div key={v.id} style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                          <span style={{ flex: 1, fontSize: "13px", color: "var(--text-2)" }}>
-                            {v.name} <span style={{ color: "var(--text-3)", fontSize: "11px" }}>({v.stock ?? 0})</span>
-                          </span>
-                          <input
-                            className="input"
-                            type="number"
-                            inputMode="numeric"
-                            placeholder={mode === "sumar" ? "+0" : "nuevo"}
-                            value={val}
-                            onChange={(e) => setQty(v.id ?? "", e.target.value, setVariantInputs)}
-                            style={{ width: "72px", textAlign: "right" }}
-                          />
-                          {result !== null && (
-                            <span style={{ fontSize: "13px", fontWeight: 700, color: "var(--green)", minWidth: "40px" }}>= {result}</span>
-                          )}
+                        <div key={v.id} style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                            <span style={{ flex: 1, fontSize: "13px", color: "var(--text-2)" }}>
+                              {v.name} <span style={{ color: "var(--text-3)", fontSize: "11px" }}>({v.stock ?? 0})</span>
+                              {typeof v.availableStock === "number" && v.availableStock !== v.stock && (
+                                <span style={{ color: "var(--text-3)", fontSize: "11px" }}> · Vendible {v.availableStock}</span>
+                              )}
+                            </span>
+                            <input
+                              className="input"
+                              type="number"
+                              inputMode="numeric"
+                              placeholder={mode === "sumar" ? "+0" : "nuevo"}
+                              value={val}
+                              onChange={(e) => setQty(v.id ?? "", e.target.value, setVariantInputs)}
+                              style={{ width: "72px", textAlign: "right" }}
+                            />
+                            {result !== null && (
+                              <span style={{ fontSize: "13px", fontWeight: 700, color: "var(--green)", minWidth: "40px" }}>= {result}</span>
+                            )}
+                            <button
+                              className="btn btn-sm btn-ghost"
+                              style={{ border: "1px solid var(--border)" }}
+                              onClick={() => void loadLots(p.id, v.id)}
+                            >
+                              {lotLoading[lotOwnerKey(p.id, v.id)] ? "..." : "📅"}
+                            </button>
+                          </div>
+                          {openLotPanels[lotOwnerKey(p.id, v.id)] && renderLotsPanel(p, v.stock, v)}
                         </div>
                       );
                     })}
@@ -1252,12 +1684,17 @@ function StockLoadingModal({
           <span style={{ fontSize: "13px", color: "var(--text-3)", flex: 1 }}>
             {changesCount > 0 ? `${changesCount} cambio${changesCount !== 1 ? "s" : ""} pendiente${changesCount !== 1 ? "s" : ""}` : "Sin cambios"}
           </span>
+          {saveError && (
+            <span style={{ fontSize: "12px", color: "var(--red)", flex: 1.2 }}>
+              {saveError}
+            </span>
+          )}
           <button className="btn btn-ghost" style={{ flexShrink: 0 }} onClick={onClose}>Cancelar</button>
           <button
             className="btn btn-green"
             style={{ flexShrink: 0 }}
             onClick={handleSaveAll}
-            disabled={saving || changesCount === 0}
+            disabled={saving || changesCount === 0 || hasInvalidRows}
           >
             {saving ? "Guardando..." : `Guardar${changesCount > 0 ? ` (${changesCount})` : ""}`}
           </button>
@@ -1880,6 +2317,7 @@ export default function ProductosPage() {
         <div style={{ display: "flex", flexDirection: "column", gap: "8px", flex: 1, overflowY: "auto" }}>
           {filtered.map((p) => {
             const isSelected = selected.has(p.id);
+            const expiryBadge = renderExpiryBadge(p);
             return selectionMode ? (
               // ─── Selection Mode Card
               <button
@@ -1935,6 +2373,7 @@ export default function ProductosPage() {
                       </div>
                     );
                   })()}
+                  {expiryBadge}
                 </div>
                 <div style={{ fontSize: "16px", fontWeight: 700, color: "var(--text-2)" }}>{formatARS(p.price)}</div>
               </button>
@@ -1980,6 +2419,7 @@ export default function ProductosPage() {
                       </div>
                     );
                   })()}
+                  {expiryBadge}
                 </div>
                 <div style={{ fontSize: "18px", fontWeight: 700 }}>{formatARS(p.price)}</div>
                 <span style={{ color: "var(--text-3)" }}>›</span>

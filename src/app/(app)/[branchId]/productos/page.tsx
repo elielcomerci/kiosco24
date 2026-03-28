@@ -64,6 +64,20 @@ type LotDraft = {
   existing?: boolean;
 };
 
+type ProductModalSavePayload = {
+  openStockAfter?: boolean;
+  productId?: string;
+  productName?: string;
+  hasVariants?: boolean;
+};
+
+type StockModalPreset = {
+  initialSearch?: string;
+  initialMode?: "sumar" | "corregir";
+  spotlightProductId?: string | null;
+  entryNote?: string | null;
+};
+
 type Category = CategoryRecord;
 const AUTO_SUGGESTED_CATEGORY_COLOR = "#64748b";
 
@@ -159,7 +173,7 @@ function ProductModal({
   branchId: string;
   categories: Category[];
   onClose: () => void;
-  onSave: () => void;
+  onSave: (payload?: ProductModalSavePayload) => void;
   onCategoriesChange: (categories: Category[]) => void;
 }) {
   const isNew = !product;
@@ -356,7 +370,7 @@ function ProductModal({
     };
   }, [lookupCode]);
 
-  const handleSave = async () => {
+  const handleSave = async (openStockAfter = false) => {
     if (!name.trim()) return;
     setLoading(true);
     setSaveError(null);
@@ -404,7 +418,12 @@ function ProductModal({
         return;
       }
 
-      onSave();
+      onSave({
+        openStockAfter,
+        productId: typeof data?.id === "string" ? data.id : product?.id,
+        productName: typeof data?.name === "string" ? data.name : name.trim(),
+        hasVariants: Array.isArray(data?.variants) ? data.variants.length > 0 : hasVariants,
+      });
     } catch (error) {
       console.error(error);
       setSaveError("No se pudo guardar el producto.");
@@ -1057,6 +1076,14 @@ function ProductModal({
           </>
         )}
 
+        {isNew && (
+          <div style={{ marginBottom: "12px", fontSize: "12px", color: "var(--text-3)" }}>
+            {hasVariants
+              ? "Tip: podés usar Crear y cargar stock para dejar cada variante lista con su stock y vencimientos enseguida."
+              : "Tip: podés usar Crear y cargar stock para dejar el producto listo en el mismo flujo."}
+          </div>
+        )}
+
         {/* showInGrid toggle */}
         {!isNew && (
           <div
@@ -1125,10 +1152,20 @@ function ProductModal({
           <button className="btn btn-ghost" style={{ flex: 1 }} onClick={onClose} disabled={loading}>
             Cancelar
           </button>
+          {isNew && (
+            <button
+              className="btn btn-ghost"
+              style={{ flex: 2, border: "1px solid var(--border)" }}
+              onClick={() => void handleSave(true)}
+              disabled={loading || !name.trim()}
+            >
+              {loading ? "..." : "Crear y cargar stock"}
+            </button>
+          )}
           <button
             className="btn btn-green"
-            style={{ flex: 2 }}
-            onClick={handleSave}
+            style={{ flex: isNew ? 1.6 : 2 }}
+            onClick={() => void handleSave(false)}
             disabled={loading || !name.trim()}
           >
             {loading ? "..." : isNew ? "Crear" : "Guardar"}
@@ -1165,15 +1202,23 @@ function StockLoadingModal({
   branchId,
   onClose,
   onSaved,
+  initialSearch = "",
+  initialMode = "sumar",
+  spotlightProductId = null,
+  entryNote = null,
 }: {
   products: Product[];
   branchId: string;
   onClose: () => void;
   onSaved: () => void;
+  initialSearch?: string;
+  initialMode?: "sumar" | "corregir";
+  spotlightProductId?: string | null;
+  entryNote?: string | null;
 }) {
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(initialSearch);
   const [saving, setSaving] = useState(false);
-  const [mode, setMode] = useState<"sumar" | "corregir">("sumar");
+  const [mode, setMode] = useState<"sumar" | "corregir">(initialMode);
   const [inputs, setInputs] = useState<Record<string, string>>({});
   const [variantInputs, setVariantInputs] = useState<Record<string, string>>({});
   const [lotInputs, setLotInputs] = useState<Record<string, LotDraft[]>>({});
@@ -1182,17 +1227,41 @@ function StockLoadingModal({
   const [lotLoading, setLotLoading] = useState<Record<string, boolean>>({});
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  const eligible = products.filter((p) => {
-    const q = search.toLowerCase();
-    if (!q) return true;
-    return (
-      p.name.toLowerCase().includes(q) ||
-      (p.barcode || "").includes(q) ||
-      (p.internalCode || "").includes(q) ||
-      (p.brand || "").toLowerCase().includes(q) ||
-      (p.supplierName || "").toLowerCase().includes(q)
-    );
-  });
+  useEffect(() => {
+    setSearch(initialSearch);
+  }, [initialSearch]);
+
+  useEffect(() => {
+    setMode(initialMode);
+  }, [initialMode]);
+
+  const eligible = products
+    .filter((p) => {
+      const q = search.toLowerCase();
+      if (!q) return true;
+      return (
+        p.name.toLowerCase().includes(q) ||
+        (p.barcode || "").includes(q) ||
+        (p.internalCode || "").includes(q) ||
+        (p.brand || "").toLowerCase().includes(q) ||
+        (p.supplierName || "").toLowerCase().includes(q)
+      );
+    })
+    .sort((left, right) => {
+      if (!spotlightProductId) {
+        return 0;
+      }
+
+      if (left.id === spotlightProductId) {
+        return -1;
+      }
+
+      if (right.id === spotlightProductId) {
+        return 1;
+      }
+
+      return 0;
+    });
 
   const setQty = (
     key: string,
@@ -1554,6 +1623,11 @@ function StockLoadingModal({
             onChange={(e) => setSearch(e.target.value)}
             autoFocus
           />
+          {entryNote && (
+            <div style={{ fontSize: "11px", color: "var(--primary)", fontWeight: 600 }}>
+              {entryNote}
+            </div>
+          )}
           <div style={{ display: "flex", gap: "8px" }}>
             {(["sumar", "corregir"] as const).map((m) => (
               <button
@@ -2059,6 +2133,7 @@ export default function ProductosPage() {
   const [branches, setBranches] = useState<Branch[]>([]);
   const [branchesLoaded, setBranchesLoaded] = useState(false);
   const [showStockModal, setShowStockModal] = useState(false);
+  const [stockModalPreset, setStockModalPreset] = useState<StockModalPreset | null>(null);
   const [showReplicarModal, setShowReplicarModal] = useState(false);
   const [showTransferirModal, setShowTransferirModal] = useState(false);
 
@@ -2245,6 +2320,26 @@ export default function ProductosPage() {
     fetchProducts();
   };
 
+  const handleProductModalSave = async (payload?: ProductModalSavePayload) => {
+    setModal(null);
+    await fetchProducts();
+
+    if (payload?.openStockAfter && payload.productId) {
+      setStockModalPreset({
+        initialSearch: payload.productName ?? "",
+        initialMode: "corregir",
+        spotlightProductId: payload.productId,
+        entryNote: payload.hasVariants
+          ? "Producto creado. Definí el stock final y, si querés, cargá vencimientos por variante."
+          : "Producto creado. Definí el stock final y, si querés, cargá vencimientos ahora.",
+      });
+      setShowStockModal(true);
+      return;
+    }
+
+    setStockModalPreset(null);
+  };
+
   return (
     <>
     <div className="screen-only" style={{ padding: "24px 16px", minHeight: "100dvh", display: "flex", flexDirection: "column" }}>
@@ -2261,7 +2356,10 @@ export default function ProductosPage() {
               <button
                 className="btn btn-sm btn-ghost"
                 style={{ border: "1px solid var(--border)", fontWeight: 600 }}
-                onClick={() => { setShowStockModal(true); }}
+                onClick={() => {
+                  setStockModalPreset(null);
+                  setShowStockModal(true);
+                }}
                 title="Cargar stock"
               >📦 Stock</button>
               {isOwner && branches.length > 1 && (
@@ -2607,7 +2705,7 @@ export default function ProductosPage() {
           branchId={branchId}
           categories={categories}
           onClose={() => setModal(null)}
-          onSave={() => { setModal(null); fetchProducts(); }}
+          onSave={handleProductModalSave}
           onCategoriesChange={setCategories}
         />
       )}
@@ -2620,8 +2718,15 @@ export default function ProductosPage() {
           <StockLoadingModal
             products={stockProducts}
             branchId={branchId}
-            onClose={() => setShowStockModal(false)}
+            onClose={() => {
+              setShowStockModal(false);
+              setStockModalPreset(null);
+            }}
             onSaved={fetchProducts}
+            initialSearch={stockModalPreset?.initialSearch}
+            initialMode={stockModalPreset?.initialMode}
+            spotlightProductId={stockModalPreset?.spotlightProductId}
+            entryNote={stockModalPreset?.entryNote}
           />
         );
       })()}

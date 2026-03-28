@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import ModalPortal from "@/components/ui/ModalPortal";
 
 export interface CategoryRecord {
   id: string;
@@ -75,28 +76,29 @@ export default function CategoryModal({
   };
 
   return (
-    <div
-      className="modal-overlay animate-fade-in"
-      onClick={(e) => {
-        e.stopPropagation();
-        onClose();
-      }}
-      style={{ zIndex: 9999, alignItems: "flex-end", padding: "16px", paddingBottom: "max(16px, env(safe-area-inset-bottom))" }}
-    >
+    <ModalPortal>
       <div
-        className="modal animate-slide-up"
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          maxHeight: "85dvh",
-          overflowY: "auto",
-          padding: "20px",
-          width: "100%",
-          maxWidth: "500px",
-          display: "flex",
-          flexDirection: "column",
-          gap: "16px",
+        className="modal-overlay animate-fade-in"
+        onClick={(e) => {
+          e.stopPropagation();
+          onClose();
         }}
+        style={{ zIndex: 9999, alignItems: "flex-end", padding: "16px", paddingBottom: "max(16px, env(safe-area-inset-bottom))" }}
       >
+        <div
+          className="modal animate-slide-up"
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            maxHeight: "85dvh",
+            overflowY: "auto",
+            padding: "20px",
+            width: "100%",
+            maxWidth: "500px",
+            display: "flex",
+            flexDirection: "column",
+            gap: "16px",
+          }}
+        >
         <h2 style={{ fontSize: "20px", fontWeight: 700 }}>
           {isNew ? "Nueva Categoria" : "Editar Categoria"}
         </h2>
@@ -176,7 +178,8 @@ export default function CategoryModal({
             {loading ? "..." : "Guardar"}
           </button>
         </div>
+        </div>
       </div>
-    </div>
+    </ModalPortal>
   );
 }

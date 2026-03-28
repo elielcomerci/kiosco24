@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useParams } from "next/navigation";
 import NumPad from "@/components/ui/NumPad";
+import ModalPortal from "@/components/ui/ModalPortal";
 import { formatARS } from "@/lib/utils";
 
 const REASONS = [
@@ -44,8 +45,9 @@ export default function GastoModal({ onClose, onSuccess, employeeId }: GastoModa
   };
 
   return (
-    <div className="modal-overlay animate-fade-in" onClick={onClose}>
-      <div className="modal animate-slide-up" onClick={(e) => e.stopPropagation()}>
+    <ModalPortal>
+      <div className="modal-overlay animate-fade-in" onClick={onClose}>
+        <div className="modal animate-slide-up" onClick={(e) => e.stopPropagation()}>
         <h2 style={{ fontSize: "20px", fontWeight: 700 }}>💸 Registrar Gasto</h2>
 
         <div
@@ -99,7 +101,8 @@ export default function GastoModal({ onClose, onSuccess, employeeId }: GastoModa
             {loading ? "..." : "Confirmar gasto"}
           </button>
         </div>
+        </div>
       </div>
-    </div>
+    </ModalPortal>
   );
 }

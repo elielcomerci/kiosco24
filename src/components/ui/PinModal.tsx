@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import ModalPortal from "@/components/ui/ModalPortal";
 
 interface PinModalProps {
   title?: string;
@@ -39,24 +40,25 @@ export default function PinModal({
   const dots = Array.from({ length: 6 }, (_, i) => i < pin.length);
 
   return (
-    <div
-      className="modal-overlay animate-fade-in"
-      onClick={onCancel}
-      style={{ zIndex: 9999, alignItems: "flex-end", padding: "16px", paddingBottom: "max(16px, env(safe-area-inset-bottom))" }}
-    >
+    <ModalPortal>
       <div
-        className="modal animate-slide-up"
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          width: "100%",
-          maxWidth: "360px",
-          padding: "24px 20px",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          gap: "20px",
-        }}
+        className="modal-overlay animate-fade-in"
+        onClick={onCancel}
+        style={{ zIndex: 9999, alignItems: "flex-end", padding: "16px", paddingBottom: "max(16px, env(safe-area-inset-bottom))" }}
       >
+        <div
+          className="modal animate-slide-up"
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            width: "100%",
+            maxWidth: "360px",
+            padding: "24px 20px",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: "20px",
+          }}
+        >
         {/* Lock icon + title */}
         <div style={{ textAlign: "center" }}>
           <div style={{ fontSize: "36px", marginBottom: "8px" }}>🔐</div>
@@ -163,7 +165,8 @@ export default function PinModal({
         >
           {loading ? "Verificando..." : "Confirmar"}
         </button>
+        </div>
       </div>
-    </div>
+    </ModalPortal>
   );
 }

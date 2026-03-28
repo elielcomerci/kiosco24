@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import PrintablePage from "@/components/print/PrintablePage";
 import { useRegisterShortcuts } from "@/components/ui/BranchWorkspace";
+import ModalPortal from "@/components/ui/ModalPortal";
 import { formatARS } from "@/lib/utils";
 import NumPad from "@/components/ui/NumPad";
 import BackButton from "@/components/ui/BackButton";
@@ -138,14 +139,15 @@ export default function FiadosPage() {
         )}
 
         {cobrarCustomer && (
-          <div
-            className="modal-overlay animate-fade-in"
-            onClick={() => {
-              setCobrarCustomer(null);
-              setPayAmount("");
-            }}
-          >
-            <div className="modal animate-slide-up" onClick={(e) => e.stopPropagation()}>
+          <ModalPortal>
+            <div
+              className="modal-overlay animate-fade-in"
+              onClick={() => {
+                setCobrarCustomer(null);
+                setPayAmount("");
+              }}
+            >
+              <div className="modal animate-slide-up" onClick={(e) => e.stopPropagation()}>
               <div>
                 <h2 style={{ fontSize: "20px", fontWeight: 700 }}>Cobrar fiado</h2>
                 <p style={{ color: "var(--text-2)", fontSize: "14px" }}>
@@ -199,8 +201,9 @@ export default function FiadosPage() {
                   {loading ? "..." : "Confirmar cobro"}
                 </button>
               </div>
+              </div>
             </div>
-          </div>
+          </ModalPortal>
         )}
       </div>
 

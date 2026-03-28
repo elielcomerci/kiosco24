@@ -15,6 +15,7 @@ import OpenShiftModal, { type ShiftAssignee } from "@/components/turnos/OpenShif
 import CloseShiftModal from "@/components/turnos/CloseShiftModal";
 import TransferShiftModal from "@/components/turnos/TransferShiftModal";
 import BarcodeScanner from "@/components/caja/BarcodeScanner";
+import ModalPortal from "@/components/ui/ModalPortal";
 
 import { savePendingSale } from "@/lib/offline/db";
 import { useOnlineStatus } from "@/lib/offline/sync";
@@ -1648,8 +1649,9 @@ export default function CajaPage() {
 
       {/* Variant Selector Modal */}
       {variantSelector && (
-        <div className="modal-overlay animate-fade-in" onClick={() => setVariantSelector(null)} style={{ zIndex: 10000 }}>
-          <div className="modal animate-slide-up" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "400px", width: "95%", maxHeight: "80vh", overflowY: "auto" }}>
+        <ModalPortal>
+          <div className="modal-overlay animate-fade-in" onClick={() => setVariantSelector(null)} style={{ zIndex: 10000 }}>
+            <div className="modal animate-slide-up" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "400px", width: "95%", maxHeight: "80vh", overflowY: "auto" }}>
             <h2 style={{ fontSize: "18px", fontWeight: 700, marginBottom: "16px" }}>Seleccionar {variantSelector.product.name}</h2>
             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
               {variantSelector.product.variants?.map((v) => (
@@ -1695,8 +1697,9 @@ export default function CajaPage() {
             <button className="btn btn-ghost" style={{ width: "100%", marginTop: "16px" }} onClick={() => setVariantSelector(null)}>
               Cancelar
             </button>
+            </div>
           </div>
-        </div>
+        </ModalPortal>
       )}
 
       <MpIncomingPaymentToasts

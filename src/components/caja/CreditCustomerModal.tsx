@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import ModalPortal from "@/components/ui/ModalPortal";
 
 interface Customer {
   id: string;
@@ -51,8 +52,9 @@ export default function CreditCustomerModal({ onClose, onSelect }: CreditCustome
   };
 
   return (
-    <div className="modal-overlay animate-fade-in" onClick={onClose}>
-      <div className="modal animate-slide-up" onClick={(e) => e.stopPropagation()} style={{ maxHeight: "85dvh" }}>
+    <ModalPortal>
+      <div className="modal-overlay animate-fade-in" onClick={onClose}>
+        <div className="modal animate-slide-up" onClick={(e) => e.stopPropagation()} style={{ maxHeight: "85dvh" }}>
         <h2 style={{ fontSize: "20px", fontWeight: 700 }}>📋 ¿A quién le fiaste?</h2>
 
         <input
@@ -115,7 +117,8 @@ export default function CreditCustomerModal({ onClose, onSelect }: CreditCustome
         <button className="btn btn-ghost btn-full" onClick={onClose}>
           Cancelar
         </button>
+        </div>
       </div>
-    </div>
+    </ModalPortal>
   );
 }

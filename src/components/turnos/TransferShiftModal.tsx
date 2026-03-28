@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 
+import ModalPortal from "@/components/ui/ModalPortal";
 import PinModal from "@/components/ui/PinModal";
 import type { ShiftAssignee } from "@/components/turnos/OpenShiftModal";
 
@@ -118,8 +119,9 @@ export default function TransferShiftModal({
 
   return (
     <>
-      <div className="modal-overlay animate-fade-in" onClick={onCancel}>
-        <div className="modal animate-slide-up" onClick={(e) => e.stopPropagation()}>
+      <ModalPortal>
+        <div className="modal-overlay animate-fade-in" onClick={onCancel}>
+          <div className="modal animate-slide-up" onClick={(e) => e.stopPropagation()}>
           <div>
             <h2 style={{ fontSize: "20px", fontWeight: 700 }}>Transferir turno</h2>
             <p style={{ color: "var(--text-2)", fontSize: "14px", marginBottom: "16px" }}>
@@ -169,8 +171,9 @@ export default function TransferShiftModal({
               {loading ? "Transfiriendo..." : selectedEmp?.hasPin ? "Transferir con PIN" : "Transferir"}
             </button>
           </div>
+          </div>
         </div>
-      </div>
+      </ModalPortal>
 
       {showPinModal && (
         <PinModal

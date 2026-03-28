@@ -8,6 +8,7 @@ import {
   type IScannerControls,
 } from "@zxing/browser";
 import { DecodeHintType } from "@zxing/library";
+import ModalPortal from "@/components/ui/ModalPortal";
 
 interface BarcodeScannerProps {
   onScan: (result: string) => void;
@@ -161,12 +162,13 @@ export default function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps)
   }, []);
 
   return (
-    <div className="modal-overlay animate-fade-in" onClick={onClose} style={{ zIndex: 9999 }}>
-      <div
-        className="modal animate-slide-up"
-        onClick={(e) => e.stopPropagation()}
-        style={{ padding: "16px", background: "#000", maxWidth: "400px", width: "100%" }}
-      >
+    <ModalPortal>
+      <div className="modal-overlay animate-fade-in" onClick={onClose} style={{ zIndex: 9999 }}>
+        <div
+          className="modal animate-slide-up"
+          onClick={(e) => e.stopPropagation()}
+          style={{ padding: "16px", background: "#000", maxWidth: "400px", width: "100%" }}
+        >
         <h2
           style={{
             fontSize: "16px",
@@ -248,7 +250,8 @@ export default function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps)
         >
           Cancelar
         </button>
+        </div>
       </div>
-    </div>
+    </ModalPortal>
   );
 }

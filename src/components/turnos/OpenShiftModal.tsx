@@ -6,6 +6,7 @@ import { useSession } from "next-auth/react";
 import { useParams } from "next/navigation";
 
 import NumPad from "@/components/ui/NumPad";
+import ModalPortal from "@/components/ui/ModalPortal";
 import PinModal from "@/components/ui/PinModal";
 
 interface Employee {
@@ -146,8 +147,9 @@ export default function OpenShiftModal({ onConfirm }: OpenShiftModalProps) {
 
   return (
     <>
-      <div className="modal-overlay animate-fade-in">
-        <div className="modal animate-slide-up">
+      <ModalPortal>
+        <div className="modal-overlay animate-fade-in">
+          <div className="modal animate-slide-up">
           <div>
             <h2 style={{ fontSize: "20px", fontWeight: 700 }}>Abrir turno</h2>
             <p style={{ color: "var(--text-2)", fontSize: "14px", marginBottom: "16px" }}>
@@ -233,8 +235,9 @@ export default function OpenShiftModal({ onConfirm }: OpenShiftModalProps) {
           >
             {loading ? "Abriendo..." : selectedEmp?.hasPin ? "Abrir caja con PIN" : "Abrir caja"}
           </button>
+          </div>
         </div>
-      </div>
+      </ModalPortal>
 
       {showPinModal && (
         <PinModal

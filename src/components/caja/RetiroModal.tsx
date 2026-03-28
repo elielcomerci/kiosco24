@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useParams } from "next/navigation";
 import NumPad from "@/components/ui/NumPad";
+import ModalPortal from "@/components/ui/ModalPortal";
 import { formatARS } from "@/lib/utils";
 
 interface RetiroModalProps {
@@ -37,8 +38,9 @@ export default function RetiroModal({ onClose, onSuccess, employeeId }: RetiroMo
   };
 
   return (
-    <div className="modal-overlay animate-fade-in" onClick={onClose}>
-      <div className="modal animate-slide-up" onClick={(e) => e.stopPropagation()}>
+    <ModalPortal>
+      <div className="modal-overlay animate-fade-in" onClick={onClose}>
+        <div className="modal animate-slide-up" onClick={(e) => e.stopPropagation()}>
         <h2 style={{ fontSize: "20px", fontWeight: 700 }}>💰 Retiro de caja</h2>
         <p style={{ color: "var(--text-2)", fontSize: "13px" }}>
           Plata tuya. No se descuenta de la ganancia estimada.
@@ -85,7 +87,8 @@ export default function RetiroModal({ onClose, onSuccess, employeeId }: RetiroMo
             {loading ? "..." : "Confirmar retiro"}
           </button>
         </div>
+        </div>
       </div>
-    </div>
+    </ModalPortal>
   );
 }

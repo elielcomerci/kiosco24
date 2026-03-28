@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import ModalPortal from "@/components/ui/ModalPortal";
 import NumPad from "@/components/ui/NumPad";
 import { formatARS } from "@/lib/utils";
 
@@ -36,8 +37,9 @@ export default function CloseShiftModal({ onConfirm, onCancel, summary }: CloseS
   const difference = expected !== null && !isNaN(parsed) ? parsed - expected : null;
 
   return (
-    <div className="modal-overlay animate-fade-in" onClick={onCancel}>
-      <div className="modal animate-slide-up" onClick={(e) => e.stopPropagation()}>
+    <ModalPortal>
+      <div className="modal-overlay animate-fade-in" onClick={onCancel}>
+        <div className="modal animate-slide-up" onClick={(e) => e.stopPropagation()}>
         <div>
           <h2 style={{ fontSize: "20px", fontWeight: 700, color: "var(--red)" }}>Cerrar Turno</h2>
           <p style={{ color: "var(--text-2)", fontSize: "14px", marginBottom: "16px" }}>
@@ -164,8 +166,9 @@ export default function CloseShiftModal({ onConfirm, onCancel, summary }: CloseS
             {loading ? "Cerrando..." : "Confirmar Cierre"}
           </button>
         </div>
+        </div>
       </div>
-    </div>
+    </ModalPortal>
   );
 }
 

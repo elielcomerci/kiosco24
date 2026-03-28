@@ -13,8 +13,14 @@ import {
 import BarcodeScanner from "@/components/caja/BarcodeScanner";
 import CategoryModal, { type CategoryRecord } from "@/components/config/CategoryModal";
 import BackButton from "@/components/ui/BackButton";
+import ModalPortal from "@/components/ui/ModalPortal";
 import PrintablePage from "@/components/print/PrintablePage";
 import { useRegisterShortcuts } from "@/components/ui/BranchWorkspace";
+import {
+  planStockTransfer,
+  type StockTransferStrategy,
+  type TransferPlanLotInput,
+} from "@/lib/stock-transfer-plan";
 
 interface Variant {
   id?: string;
@@ -79,6 +85,10 @@ type ProductModalSavePayload = {
 };
 
 type PricingMode = "SHARED" | "BRANCH";
+
+type TransferLotRecord = TransferPlanLotInput & {
+  id: string;
+};
 
 type StockModalPreset = {
   initialSearch?: string;
@@ -267,6 +277,35 @@ function renderStockBadge(product: Product) {
       {badge.label}
     </span>
   );
+}
+
+function getProductCardBorder(product: Product) {
+  const badge = getProductStockBadge(product);
+  if (!badge) {
+    return {
+      border: "1px solid var(--border)",
+      boxShadow: "none",
+    };
+  }
+
+  if (badge.tone === "negative") {
+    return {
+      border: "1px solid rgba(239,68,68,0.55)",
+      boxShadow: "0 0 0 1px rgba(239,68,68,0.14) inset",
+    };
+  }
+
+  if (badge.tone === "out") {
+    return {
+      border: "1px solid rgba(148,163,184,0.42)",
+      boxShadow: "0 0 0 1px rgba(148,163,184,0.08) inset",
+    };
+  }
+
+  return {
+    border: "1px solid rgba(245,158,11,0.5)",
+    boxShadow: "0 0 0 1px rgba(245,158,11,0.1) inset",
+  };
 }
 
 // ─── Product Form Modal ────────────────────────────────────────────────────────
@@ -2107,24 +2146,185 @@ function TransferirStockModal({
 }) {
   const [targetBranchId, setTargetBranchId] = useState(branches[0]?.id ?? "");
   const [quantities, setQuantities] = useState<Record<string, string>>({});
-  const [variantQty, setVariantQty] = useState<Record<string, string>>({});
+  const [strategy, setStrategy] = useState<StockTransferStrategy>("nearest_first");
+  const [transferLots, setTransferLots] = useState<Record<string, TransferLotRecord[]>>({});
+  const [loadingLots, setLoadingLots] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const setQty = (key: string, val: string, setter: React.Dispatch<React.SetStateAction<Record<string, string>>>) =>
-    setter((prev) => ({ ...prev, [key]: val }));
+  const getTransferableStock = useCallback((availableStock?: number | null, stock?: number | null) => {
+    const base =
+      typeof availableStock === "number"
+        ? availableStock
+        : typeof stock === "number"
+          ? stock
+          : 0;
+    return Math.max(base, 0);
+  }, []);
+
+  const hasLoadedTransferLots = useCallback(
+    (key: string) => Object.prototype.hasOwnProperty.call(transferLots, key),
+    [transferLots],
+  );
+
+  const loadTransferLots = useCallback(
+    async (productId: string, variantId?: string) => {
+      const key = lotOwnerKey(productId, variantId);
+      if (loadingLots[key] || hasLoadedTransferLots(key)) {
+        return;
+      }
+
+      setLoadingLots((prev) => ({ ...prev, [key]: true }));
+      try {
+        const params = new URLSearchParams({ productId });
+        if (variantId) {
+          params.set("variantId", variantId);
+        }
+
+        const res = await fetch(`/api/inventario/lotes?${params.toString()}`, {
+          headers: { "x-branch-id": sourceBranchId },
+        });
+        if (!res.ok) {
+          throw new Error("No se pudo cargar el desglose por vencimiento.");
+        }
+
+        const data = await res.json();
+        const nextLots = Array.isArray(data?.lots)
+          ? data.lots
+              .filter(
+                (lot: { id?: string; quantity?: number; expiresOn?: string }) =>
+                  Boolean(lot?.id) &&
+                  Number.isInteger(lot?.quantity) &&
+                  (lot?.quantity ?? 0) > 0 &&
+                  Boolean(lot?.expiresOn),
+              )
+              .map((lot: { id: string; quantity: number; expiresOn: string }) => ({
+                id: lot.id,
+                quantity: lot.quantity,
+                expiresOn: lot.expiresOn,
+              }))
+          : [];
+
+        setTransferLots((prev) => ({ ...prev, [key]: nextLots }));
+      } catch (lotError) {
+        console.error("Error cargando lotes para transferencia:", lotError);
+        setTransferLots((prev) => ({ ...prev, [key]: [] }));
+      } finally {
+        setLoadingLots((prev) => ({ ...prev, [key]: false }));
+      }
+    },
+    [hasLoadedTransferLots, loadingLots, sourceBranchId],
+  );
+
+  const setQty = (productId: string, value: string, variantId?: string) => {
+    const key = lotOwnerKey(productId, variantId);
+    setQuantities((prev) => ({ ...prev, [key]: value }));
+    setError(null);
+
+    if (!parseStockQuantity(value)) {
+      return;
+    }
+
+    const product = products.find((item) => item.id === productId);
+    const hasTrackedLots = variantId
+      ? Boolean(product?.variants?.find((variant) => variant.id === variantId)?.hasTrackedLots)
+      : Boolean(product?.hasTrackedLots);
+
+    if (hasTrackedLots) {
+      void loadTransferLots(productId, variantId);
+    }
+  };
+
+  const getRequestedQuantity = useCallback(
+    (productId: string, variantId?: string) =>
+      parseStockQuantity(quantities[lotOwnerKey(productId, variantId)] ?? "") ?? 0,
+    [quantities],
+  );
+
+  const getTransferPlanForRow = useCallback(
+    (
+      productId: string,
+      totalStock: number | null | undefined,
+      availableStock: number | null | undefined,
+      hasTrackedLots: boolean | undefined,
+      variantId?: string,
+    ) => {
+      const key = lotOwnerKey(productId, variantId);
+      const requestedQuantity = getRequestedQuantity(productId, variantId);
+      const fallbackTransferable = getTransferableStock(availableStock, totalStock);
+      const loadedLots = transferLots[key] ?? [];
+      const canUseLoadedLots = hasTrackedLots && hasLoadedTransferLots(key);
+      const plan = canUseLoadedLots
+        ? planStockTransfer({
+            totalStock: typeof totalStock === "number" ? totalStock : 0,
+            requestedQuantity,
+            lots: loadedLots,
+            strategy,
+          })
+        : null;
+
+      return {
+        requestedQuantity,
+        transferableQuantity: plan?.transferableQuantity ?? fallbackTransferable,
+        plan,
+        isLoadingLots: Boolean(loadingLots[key]),
+      };
+    },
+    [getRequestedQuantity, getTransferableStock, hasLoadedTransferLots, loadingLots, strategy, transferLots],
+  );
+
+  const productsWithTransferableStock = useMemo(
+    () =>
+      products.filter((product) => {
+        if (product.variants && product.variants.length > 0) {
+          return product.variants.some(
+            (variant) => getTransferableStock(variant.availableStock, variant.stock) > 0,
+          );
+        }
+
+        return getTransferableStock(product.availableStock, product.stock) > 0;
+      }),
+    [getTransferableStock, products],
+  );
+
+  const hasTrackedLotsInScope = useMemo(
+    () =>
+      productsWithTransferableStock.some(
+        (product) =>
+          product.hasTrackedLots ||
+          Boolean(
+            product.variants?.some(
+              (variant) =>
+                variant.hasTrackedLots && getTransferableStock(variant.availableStock, variant.stock) > 0,
+            ),
+          ),
+      ),
+    [getTransferableStock, productsWithTransferableStock],
+  );
 
   const buildItems = () => {
     const items: { productId: string; variantId?: string; quantity: number }[] = [];
-    for (const p of products) {
-      if (p.variants && p.variants.length > 0) {
-        for (const v of p.variants) {
-          const qty = parseInt(variantQty[v.id ?? ""] ?? "0");
-          if (qty > 0) items.push({ productId: p.id, variantId: v.id, quantity: qty });
+    for (const product of productsWithTransferableStock) {
+      if (product.variants && product.variants.length > 0) {
+        for (const variant of product.variants) {
+          if (!variant.id || getTransferableStock(variant.availableStock, variant.stock) <= 0) {
+            continue;
+          }
+
+          const qty = getRequestedQuantity(product.id, variant.id);
+          if (qty > 0) {
+            items.push({ productId: product.id, variantId: variant.id, quantity: qty });
+          }
         }
       } else {
-        const qty = parseInt(quantities[p.id] ?? "0");
-        if (qty > 0) items.push({ productId: p.id, quantity: qty });
+        if (getTransferableStock(product.availableStock, product.stock) <= 0) {
+          continue;
+        }
+
+        const qty = getRequestedQuantity(product.id);
+        if (qty > 0) {
+          items.push({ productId: product.id, quantity: qty });
+        }
       }
     }
     return items;
@@ -2132,16 +2332,130 @@ function TransferirStockModal({
 
   const totalItems = buildItems().length;
 
+  const hasInvalidQuantities = productsWithTransferableStock.some((product) => {
+    if (product.variants && product.variants.length > 0) {
+      return product.variants.some((variant) => {
+        if (!variant.id || getTransferableStock(variant.availableStock, variant.stock) <= 0) {
+          return false;
+        }
+
+        const rowState = getTransferPlanForRow(
+          product.id,
+          variant.stock,
+          variant.availableStock,
+          variant.hasTrackedLots,
+          variant.id,
+        );
+        return rowState.requestedQuantity > rowState.transferableQuantity;
+      });
+    }
+
+    const rowState = getTransferPlanForRow(
+      product.id,
+      product.stock,
+      product.availableStock,
+      product.hasTrackedLots,
+    );
+    return rowState.requestedQuantity > rowState.transferableQuantity;
+  });
+
+  const formatPlanDate = (value: string) =>
+    new Date(`${value}T00:00:00.000Z`).toLocaleDateString("es-AR", { timeZone: "UTC" });
+
+  const renderTransferPlan = ({
+    productId,
+    totalStock,
+    availableStock,
+    hasTrackedLots,
+    variantId,
+  }: {
+    productId: string;
+    totalStock: number | null | undefined;
+    availableStock: number | null | undefined;
+    hasTrackedLots?: boolean;
+    variantId?: string;
+  }) => {
+    const rowState = getTransferPlanForRow(productId, totalStock, availableStock, hasTrackedLots, variantId);
+
+    if (rowState.requestedQuantity <= 0 || !hasTrackedLots) {
+      return null;
+    }
+
+    if (rowState.isLoadingLots && !rowState.plan) {
+      return (
+        <div
+          style={{
+            marginTop: "8px",
+            padding: "8px 10px",
+            borderRadius: "10px",
+            background: "rgba(148,163,184,0.08)",
+            color: "var(--text-3)",
+            fontSize: "12px",
+          }}
+        >
+          Cargando desglose de vencimientos...
+        </div>
+      );
+    }
+
+    if (!rowState.plan) {
+      return null;
+    }
+
+    return (
+      <div
+        style={{
+          marginTop: "8px",
+          padding: "10px 12px",
+          borderRadius: "12px",
+          background: "rgba(15,23,42,0.35)",
+          border: "1px solid rgba(148,163,184,0.16)",
+          display: "flex",
+          flexDirection: "column",
+          gap: "6px",
+        }}
+      >
+        <div style={{ fontSize: "11px", fontWeight: 700, color: "var(--text-3)", textTransform: "uppercase" }}>
+          Vista previa
+        </div>
+
+        {rowState.plan.lotsToTransfer.map((lot) => (
+          <div key={`${lot.id ?? lot.expiresOn}-${lot.quantity}`} style={{ fontSize: "12px", color: "var(--text-2)" }}>
+            {lot.quantity} u. {"->"} {formatPlanDate(lot.expiresOn)}
+          </div>
+        ))}
+
+        {rowState.plan.untrackedQuantity > 0 && (
+          <div style={{ fontSize: "12px", color: "var(--text-2)" }}>
+            {rowState.plan.untrackedQuantity} u. sin fecha
+          </div>
+        )}
+
+        {rowState.plan.expiredQuantity > 0 && (
+          <div style={{ fontSize: "12px", color: "var(--amber)" }}>
+            {rowState.plan.expiredQuantity} u. vencidas quedan fuera de esta transferencia
+          </div>
+        )}
+
+        {rowState.requestedQuantity > rowState.transferableQuantity && (
+          <div style={{ fontSize: "12px", color: "var(--red)" }}>
+            Maximo transferible: {rowState.transferableQuantity} u.
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const handleTransferir = async () => {
     const items = buildItems();
-    if (items.length === 0 || !targetBranchId) return;
+    if (items.length === 0 || !targetBranchId || hasInvalidQuantities) return;
     setLoading(true);
     setError(null);
     try {
       const res = await fetch("/api/inventario/transferencia", {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-branch-id": sourceBranchId },
-        body: JSON.stringify({ items, targetBranchId }),
+        body: JSON.stringify({ items, targetBranchId, strategy }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => null);
@@ -2153,11 +2467,6 @@ function TransferirStockModal({
       setLoading(false);
     }
   };
-
-  const productsWithStock = products.filter((p) => {
-    if (p.variants && p.variants.length > 0) return p.variants.some((v) => (v.stock ?? 0) > 0);
-    return (p.stock ?? 0) > 0;
-  });
 
   return (
     <div className="modal-overlay animate-fade-in" onClick={onClose} style={{ zIndex: 9999, alignItems: "flex-end", padding: "16px", paddingBottom: "max(16px, env(safe-area-inset-bottom))" }}>
@@ -2174,62 +2483,137 @@ function TransferirStockModal({
           </select>
         </div>
 
+        {hasTrackedLotsInScope && (
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: "8px",
+              padding: "12px",
+              borderRadius: "14px",
+              background: "rgba(59,130,246,0.08)",
+              border: "1px solid rgba(59,130,246,0.18)",
+            }}
+          >
+            <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 700, textTransform: "uppercase" }}>
+              Enviar primero
+            </label>
+            <select
+              className="input"
+              value={strategy}
+              onChange={(e) => setStrategy(e.target.value as StockTransferStrategy)}
+              style={{ width: "100%", background: "var(--surface)", cursor: "pointer" }}
+            >
+              <option value="nearest_first">Mas proximas primero</option>
+              <option value="farthest_first">Mas lejanas primero</option>
+            </select>
+            <div style={{ fontSize: "12px", color: "var(--text-3)" }}>
+              Los lotes vencidos no se transfieren desde este flujo.
+            </div>
+          </div>
+        )}
+
         <div style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase" }}>Cantidad a transferir</div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: "8px", overflowY: "auto", maxHeight: "320px" }}>
-          {productsWithStock.map((p) => (
-            <div key={p.id} style={{ border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: "10px 14px", background: "var(--surface)" }}>
-              <div style={{ fontWeight: 600, fontSize: "14px", marginBottom: "6px" }}>{p.emoji ? `${p.emoji} ` : ""}{p.name}</div>
-              {p.variants && p.variants.length > 0 ? (
-                p.variants.filter((v) => (v.stock ?? 0) > 0).map((v) => {
-                  const qty = parseInt(variantQty[v.id ?? ""] ?? "0");
-                  const maxStock = v.stock ?? 0;
-                  const isOver = qty > maxStock;
+          {productsWithTransferableStock.map((product) => (
+            <div key={product.id} style={{ border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: "10px 14px", background: "var(--surface)" }}>
+              <div style={{ fontWeight: 600, fontSize: "14px", marginBottom: "6px" }}>{product.emoji ? `${product.emoji} ` : ""}{product.name}</div>
+              {product.variants && product.variants.length > 0 ? (
+                product.variants
+                  .filter((variant) => variant.id && getTransferableStock(variant.availableStock, variant.stock) > 0)
+                  .map((variant) => {
+                    const rowState = getTransferPlanForRow(
+                      product.id,
+                      variant.stock,
+                      variant.availableStock,
+                      variant.hasTrackedLots,
+                      variant.id,
+                    );
+                    const maxStock = rowState.transferableQuantity;
+                    const isOver = rowState.requestedQuantity > maxStock;
+                    return (
+                      <div key={variant.id} style={{ marginBottom: "8px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                          <span style={{ flex: 1, fontSize: "13px", color: "var(--text-2)" }}>
+                            {variant.name} <span style={{ color: "var(--text-3)" }}>(transferible: {maxStock})</span>
+                          </span>
+                          <input
+                            className="input"
+                            type="number"
+                            inputMode="numeric"
+                            min="0"
+                            max={maxStock}
+                            placeholder="0"
+                            value={quantities[lotOwnerKey(product.id, variant.id)] ?? ""}
+                            onChange={(e) => setQty(product.id, e.target.value, variant.id)}
+                            style={{ width: "72px", textAlign: "right", borderColor: isOver ? "var(--red)" : undefined }}
+                          />
+                        </div>
+                        {renderTransferPlan({
+                          productId: product.id,
+                          totalStock: variant.stock,
+                          availableStock: variant.availableStock,
+                          hasTrackedLots: variant.hasTrackedLots,
+                          variantId: variant.id,
+                        })}
+                      </div>
+                    );
+                  })
+              ) : (
+                (() => {
+                  const rowState = getTransferPlanForRow(
+                    product.id,
+                    product.stock,
+                    product.availableStock,
+                    product.hasTrackedLots,
+                  );
+                  const maxStock = rowState.transferableQuantity;
                   return (
-                    <div key={v.id} style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
-                      <span style={{ flex: 1, fontSize: "13px", color: "var(--text-2)" }}>{v.name} <span style={{ color: "var(--text-3)" }}>(stock: {maxStock})</span></span>
-                      <input
-                        className="input"
-                        type="number"
-                        inputMode="numeric"
-                        min="0"
-                        max={maxStock}
-                        placeholder="0"
-                        value={variantQty[v.id ?? ""] ?? ""}
-                        onChange={(e) => setQty(v.id ?? "", e.target.value, setVariantQty)}
-                        style={{ width: "72px", textAlign: "right", borderColor: isOver ? "var(--red)" : undefined }}
-                      />
+                    <div>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <span style={{ flex: 1, fontSize: "13px", color: "var(--text-3)" }}>
+                          Stock transferible: {maxStock}
+                        </span>
+                        <input
+                          className="input"
+                          type="number"
+                          inputMode="numeric"
+                          min="0"
+                          max={maxStock}
+                          placeholder="0"
+                          value={quantities[lotOwnerKey(product.id)] ?? ""}
+                          onChange={(e) => setQty(product.id, e.target.value)}
+                          style={{ width: "72px", textAlign: "right", borderColor: rowState.requestedQuantity > maxStock ? "var(--red)" : undefined }}
+                        />
+                      </div>
+                      {renderTransferPlan({
+                        productId: product.id,
+                        totalStock: product.stock,
+                        availableStock: product.availableStock,
+                        hasTrackedLots: product.hasTrackedLots,
+                      })}
                     </div>
                   );
-                })
-              ) : (
-                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                  <span style={{ flex: 1, fontSize: "13px", color: "var(--text-3)" }}>Stock disponible: {p.stock}</span>
-                  <input
-                    className="input"
-                    type="number"
-                    inputMode="numeric"
-                    min="0"
-                    max={p.stock ?? 0}
-                    placeholder="0"
-                    value={quantities[p.id] ?? ""}
-                    onChange={(e) => setQty(p.id, e.target.value, setQuantities)}
-                    style={{ width: "72px", textAlign: "right", borderColor: parseInt(quantities[p.id] ?? "0") > (p.stock ?? 0) ? "var(--red)" : undefined }}
-                  />
-                </div>
+                })()
               )}
             </div>
           ))}
-          {productsWithStock.length === 0 && (
+          {productsWithTransferableStock.length === 0 && (
             <div style={{ textAlign: "center", padding: "24px", color: "var(--text-3)" }}>No hay productos con stock para transferir</div>
           )}
         </div>
 
         {error && <div style={{ color: "var(--red)", fontSize: "13px", padding: "8px 12px", background: "rgba(239,68,68,.1)", borderRadius: "var(--radius-sm)" }}>{error}</div>}
+        {hasInvalidQuantities && !error && (
+          <div style={{ color: "var(--red)", fontSize: "13px", padding: "8px 12px", background: "rgba(239,68,68,.1)", borderRadius: "var(--radius-sm)" }}>
+            Revisa las cantidades: alguna supera el maximo transferible.
+          </div>
+        )}
 
         <div style={{ display: "flex", gap: "10px" }}>
           <button className="btn btn-ghost" style={{ flex: 1 }} onClick={onClose}>Cancelar</button>
-          <button className="btn btn-green" style={{ flex: 2 }} onClick={handleTransferir} disabled={loading || totalItems === 0 || !targetBranchId}>
+          <button className="btn btn-green" style={{ flex: 2 }} onClick={handleTransferir} disabled={loading || totalItems === 0 || !targetBranchId || hasInvalidQuantities}>
             {loading ? "Transfiriendo..." : `Transferir ${totalItems > 0 ? `(${totalItems} ítem${totalItems !== 1 ? "s" : ""})` : ""}`}
           </button>
         </div>
@@ -2561,6 +2945,7 @@ export default function ProductosPage() {
             const isSelected = selected.has(p.id);
             const expiryBadge = renderExpiryBadge(p);
             const stockBadge = renderStockBadge(p);
+            const cardChrome = getProductCardBorder(p);
             return selectionMode ? (
               // ─── Selection Mode Card
               <button
@@ -2574,11 +2959,12 @@ export default function ProductosPage() {
                   cursor: "pointer",
                   width: "100%",
                   textAlign: "left",
-                  border: `2px solid ${isSelected ? "var(--primary)" : "var(--border)"}`,
+                  border: isSelected ? `2px solid var(--primary)` : cardChrome.border,
                   borderRadius: "var(--radius)",
                   background: isSelected ? "rgba(var(--primary-rgb, 34, 197, 94), 0.08)" : "var(--surface)",
+                  boxShadow: isSelected ? "0 0 0 1px rgba(34,197,94,0.16) inset" : cardChrome.boxShadow,
                   opacity: p.showInGrid ? 1 : 0.6,
-                  transition: "border 0.15s, background 0.15s",
+                  transition: "border 0.15s, background 0.15s, box-shadow 0.15s",
                 }}
               >
                 {/* Checkbox visual */}
@@ -2634,7 +3020,8 @@ export default function ProductosPage() {
                   cursor: "pointer",
                   width: "100%",
                   textAlign: "left",
-                  border: "none",
+                  border: cardChrome.border,
+                  boxShadow: cardChrome.boxShadow,
                   background: "var(--surface)",
                   opacity: p.showInGrid ? 1 : 0.5,
                 }}
@@ -2761,8 +3148,9 @@ export default function ProductosPage() {
 
       {/* Bulk Category Modal */}
       {showBulkCategoryModal && (
-        <div className="modal-overlay animate-fade-in" onClick={() => setShowBulkCategoryModal(false)}>
-          <div className="modal animate-slide-up" onClick={(e) => e.stopPropagation()} style={{ maxHeight: "85dvh", padding: "20px" }}>
+        <ModalPortal>
+          <div className="modal-overlay animate-fade-in" onClick={() => setShowBulkCategoryModal(false)}>
+            <div className="modal animate-slide-up" onClick={(e) => e.stopPropagation()} style={{ maxHeight: "85dvh", padding: "20px" }}>
             <h2 style={{ fontSize: "20px", fontWeight: 700, marginBottom: "16px" }}>Asignar Categoría</h2>
             <p style={{ color: "var(--text-2)", fontSize: "14px", marginBottom: "20px" }}>
               Seleccioná la categoría para los {selected.size} productos marcados.
@@ -2788,14 +3176,16 @@ export default function ProductosPage() {
                 {bulking ? "Asignando..." : "Confirmar"}
               </button>
             </div>
+            </div>
           </div>
-        </div>
+        </ModalPortal>
       )}
 
       {/* Update Prices Modal */}
       {showUpdateModal && (
-        <div className="modal-overlay animate-fade-in" onClick={() => setShowUpdateModal(false)}>
-          <div className="modal animate-slide-up" onClick={(e) => e.stopPropagation()} style={{ maxHeight: "85dvh" }}>
+        <ModalPortal>
+          <div className="modal-overlay animate-fade-in" onClick={() => setShowUpdateModal(false)}>
+            <div className="modal animate-slide-up" onClick={(e) => e.stopPropagation()} style={{ maxHeight: "85dvh" }}>
             <h2 style={{ fontSize: "20px", fontWeight: 700 }}>Actualizar precios</h2>
             <p style={{ color: "var(--text-2)", fontSize: "14px" }}>
               Aplica un % a los {filtered.length} productos filtrados. Los nuevos precios se redondean a los $10.
@@ -2846,21 +3236,24 @@ export default function ProductosPage() {
                 {loading ? "..." : "Confirmar todos"}
               </button>
             </div>
+            </div>
           </div>
-        </div>
+        </ModalPortal>
       )}
 
       {/* Product Create/Edit Modal */}
       {modal && (
-        <ProductModal
-          product={modal === "new" ? null : modal}
-          branchId={branchId}
-          pricingMode={pricingMode}
-          categories={categories}
-          onClose={() => setModal(null)}
-          onSave={handleProductModalSave}
-          onCategoriesChange={setCategories}
-        />
+        <ModalPortal>
+          <ProductModal
+            product={modal === "new" ? null : modal}
+            branchId={branchId}
+            pricingMode={pricingMode}
+            categories={categories}
+            onClose={() => setModal(null)}
+            onSave={handleProductModalSave}
+            onCategoriesChange={setCategories}
+          />
+        </ModalPortal>
       )}
 
       {/* ─── StockLoadingModal ──────────────────────────────────────────────── */}
@@ -2868,43 +3261,49 @@ export default function ProductosPage() {
         // Products eligible: all visible (+ those with stock even if hidden)
         const stockProducts = products;
         return (
-          <StockLoadingModal
-            products={stockProducts}
-            branchId={branchId}
-            onClose={() => {
-              setShowStockModal(false);
-              setStockModalPreset(null);
-            }}
-            onSaved={fetchProducts}
-            initialSearch={stockModalPreset?.initialSearch}
-            initialMode={stockModalPreset?.initialMode}
-            spotlightProductId={stockModalPreset?.spotlightProductId}
-            entryNote={stockModalPreset?.entryNote}
-          />
+          <ModalPortal>
+            <StockLoadingModal
+              products={stockProducts}
+              branchId={branchId}
+              onClose={() => {
+                setShowStockModal(false);
+                setStockModalPreset(null);
+              }}
+              onSaved={fetchProducts}
+              initialSearch={stockModalPreset?.initialSearch}
+              initialMode={stockModalPreset?.initialMode}
+              spotlightProductId={stockModalPreset?.spotlightProductId}
+              entryNote={stockModalPreset?.entryNote}
+            />
+          </ModalPortal>
         );
       })()}
 
       {/* ─── ReplicarModal ──────────────────────────────────────────────────── */}
       {showReplicarModal && (
-        <ReplicarModal
-          products={selectionMode && selected.size > 0 ? products.filter(p => selected.has(p.id)) : filtered}
-          branches={branches.filter(b => b.id !== branchId)}
-          pricingMode={pricingMode}
-          sourceBranchId={branchId}
-          onClose={() => setShowReplicarModal(false)}
-          onDone={() => { setShowReplicarModal(false); fetchProducts(); }}
-        />
+        <ModalPortal>
+          <ReplicarModal
+            products={selectionMode && selected.size > 0 ? products.filter(p => selected.has(p.id)) : filtered}
+            branches={branches.filter(b => b.id !== branchId)}
+            pricingMode={pricingMode}
+            sourceBranchId={branchId}
+            onClose={() => setShowReplicarModal(false)}
+            onDone={() => { setShowReplicarModal(false); fetchProducts(); }}
+          />
+        </ModalPortal>
       )}
 
       {/* ─── TransferirStockModal ───────────────────────────────────────────── */}
       {showTransferirModal && (
-        <TransferirStockModal
-          products={selectionMode && selected.size > 0 ? products.filter(p => selected.has(p.id)) : filtered}
-          branches={branches.filter(b => b.id !== branchId)}
-          sourceBranchId={branchId}
-          onClose={() => setShowTransferirModal(false)}
-          onDone={() => { setShowTransferirModal(false); fetchProducts(); }}
-        />
+        <ModalPortal>
+          <TransferirStockModal
+            products={selectionMode && selected.size > 0 ? products.filter(p => selected.has(p.id)) : filtered}
+            branches={branches.filter(b => b.id !== branchId)}
+            sourceBranchId={branchId}
+            onClose={() => setShowTransferirModal(false)}
+            onDone={() => { setShowTransferirModal(false); fetchProducts(); }}
+          />
+        </ModalPortal>
       )}
     </div>
     <PrintablePage

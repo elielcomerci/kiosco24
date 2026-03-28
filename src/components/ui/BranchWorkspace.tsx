@@ -10,6 +10,7 @@ import {
   useState,
 } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import ModalPortal from "@/components/ui/ModalPortal";
 import { useIsDesktop } from "@/lib/hooks";
 
 export interface BranchWorkspaceBranch {
@@ -85,12 +86,13 @@ function ShortcutHelpModal({
   }, {});
 
   return (
-    <div className="modal-overlay animate-fade-in no-print" onClick={onClose} style={{ zIndex: 10001 }}>
-      <div
-        className="modal animate-slide-up"
-        onClick={(e) => e.stopPropagation()}
-        style={{ maxWidth: "720px", width: "min(92vw, 720px)", maxHeight: "85vh", overflowY: "auto" }}
-      >
+    <ModalPortal>
+      <div className="modal-overlay animate-fade-in no-print" onClick={onClose} style={{ zIndex: 10001 }}>
+        <div
+          className="modal animate-slide-up"
+          onClick={(e) => e.stopPropagation()}
+          style={{ maxWidth: "720px", width: "min(92vw, 720px)", maxHeight: "85vh", overflowY: "auto" }}
+        >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
           <div>
             <h2 style={{ fontSize: "22px", fontWeight: 800 }}>Atajos de teclado</h2>
@@ -163,8 +165,9 @@ function ShortcutHelpModal({
             </div>
           ))}
         </div>
+        </div>
       </div>
-    </div>
+    </ModalPortal>
   );
 }
 

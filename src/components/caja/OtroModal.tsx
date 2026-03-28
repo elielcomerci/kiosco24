@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import NumPad from "@/components/ui/NumPad";
+import ModalPortal from "@/components/ui/ModalPortal";
 import { formatARS } from "@/lib/utils";
 
 interface TicketItem {
@@ -29,8 +30,9 @@ export default function OtroModal({ onClose, onAdd }: OtroModalProps) {
   };
 
   return (
-    <div className="modal-overlay animate-fade-in" onClick={onClose}>
-      <div className="modal animate-slide-up" onClick={(e) => e.stopPropagation()}>
+    <ModalPortal>
+      <div className="modal-overlay animate-fade-in" onClick={onClose}>
+        <div className="modal animate-slide-up" onClick={(e) => e.stopPropagation()}>
         <h2 style={{ fontSize: "20px", fontWeight: 700 }}>➕ OTRO producto</h2>
 
         <div
@@ -74,7 +76,8 @@ export default function OtroModal({ onClose, onAdd }: OtroModalProps) {
             Agregar al ticket
           </button>
         </div>
+        </div>
       </div>
-    </div>
+    </ModalPortal>
   );
 }

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import BackButton from "@/components/ui/BackButton";
+import ModalPortal from "@/components/ui/ModalPortal";
 import ThemeEditor from "@/components/ui/ThemeEditor";
 import {
   SUBSCRIPTION_CONTINUATION_LABEL,
@@ -1889,30 +1890,36 @@ export default function ConfiguracionPage() {
 
       {/* Modals */}
       {employeeModal && (
-        <EmployeeModal
-          branchId={branchId}
-          allBranches={branches}
-          employee={employeeModal === "new" ? null : employeeModal}
-          onClose={handleEmployeeModalClose}
-          onSave={handleEmployeeModalSave}
-        />
+        <ModalPortal>
+          <EmployeeModal
+            branchId={branchId}
+            allBranches={branches}
+            employee={employeeModal === "new" ? null : employeeModal}
+            onClose={handleEmployeeModalClose}
+            onSave={handleEmployeeModalSave}
+          />
+        </ModalPortal>
       )}
 
       {branchModal && (
-        <BranchModal
-          branchId={branchId}
-          pricingMode={pricingMode}
-          onClose={handleBranchModalClose}
-          onSave={handleBranchModalSave}
-        />
+        <ModalPortal>
+          <BranchModal
+            branchId={branchId}
+            pricingMode={pricingMode}
+            onClose={handleBranchModalClose}
+            onSave={handleBranchModalSave}
+          />
+        </ModalPortal>
       )}
 
       {categoryModal && (
-        <CategoryModal
-          category={categoryModal}
-          onClose={handleCategoryModalClose}
-          onSave={handleCategoryModalSave}
-        />
+        <ModalPortal>
+          <CategoryModal
+            category={categoryModal}
+            onClose={handleCategoryModalClose}
+            onSave={handleCategoryModalSave}
+          />
+        </ModalPortal>
       )}
     </div>
   );

@@ -1,5 +1,6 @@
 "use client";
 
+import ModalPortal from "@/components/ui/ModalPortal";
 import { formatARS } from "@/lib/utils";
 
 interface CajaTotalsStats {
@@ -37,12 +38,13 @@ export default function CajaTotalsBreakdownModal({
   const totalVentas = stats.totalVentas ?? paymentRows.reduce((sum, row) => sum + row.value, 0);
 
   return (
-    <div className="modal-overlay animate-fade-in" onClick={onClose} style={{ zIndex: 10000 }}>
-      <div
-        className="modal animate-slide-up"
-        onClick={(e) => e.stopPropagation()}
-        style={{ maxWidth: "420px", width: "95%", maxHeight: "85dvh", overflowY: "auto", padding: "20px" }}
-      >
+    <ModalPortal>
+      <div className="modal-overlay animate-fade-in" onClick={onClose} style={{ zIndex: 10000 }}>
+        <div
+          className="modal animate-slide-up"
+          onClick={(e) => e.stopPropagation()}
+          style={{ maxWidth: "420px", width: "95%", maxHeight: "85dvh", overflowY: "auto", padding: "20px" }}
+        >
         <div style={{ display: "grid", gap: "6px", marginBottom: "16px" }}>
           <h2 style={{ fontSize: "20px", fontWeight: 800, margin: 0 }}>Caja del turno</h2>
           <div style={{ fontSize: "13px", color: "var(--text-3)" }}>
@@ -170,7 +172,8 @@ export default function CajaTotalsBreakdownModal({
         <button className="btn btn-ghost" style={{ width: "100%" }} onClick={onClose}>
           Cerrar
         </button>
+        </div>
       </div>
-    </div>
+    </ModalPortal>
   );
 }

@@ -49,35 +49,46 @@ export default function BranchSelector({
   if (branches.length <= 1) {
     // Si solo hay 1 sucursal, mostramos el texto estático como antes para no confundir
     return (
-      <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "12px", minWidth: 0 }}>
         {currentBranch?.logoUrl ? (
           <img 
             src={currentBranch.logoUrl} 
             alt={currentBranch?.name} 
-            style={{ height: "32px", width: "auto" }} 
+            style={{ width: "38px", height: "38px", borderRadius: "10px", objectFit: "cover", flexShrink: 0 }} 
           />
         ) : (
           <span style={{ fontSize: "20px" }}>🏪</span>
         )}
-        <h1 style={{ fontSize: "16px", fontWeight: 700 }}>{currentBranch?.name}</h1>
+        <h1
+          style={{
+            fontSize: "18px",
+            fontWeight: 800,
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          }}
+        >
+          {currentBranch?.name}
+        </h1>
       </div>
     );
   }
 
   return (
-    <div style={{ position: "relative" }} ref={menuRef}>
+    <div style={{ position: "relative", minWidth: 0 }} ref={menuRef}>
       <button
         onClick={() => setOpen(!open)}
         style={{
           display: "flex",
           alignItems: "center",
-          gap: "8px",
+          gap: "10px",
           background: "transparent",
           border: "none",
           cursor: "pointer",
-          padding: "4px 8px",
-          borderRadius: "8px",
+          padding: "4px 10px 4px 0",
+          borderRadius: "10px",
           transition: "background 0.2s",
+          minWidth: 0,
         }}
         className="hover-trigger"
       >
@@ -85,15 +96,25 @@ export default function BranchSelector({
           <img 
             src={currentBranch.logoUrl} 
             alt={currentBranch?.name} 
-            style={{ height: "24px", width: "auto" }} 
+            style={{ width: "38px", height: "38px", borderRadius: "10px", objectFit: "cover", flexShrink: 0 }} 
           />
         ) : (
           <span style={{ fontSize: "18px" }}>🏪</span>
         )}
-        <h1 style={{ fontSize: "16px", fontWeight: 700, color: "var(--text)" }}>
+        <h1
+          style={{
+            fontSize: "18px",
+            fontWeight: 800,
+            color: "var(--text)",
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            maxWidth: "180px",
+          }}
+        >
           {currentBranch?.name}
         </h1>
-        <span style={{ fontSize: "12px", color: "var(--text-3)", transform: open ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }}>
+        <span style={{ fontSize: "12px", color: "var(--text-3)", transform: open ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s", flexShrink: 0 }}>
           ▼
         </span>
       </button>

@@ -13,6 +13,7 @@ import {
 import BarcodeScanner from "@/components/caja/BarcodeScanner";
 import CategoryModal, { type CategoryRecord } from "@/components/config/CategoryModal";
 import CatalogSpreadsheetModal from "@/components/products/CatalogSpreadsheetModal";
+import ProductsActionsMenu from "@/components/products/ProductsActionsMenu";
 import BackButton from "@/components/ui/BackButton";
 import ModalPortal from "@/components/ui/ModalPortal";
 import PrintablePage from "@/components/print/PrintablePage";
@@ -3064,19 +3065,21 @@ export default function ProductosPage() {
   return (
     <>
     <div className="screen-only" style={{ padding: "24px 16px", minHeight: "100dvh", display: "flex", flexDirection: "column" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-        {selectionMode ? (
-          <button className="btn btn-sm btn-ghost" onClick={toggleSelectionMode} style={{ fontWeight: 600 }}>Cancelar</button>
-        ) : (
-          <BackButton />
-        )}
-        <h1 style={{ fontSize: "20px", fontWeight: 800 }}>Productos</h1>
-        <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", justifyContent: "flex-end" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px", marginBottom: "16px" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "6px", minWidth: 0 }}>
+          {selectionMode ? (
+            <button className="btn btn-sm btn-ghost" onClick={toggleSelectionMode} style={{ fontWeight: 600, alignSelf: "flex-start" }}>Cancelar</button>
+          ) : (
+            <BackButton />
+          )}
+          <h1 style={{ fontSize: "28px", lineHeight: 1.05, fontWeight: 900 }}>Productos</h1>
+        </div>
+        <div className="products-header-actions" style={{ display: "flex", gap: "8px", flexWrap: "wrap", justifyContent: "flex-end" }}>
           {!selectionMode && (
             <>
               <button
                 className="btn btn-sm btn-ghost"
-                style={{ border: "1px solid var(--border)", fontWeight: 600 }}
+                style={{ border: "1px solid var(--border)", fontWeight: 700 }}
                 onClick={() => {
                   setStockModalPreset(null);
                   setShowStockModal(true);
@@ -3087,36 +3090,48 @@ export default function ProductosPage() {
                 <>
                   <button
                     className="btn btn-sm btn-ghost"
-                    style={{ border: "1px solid var(--border)", fontWeight: 600 }}
+                    style={{ border: "1px solid var(--border)", fontWeight: 600, display: "none" }}
                     onClick={() => void handleExportCatalog()}
                     disabled={exportingCatalog || products.length === 0}
                     title="Descargar plantilla XLSX"
                   >{exportingCatalog ? "..." : "Exportar"}</button>
                   <button
                     className="btn btn-sm btn-ghost"
-                    style={{ border: "1px solid var(--border)", fontWeight: 600 }}
+                    style={{ border: "1px solid var(--border)", fontWeight: 600, display: "none" }}
                     onClick={() => setShowCatalogImportModal(true)}
                     title="Importar plantilla XLSX"
                   >Importar</button>
                   <button
                     className="btn btn-sm btn-ghost"
-                    style={{ border: "1px solid var(--border)", fontWeight: 600 }}
+                    style={{ border: "1px solid var(--border)", fontWeight: 600, display: "none" }}
                     onClick={() => setShowReplicarModal(true)}
                     disabled={branches.length <= 1}
                     title="Replicar productos a otra sucursal"
                   >↗ Replicar</button>
                   <button
                     className="btn btn-sm btn-ghost"
-                    style={{ border: "1px solid var(--border)", fontWeight: 600 }}
+                    style={{ border: "1px solid var(--border)", fontWeight: 600, display: "none" }}
                     onClick={() => setShowTransferirModal(true)}
                     disabled={branches.length <= 1}
                     title="Transferir stock entre sucursales"
                   >⇄ Transferir</button>
                 </>
               )}
-              <button className="btn btn-sm btn-ghost" onClick={() => setShowUpdateModal(true)}>+%</button>
+              <button className="btn btn-sm btn-ghost" style={{ display: "none" }} onClick={() => setShowUpdateModal(true)}>+%</button>
               <button className="btn btn-sm btn-ghost" style={{ border: "1px solid var(--border)" }} onClick={toggleSelectionMode}>☑</button>
-              <button className="btn btn-sm btn-green" onClick={() => setModal("new")}>+ Nuevo</button>
+              <ProductsActionsMenu
+                isOwner={Boolean(isOwner)}
+                exporting={exportingCatalog}
+                hasMultipleBranches={branches.length > 1}
+                canExport={products.length > 0}
+                onExport={() => void handleExportCatalog()}
+                onImport={() => setShowCatalogImportModal(true)}
+                onReplicate={() => setShowReplicarModal(true)}
+                onTransfer={() => setShowTransferirModal(true)}
+                onUpdatePrices={() => setShowUpdateModal(true)}
+                onSelectionMode={toggleSelectionMode}
+              />
+              <button className="btn btn-sm btn-green" onClick={() => setModal("new")} style={{ fontWeight: 800 }}>+ Nuevo</button>
             </>
           )}
         </div>

@@ -93,23 +93,16 @@ export default async function BranchLayout({
         className="no-print"
         style={{
           flexShrink: 0,
-          padding: "8px 16px",
+          padding: "10px 16px",
           background: "var(--surface)",
           borderBottom: "1px solid var(--border)",
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          minHeight: "56px",
+          minHeight: "62px",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          {currentBranch.logoUrl && (
-            <img
-              src={currentBranch.logoUrl}
-              alt="Logo"
-              style={{ width: "32px", height: "32px", borderRadius: "6px", objectFit: "cover" }}
-            />
-          )}
+        <div style={{ display: "flex", alignItems: "center", minWidth: 0 }}>
           <BranchSelector branches={branches} currentBranchId={effectiveBranchId} />
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>

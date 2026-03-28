@@ -12,6 +12,7 @@ import {
 } from "@/lib/barcode-suggestions";
 import BarcodeScanner from "@/components/caja/BarcodeScanner";
 import CategoryModal, { type CategoryRecord } from "@/components/config/CategoryModal";
+import CatalogSpreadsheetModal from "@/components/products/CatalogSpreadsheetModal";
 import BackButton from "@/components/ui/BackButton";
 import ModalPortal from "@/components/ui/ModalPortal";
 import PrintablePage from "@/components/print/PrintablePage";
@@ -2794,6 +2795,9 @@ export default function ProductosPage() {
   const [stockModalPreset, setStockModalPreset] = useState<StockModalPreset | null>(null);
   const [showReplicarModal, setShowReplicarModal] = useState(false);
   const [showTransferirModal, setShowTransferirModal] = useState(false);
+  const [showCatalogImportModal, setShowCatalogImportModal] = useState(false);
+  const [catalogNotice, setCatalogNotice] = useState<string | null>(null);
+  const [exportingCatalog, setExportingCatalog] = useState(false);
 
   const fetchBranches = useCallback(async () => {
     if (branchesLoaded) return;
@@ -2849,6 +2853,20 @@ export default function ProductosPage() {
       window.clearTimeout(timeoutId);
     };
   }, [fetchProducts]);
+
+  useEffect(() => {
+    if (!catalogNotice) {
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setCatalogNotice(null);
+    }, 3500);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [catalogNotice]);
 
   const filtered = products.filter((p) => {
     const normalizedSearch = search.toLowerCase();
@@ -3006,6 +3024,43 @@ export default function ProductosPage() {
     setStockModalPreset(null);
   };
 
+  const handleExportCatalog = useCallback(async () => {
+    try {
+      setExportingCatalog(true);
+      setCatalogNotice(null);
+
+      const productIds =
+        selectionMode && selected.size > 0 ? Array.from(selected) : products.map((product) => product.id);
+
+      const response = await fetch("/api/productos/export", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-branch-id": branchId,
+        },
+        body: JSON.stringify({ productIds }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(typeof data?.error === "string" ? data.error : "No pudimos exportar el archivo.");
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `catalogo-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      link.click();
+      window.URL.revokeObjectURL(url);
+      setCatalogNotice("Plantilla descargada.");
+    } catch (exportError) {
+      setCatalogNotice(exportError instanceof Error ? exportError.message : "No pudimos exportar el archivo.");
+    } finally {
+      setExportingCatalog(false);
+    }
+  }, [branchId, products, selected, selectionMode]);
+
   return (
     <>
     <div className="screen-only" style={{ padding: "24px 16px", minHeight: "100dvh", display: "flex", flexDirection: "column" }}>
@@ -3028,18 +3083,33 @@ export default function ProductosPage() {
                 }}
                 title="Cargar stock"
               >📦 Stock</button>
-              {isOwner && branches.length > 1 && (
+              {isOwner && (
                 <>
                   <button
                     className="btn btn-sm btn-ghost"
                     style={{ border: "1px solid var(--border)", fontWeight: 600 }}
+                    onClick={() => void handleExportCatalog()}
+                    disabled={exportingCatalog || products.length === 0}
+                    title="Descargar plantilla XLSX"
+                  >{exportingCatalog ? "..." : "Exportar"}</button>
+                  <button
+                    className="btn btn-sm btn-ghost"
+                    style={{ border: "1px solid var(--border)", fontWeight: 600 }}
+                    onClick={() => setShowCatalogImportModal(true)}
+                    title="Importar plantilla XLSX"
+                  >Importar</button>
+                  <button
+                    className="btn btn-sm btn-ghost"
+                    style={{ border: "1px solid var(--border)", fontWeight: 600 }}
                     onClick={() => setShowReplicarModal(true)}
+                    disabled={branches.length <= 1}
                     title="Replicar productos a otra sucursal"
                   >↗ Replicar</button>
                   <button
                     className="btn btn-sm btn-ghost"
                     style={{ border: "1px solid var(--border)", fontWeight: 600 }}
                     onClick={() => setShowTransferirModal(true)}
+                    disabled={branches.length <= 1}
                     title="Transferir stock entre sucursales"
                   >⇄ Transferir</button>
                 </>
@@ -3073,6 +3143,25 @@ export default function ProductosPage() {
           </button>
         )}
       </div>
+
+      {catalogNotice && (
+        <div
+          style={{
+            marginBottom: "14px",
+            padding: "10px 14px",
+            borderRadius: "14px",
+            border: `1px solid ${catalogNotice.includes("No pudimos") ? "rgba(239,68,68,0.24)" : "rgba(34,197,94,0.24)"}`,
+            background: catalogNotice.includes("No pudimos")
+              ? "rgba(239,68,68,0.12)"
+              : "rgba(34,197,94,0.12)",
+            color: catalogNotice.includes("No pudimos") ? "var(--red)" : "var(--green)",
+            fontSize: "13px",
+            fontWeight: 600,
+          }}
+        >
+          {catalogNotice}
+        </div>
+      )}
 
       {/* Product List */}
       {loading ? (
@@ -3432,6 +3521,22 @@ export default function ProductosPage() {
       )}
 
       {/* ─── TransferirStockModal ───────────────────────────────────────────── */}
+      {showCatalogImportModal && (
+        <ModalPortal>
+          <CatalogSpreadsheetModal
+            branchId={branchId}
+            branches={branches}
+            pricingMode={pricingMode}
+            onClose={() => setShowCatalogImportModal(false)}
+            onApplied={(message) => {
+              setShowCatalogImportModal(false);
+              setCatalogNotice(message);
+              void fetchProducts();
+            }}
+          />
+        </ModalPortal>
+      )}
+
       {showTransferirModal && (
         <ModalPortal>
           <TransferirStockModal

@@ -5,12 +5,15 @@ import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import BackButton from "@/components/ui/BackButton";
 import ModalPortal from "@/components/ui/ModalPortal";
+import TicketModal from "@/components/ticket/TicketModal";
 import ThemeEditor from "@/components/ui/ThemeEditor";
 import {
   SUBSCRIPTION_CANCEL_LABEL,
   SUBSCRIPTION_PRICE_LABEL,
   SUBSCRIPTION_PROMO_LABEL,
 } from "@/lib/subscription-plan";
+import { optimizeBrandingImage } from "@/lib/image-upload";
+import type { TicketPreviewData } from "@/lib/ticket-format";
 
 interface Employee {
   id: string;
@@ -32,6 +35,8 @@ interface Category {
 interface Branch {
   id: string;
   name: string;
+  address: string | null;
+  phone: string | null;
   logoUrl: string | null;
   primaryColor: string | null;
   bgColor: string | null;
@@ -665,6 +670,7 @@ export default function ConfiguracionPage() {
   const [loadingCurrentBranch, setLoadingCurrentBranch] = useState(true);
   const [loadingSubscription, setLoadingSubscription] = useState(true);
   const [loadingExpirySettings, setLoadingExpirySettings] = useState(true);
+  const [loadingTicketSettings, setLoadingTicketSettings] = useState(true);
 
   const [subscription, setSubscription] = useState<{status: string, managementUrl: string | null} | null>(null);
   const [expiryAlertDays, setExpiryAlertDays] = useState("30");
@@ -682,6 +688,8 @@ export default function ConfiguracionPage() {
   const [categoryModal, setCategoryModal] = useState<"new" | Category | null>(null);
 
   const [editBranchName, setEditBranchName] = useState("");
+  const [editBranchAddress, setEditBranchAddress] = useState("");
+  const [editBranchPhone, setEditBranchPhone] = useState("");
   const [editLogoUrl, setEditLogoUrl] = useState("");
   const [editPrimaryColor, setEditPrimaryColor] = useState("#22c55e");
   const [editBgColor, setEditBgColor] = useState("#0f172a");
@@ -693,6 +701,15 @@ export default function ConfiguracionPage() {
   const [savingStockRules, setSavingStockRules] = useState(false);
   const [stockRulesMessage, setStockRulesMessage] = useState<string | null>(null);
   const [stockRulesError, setStockRulesError] = useState<string | null>(null);
+  const [ticketShowLogo, setTicketShowLogo] = useState(true);
+  const [ticketShowAddress, setTicketShowAddress] = useState(false);
+  const [ticketShowPhone, setTicketShowPhone] = useState(false);
+  const [ticketShowFooterText, setTicketShowFooterText] = useState(true);
+  const [ticketFooterText, setTicketFooterText] = useState("¡Gracias por su compra!");
+  const [savingTicketSettings, setSavingTicketSettings] = useState(false);
+  const [ticketSettingsMessage, setTicketSettingsMessage] = useState<string | null>(null);
+  const [ticketSettingsError, setTicketSettingsError] = useState<string | null>(null);
+  const [showTicketDemo, setShowTicketDemo] = useState(false);
 
   // MercadoPago
   const [mpSetupLoading, setMpSetupLoading] = useState(false);
@@ -754,6 +771,8 @@ export default function ConfiguracionPage() {
   const applyBranchDraft = useCallback((branch: Branch) => {
     setCurrentBranch(branch);
     setEditBranchName(branch.name);
+    setEditBranchAddress(branch.address || "");
+    setEditBranchPhone(branch.phone || "");
     setEditLogoUrl(branch.logoUrl || "");
     setEditPrimaryColor(branch.primaryColor || "#22c55e");
     setEditBgColor(branch.bgColor || "#0f172a");
@@ -823,6 +842,34 @@ export default function ConfiguracionPage() {
     }
   }, [branchId]);
 
+  const fetchTicketSettings = useCallback(async () => {
+    setLoadingTicketSettings(true);
+    try {
+      const res = await fetch("/api/ticket/settings", {
+        headers: {
+          "x-branch-id": branchId,
+        },
+      });
+
+      if (!res.ok) {
+        return;
+      }
+
+      const data = await res.json().catch(() => null);
+      setTicketShowLogo(Boolean(data?.showLogo));
+      setTicketShowAddress(Boolean(data?.showAddress));
+      setTicketShowPhone(Boolean(data?.showPhone));
+      setTicketShowFooterText(Boolean(data?.showFooterText));
+      setTicketFooterText(
+        typeof data?.footerText === "string" && data.footerText.trim()
+          ? data.footerText
+          : "¡Gracias por su compra!",
+      );
+    } finally {
+      setLoadingTicketSettings(false);
+    }
+  }, [branchId]);
+
   useEffect(() => {
     fetchEmployees();
     fetchBranches();
@@ -830,7 +877,8 @@ export default function ConfiguracionPage() {
     fetchCurrentBranch();
     fetchSubscription();
     fetchExpirySettings();
-  }, [fetchEmployees, fetchBranches, fetchCategories, fetchCurrentBranch, fetchSubscription, fetchExpirySettings]);
+    fetchTicketSettings();
+  }, [fetchEmployees, fetchBranches, fetchCategories, fetchCurrentBranch, fetchSubscription, fetchExpirySettings, fetchTicketSettings]);
 
   const handleSaveBranchSettings = async () => {
     if (!editBranchName.trim()) {
@@ -851,6 +899,8 @@ export default function ConfiguracionPage() {
         },
         body: JSON.stringify({
           name: editBranchName.trim(),
+          address: editBranchAddress.trim() || null,
+          phone: editBranchPhone.trim() || null,
           logoUrl: editLogoUrl || null,
           primaryColor: editPrimaryColor,
           bgColor: editBgColor,
@@ -864,13 +914,58 @@ export default function ConfiguracionPage() {
       }
 
       applyBranchDraft(data as Branch);
-      setBranchSettingsMessage("Nombre y logo guardados.");
+      setBranchSettingsMessage("Datos de sucursal guardados.");
       router.refresh();
     } catch (error) {
       console.error(error);
-      setBranchSettingsError("No se pudo guardar la identidad visual.");
+      setBranchSettingsError("No se pudo guardar la sucursal.");
     } finally {
       setSavingBranch(false);
+    }
+  };
+
+  const handleSaveTicketSettings = async () => {
+    setTicketSettingsError(null);
+    setTicketSettingsMessage(null);
+    setSavingTicketSettings(true);
+
+    try {
+      const res = await fetch("/api/ticket/settings", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "x-branch-id": branchId,
+        },
+        body: JSON.stringify({
+          showLogo: ticketShowLogo,
+          showAddress: ticketShowAddress,
+          showPhone: ticketShowPhone,
+          showFooterText: ticketShowFooterText,
+          footerText: ticketFooterText.trim() || null,
+        }),
+      });
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        setTicketSettingsError(data?.error || "No se pudo guardar el ticket.");
+        return;
+      }
+
+      setTicketShowLogo(Boolean(data?.showLogo));
+      setTicketShowAddress(Boolean(data?.showAddress));
+      setTicketShowPhone(Boolean(data?.showPhone));
+      setTicketShowFooterText(Boolean(data?.showFooterText));
+      setTicketFooterText(
+        typeof data?.footerText === "string" && data.footerText.trim()
+          ? data.footerText
+          : "¡Gracias por su compra!",
+      );
+      setTicketSettingsMessage("Ticket actualizado.");
+    } catch (error) {
+      console.error(error);
+      setTicketSettingsError("No se pudo guardar el ticket.");
+    } finally {
+      setSavingTicketSettings(false);
     }
   };
 
@@ -1082,6 +1177,34 @@ export default function ConfiguracionPage() {
     fontWeight: 600,
     color: "rgba(255,255,255,0.92)",
   };
+  const ticketDemoData: TicketPreviewData = {
+    saleId: "demo-ticket",
+    ticketNumber: "000123",
+    issuedAt: new Date().toISOString(),
+    branchName: editBranchName.trim() || currentBranch?.name || "Mi kiosco",
+    branchAddress: editBranchAddress.trim() || null,
+    branchPhone: editBranchPhone.trim() || null,
+    branchLogoUrl: editLogoUrl || null,
+    footerText: ticketFooterText.trim() || null,
+    items: [
+      { name: "Coca Cola 500ml", quantity: 2, unitPrice: 800, subtotal: 1600 },
+      { name: "Alfajor", quantity: 1, unitPrice: 500, subtotal: 500 },
+    ],
+    subtotal: 2100,
+    discount: null,
+    total: 2100,
+    paymentMethod: "CASH",
+    paymentMethodLabel: "Efectivo",
+    cashReceived: 2500,
+    change: 400,
+    employeeName: "Caja principal",
+    customerName: null,
+    showLogo: ticketShowLogo,
+    showAddress: ticketShowAddress,
+    showPhone: ticketShowPhone,
+    showFooterText: ticketShowFooterText,
+    voided: false,
+  };
 
 
   return (
@@ -1225,9 +1348,11 @@ export default function ConfiguracionPage() {
                   setBranchSettingsError(null);
                   setBranchSettingsMessage(null);
                   setUploadingLogo(true);
-                  const formData = new FormData();
-                  formData.append("file", file);
                   try {
+                    const optimizedFile = await optimizeBrandingImage(file);
+                    const formData = new FormData();
+                    formData.append("file", optimizedFile);
+                    formData.append("folder", "branding");
                     const res = await fetch("/api/upload", { method: "POST", body: formData });
                     const data = await res.json().catch(() => null);
                     if (!res.ok) {
@@ -1261,6 +1386,31 @@ export default function ConfiguracionPage() {
             </div>
           </div>
 
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "12px" }}>
+            <div>
+              <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, display: "block", marginBottom: "4px" }}>
+                DIRECCION
+              </label>
+              <input
+                className="input"
+                value={editBranchAddress}
+                onChange={(e) => setEditBranchAddress(e.target.value)}
+                placeholder="Opcional"
+              />
+            </div>
+            <div>
+              <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, display: "block", marginBottom: "4px" }}>
+                TELEFONO
+              </label>
+              <input
+                className="input"
+                value={editBranchPhone}
+                onChange={(e) => setEditBranchPhone(e.target.value)}
+                placeholder="Opcional"
+              />
+            </div>
+          </div>
+
           {/* Save name + logo button */}
           <button 
             className="btn btn-ghost btn-sm" 
@@ -1268,10 +1418,10 @@ export default function ConfiguracionPage() {
             onClick={handleSaveBranchSettings}
             disabled={savingBranch || uploadingLogo || !editBranchName.trim()}
           >
-            {savingBranch ? "Guardando..." : "Guardar nombre y logo"}
+            {savingBranch ? "Guardando..." : "Guardar sucursal"}
           </button>
           <div style={{ fontSize: "12px", color: branchSettingsError ? "var(--red)" : branchSettingsMessage ? "var(--green)" : "var(--text-3)" }}>
-            {branchSettingsError || branchSettingsMessage || "El logo se previsualiza al subirlo y queda aplicado cuando guardas los cambios."}
+            {branchSettingsError || branchSettingsMessage || "Nombre, logo y datos del ticket se guardan aca."}
           </div>
         </div>
       </section>
@@ -1298,6 +1448,88 @@ export default function ConfiguracionPage() {
           )}
         </div>
       </section>
+
+      {isOwner && (
+        <section style={{ marginBottom: 0, gridColumn: "1 / -1" }}>
+          <div style={{ marginBottom: "12px" }}>
+            <h2 style={{ fontSize: "16px", fontWeight: 700, color: "var(--text-2)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              Ticket
+            </h2>
+          </div>
+
+          <div
+            style={{
+              background: "var(--surface)",
+              border: "1px solid var(--border)",
+              borderRadius: "var(--radius)",
+              padding: "20px",
+              display: "flex",
+              flexDirection: "column",
+              gap: "14px",
+            }}
+          >
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "10px" }}>
+              {[
+                { label: "Logo", active: ticketShowLogo, onToggle: () => setTicketShowLogo((prev) => !prev) },
+                { label: "Direccion", active: ticketShowAddress, onToggle: () => setTicketShowAddress((prev) => !prev) },
+                { label: "Telefono", active: ticketShowPhone, onToggle: () => setTicketShowPhone((prev) => !prev) },
+                { label: "Pie de ticket", active: ticketShowFooterText, onToggle: () => setTicketShowFooterText((prev) => !prev) },
+              ].map((option) => (
+                <button
+                  key={option.label}
+                  type="button"
+                  className={`btn ${option.active ? "btn-green" : "btn-ghost"}`}
+                  style={{ border: "1px solid var(--border)", justifyContent: "space-between" }}
+                  onClick={option.onToggle}
+                  disabled={loadingTicketSettings || savingTicketSettings}
+                >
+                  <span>{option.label}</span>
+                  <span style={{ fontSize: "12px", opacity: 0.9 }}>{option.active ? "ON" : "OFF"}</span>
+                </button>
+              ))}
+            </div>
+
+            <div>
+              <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, display: "block", marginBottom: "4px" }}>
+                PIE DEL TICKET
+              </label>
+              <input
+                className="input"
+                value={ticketFooterText}
+                onChange={(e) => setTicketFooterText(e.target.value.slice(0, 160))}
+                placeholder="Opcional"
+                disabled={loadingTicketSettings || savingTicketSettings || !ticketShowFooterText}
+              />
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
+              <div style={{ fontSize: "12px", color: ticketSettingsError ? "var(--red)" : ticketSettingsMessage ? "var(--green)" : "var(--text-3)" }}>
+                {loadingTicketSettings
+                  ? "Cargando ticket..."
+                  : ticketSettingsError || ticketSettingsMessage || "El nombre del negocio siempre se muestra."}
+              </div>
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                <button
+                  className="btn btn-ghost btn-sm"
+                  style={{ border: "1px solid var(--border)" }}
+                  onClick={() => setShowTicketDemo(true)}
+                  disabled={loadingTicketSettings}
+                >
+                  Ver demo
+                </button>
+                <button
+                  className="btn btn-ghost btn-sm"
+                  style={{ border: "1px solid var(--border)" }}
+                  onClick={handleSaveTicketSettings}
+                  disabled={loadingTicketSettings || savingTicketSettings}
+                >
+                  {savingTicketSettings ? "Guardando..." : "Guardar ticket"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
 
           </div>
         </section>
@@ -2096,6 +2328,14 @@ export default function ConfiguracionPage() {
             onSave={handleCategoryModalSave}
           />
         </ModalPortal>
+      )}
+
+      {showTicketDemo && (
+        <TicketModal
+          branchId={branchId}
+          initialTicket={ticketDemoData}
+          onClose={() => setShowTicketDemo(false)}
+        />
       )}
     </div>
   );

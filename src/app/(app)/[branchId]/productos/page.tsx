@@ -21,6 +21,7 @@ import {
   type StockTransferStrategy,
   type TransferPlanLotInput,
 } from "@/lib/stock-transfer-plan";
+import { optimizeProductImage } from "@/lib/image-upload";
 
 interface Variant {
   id?: string;
@@ -898,9 +899,11 @@ function ProductModal({
                   const file = e.target.files?.[0];
                   if (!file) return;
                   setUploadingImage(true);
-                  const formData = new FormData();
-                  formData.append("file", file);
                   try {
+                    const optimizedFile = await optimizeProductImage(file);
+                    const formData = new FormData();
+                    formData.append("file", optimizedFile);
+                    formData.append("folder", "products");
                     const res = await fetch("/api/upload", { method: "POST", body: formData });
                     const data = await res.json();
                     if (data.secure_url) setImage(data.secure_url);
@@ -908,6 +911,7 @@ function ProductModal({
                     console.error(err);
                   }
                   setUploadingImage(false);
+                  e.target.value = "";
                 }}
               />
             </div>

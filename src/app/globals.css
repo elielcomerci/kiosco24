@@ -38,6 +38,189 @@
   --shadow-lg: 0 20px 60px rgba(0,0,0,0.6);
 }
 
+.ticket-preview {
+  width: min(100%, 340px);
+  margin: 0 auto;
+  background: #ffffff;
+  color: #111827;
+  border: 1px solid #d1d5db;
+  border-radius: 18px;
+  padding: 20px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+  font-family: "Inter", "Segoe UI", sans-serif;
+}
+
+.ticket-preview--compact {
+  transform: scale(0.96);
+  transform-origin: top center;
+}
+
+.ticket-preview__logo {
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: 14px;
+  align-self: center;
+}
+
+.ticket-preview__header {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ticket-preview__branch {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.15;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+}
+
+.ticket-preview__meta-line {
+  font-size: 12px;
+  color: #4b5563;
+}
+
+.ticket-preview__section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px dashed #d1d5db;
+}
+
+.ticket-preview__row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: flex-start;
+  font-size: 12px;
+}
+
+.ticket-preview__row strong {
+  font-family: "Courier New", monospace;
+  text-align: right;
+}
+
+.ticket-preview__row--total {
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.ticket-preview__item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ticket-preview__item-top,
+.ticket-preview__item-bottom {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
+}
+
+.ticket-preview__item-bottom {
+  color: #4b5563;
+}
+
+.ticket-preview__item-bottom strong {
+  color: #111827;
+  font-family: "Courier New", monospace;
+}
+
+.ticket-preview__totals {
+  gap: 10px;
+}
+
+.ticket-preview__footer {
+  padding-top: 14px;
+  border-top: 1px dashed #d1d5db;
+  text-align: center;
+  font-size: 12px;
+  color: #374151;
+}
+
+.ticket-preview__voided {
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  background: rgba(239, 68, 68, 0.08);
+  color: #dc2626;
+  border-radius: 999px;
+  padding: 6px 10px;
+  align-self: center;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+@media print {
+  body * {
+    visibility: hidden !important;
+  }
+
+  .ticket-print-area,
+  .ticket-print-area * {
+    visibility: visible !important;
+  }
+
+  .ticket-print-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    padding: 0;
+    margin: 0;
+  }
+
+  .ticket-preview {
+    width: min(100%, 76mm);
+    max-width: none;
+    border: none;
+    border-radius: 0;
+    padding: 0;
+    box-shadow: none;
+    gap: 10px;
+    font-family: "Courier New", monospace;
+  }
+
+  .ticket-preview__branch {
+    font-size: 16px;
+  }
+
+  .ticket-preview__meta-line,
+  .ticket-preview__row,
+  .ticket-preview__item-top,
+  .ticket-preview__item-bottom,
+  .ticket-preview__footer {
+    font-size: 11px;
+  }
+
+  .ticket-preview__row--total {
+    font-size: 14px;
+  }
+
+  .ticket-preview__logo {
+    width: 48px;
+    height: 48px;
+  }
+
+  .ticket-modal-shell {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+
+  @page {
+    margin: 8mm;
+  }
+}
+
 /* ─── Reset ──────────────────────────────────────────────────────────────── */
 *, *::before, *::after {
   box-sizing: border-box;

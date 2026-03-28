@@ -176,7 +176,7 @@ export default async function LandingPage() {
       </main>
 
       <footer style={{ padding: "60px 5%", borderTop: "1px solid rgba(255,255,255,0.05)", marginTop: "80px", textAlign: "center", color: "rgba(255,255,255,0.4)" }}>
-        <p>© 2026 Kiosco 24h - Hecho con ❤️ para comerciantes argentinos.</p>
+        <p>© 2026 Kiosco 24 - Hecho con ❤️ por ZAP Agencia Creativa.</p>
       </footer>
     </div>
   );

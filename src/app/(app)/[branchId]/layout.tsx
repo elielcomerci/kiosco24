@@ -113,6 +113,13 @@ export default async function BranchLayout({
           <BranchSelector branches={branches} currentBranchId={effectiveBranchId} />
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <a
+            href={`/${effectiveBranchId}/tickets`}
+            style={{ fontSize: "20px", textDecoration: "none", color: "var(--text)" }}
+            title="Tickets"
+          >
+            {"\uD83E\uDDFE"}
+          </a>
           {!isEmployee && (
             <a
               href={`/${effectiveBranchId}/configuracion`}

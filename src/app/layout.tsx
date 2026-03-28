@@ -5,9 +5,18 @@ import { GeistSans } from "geist/font/sans";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Kiosco 24h",
+  title: "Kiosco 24",
   description: "POS rapido para kioscos argentinos",
   manifest: "/manifest.json",
+  icons: {
+    icon: "/favicon.ico",
+    apple: "/apple-touch-icon.png",
+  },
+  appleWebApp: {
+    capable: true,
+    title: "Kiosco24",
+    statusBarStyle: "default",
+  },
 };
 
 export const viewport: Viewport = {

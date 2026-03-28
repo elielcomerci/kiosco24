@@ -88,6 +88,8 @@ model Kiosco {
 model Branch {
   id                 String             @id @default(cuid())
   name               String
+  address            String?
+  phone              String?
   kioscoId           String
   kiosco             Kiosco             @relation(fields: [kioscoId], references: [id], onDelete: Cascade)
   activeShiftId      String?            @unique
@@ -104,6 +106,7 @@ model Branch {
   bgColor            String?            @default("#0f172a")
   ownerPin           String?
   allowNegativeStock Boolean            @default(false)
+  ticketCounter      Int                @default(0)
   accessKey          String?            @unique // Código para vincular dispositivos
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
@@ -119,8 +122,22 @@ model Branch {
   mpIncomingPaymentNotices MpIncomingPaymentNotice[]
   restockEvents            RestockEvent[]
   stockLots                StockLot[]
+  ticketSettings           TicketSettings?
 
   @@index([kioscoId])
+}
+
+model TicketSettings {
+  id             String   @id @default(cuid())
+  branchId       String   @unique
+  branch         Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  showLogo       Boolean  @default(true)
+  showAddress    Boolean  @default(false)
+  showPhone      Boolean  @default(false)
+  showFooterText Boolean  @default(true)
+  footerText     String?  @default("¡Gracias por su compra!")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 }
 
 model Category {
@@ -373,6 +390,9 @@ model Sale {
   total               Float
   paymentMethod       PaymentMethod
   receivedAmount      Float?
+  ticketNumber        Int?
+  ticketIssuedAt      DateTime?
+  ticketMetaSnapshot  Json?
   shiftId             String?
   shift               Shift?          @relation(fields: [shiftId], references: [id], onDelete: SetNull)
   branchId            String
@@ -388,6 +408,7 @@ model Sale {
 
   @@unique([branchId, clientSaleId])
   @@index([branchId, createdAt])
+  @@index([branchId, ticketNumber])
   @@index([shiftId])
 }
 

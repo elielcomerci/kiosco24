@@ -1,15 +1,27 @@
+import { put } from "@vercel/blob";
 import { NextResponse } from "next/server";
-import { v2 as cloudinary } from "cloudinary";
 import { auth } from "@/lib/auth";
 import { guardOperationalAccess } from "@/lib/access-control";
 
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
-
 export const runtime = "nodejs";
+
+const MAX_FILE_SIZE_BYTES = 8 * 1024 * 1024;
+
+function sanitizeSegment(value: string, fallback: string) {
+  const normalized = value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9-_]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .toLowerCase();
+
+  return normalized || fallback;
+}
+
+function getSafeFolder(rawFolder: string | null) {
+  const allowedFolders = new Set(["products", "branding", "uploads"]);
+  return rawFolder && allowedFolders.has(rawFolder) ? rawFolder : "uploads";
+}
 
 export async function POST(req: Request) {
   try {
@@ -23,41 +35,52 @@ export async function POST(req: Request) {
       return accessResponse;
     }
 
-    const formData = await req.formData();
-    const file = formData.get("file") as File | null;
+    if (!process.env.BLOB_READ_WRITE_TOKEN) {
+      return NextResponse.json(
+        { error: "Falta configurar BLOB_READ_WRITE_TOKEN en el entorno." },
+        { status: 500 },
+      );
+    }
 
-    if (!file) {
+    const formData = await req.formData();
+    const file = formData.get("file");
+    const folder = getSafeFolder(formData.get("folder")?.toString() ?? null);
+
+    if (!(file instanceof File)) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
     }
 
-    // Convert file to Base64
-    const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    const mime = file.type || "image/jpeg";
-    const encoding = "base64";
-    const base64Data = buffer.toString("base64");
-    const fileUri = `data:${mime};${encoding},${base64Data}`;
+    if (!file.type.startsWith("image/")) {
+      return NextResponse.json({ error: "Solo se permiten imagenes." }, { status: 400 });
+    }
 
-    // Upload to Cloudinary
-    const uploadResponse = await new Promise((resolve, reject) => {
-      cloudinary.uploader.upload(
-        fileUri,
-        {
-          folder: "kiosco24_products",
-          width: 800,
-          crop: "limit", // resize to max 800px width keeping aspect ratio
-          quality: "auto",
-        },
-        (error, result) => {
-          if (error) reject(error);
-          else resolve(result);
-        }
-      );
+    if (file.size > MAX_FILE_SIZE_BYTES) {
+      return NextResponse.json({ error: "La imagen supera el maximo de 8 MB." }, { status: 400 });
+    }
+
+    const extensionFromType = file.type.split("/")[1] || "png";
+    const originalName = file.name || `image.${extensionFromType}`;
+    const hasExtension = /\.[a-zA-Z0-9]+$/.test(originalName);
+    const baseName = originalName.replace(/\.[^.]+$/, "");
+    const safeBaseName = sanitizeSegment(baseName, "image");
+    const safeExtension = sanitizeSegment(hasExtension ? originalName.split(".").pop() || extensionFromType : extensionFromType, extensionFromType);
+    const pathname = `${folder}/${safeBaseName}.${safeExtension}`;
+
+    const blob = await put(pathname, file, {
+      access: "public",
+      addRandomSuffix: true,
+      contentType: file.type,
+      token: process.env.BLOB_READ_WRITE_TOKEN,
     });
 
-    return NextResponse.json(uploadResponse);
+    return NextResponse.json({
+      url: blob.url,
+      secure_url: blob.url,
+      pathname: blob.pathname,
+      contentType: blob.contentType,
+    });
   } catch (error) {
-    console.error("Cloudinary upload error:", error);
+    console.error("Vercel Blob upload error:", error);
     return NextResponse.json({ error: "Upload failed" }, { status: 500 });
   }
 }

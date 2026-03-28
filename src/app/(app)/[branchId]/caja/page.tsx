@@ -16,6 +16,7 @@ import CloseShiftModal from "@/components/turnos/CloseShiftModal";
 import TransferShiftModal from "@/components/turnos/TransferShiftModal";
 import BarcodeScanner from "@/components/caja/BarcodeScanner";
 import ModalPortal from "@/components/ui/ModalPortal";
+import TicketModal from "@/components/ticket/TicketModal";
 
 import { savePendingSale } from "@/lib/offline/db";
 import { useOnlineStatus } from "@/lib/offline/sync";
@@ -73,6 +74,7 @@ interface TicketItem {
 
 interface Sale {
   id: string;
+  ticketNumber?: number | null;
   total: number;
   paymentMethod: "CASH" | "MERCADOPAGO" | "TRANSFER" | "DEBIT" | "CREDIT_CARD" | "CREDIT";
   items: TicketItem[];
@@ -268,6 +270,7 @@ export default function CajaPage() {
   }>({ enCaja: 0, ganancia: null, hasCosts: false });
   const [lastSale, setLastSale] = useState<Sale | null>(null);
   const [confirmedSale, setConfirmedSale] = useState<Sale | null>(null);
+  const [ticketSaleId, setTicketSaleId] = useState<string | null>(null);
   const [showGasto, setShowGasto] = useState(false);
   const [showOtro, setShowOtro] = useState(false);
   const [showRetiro, setShowRetiro] = useState(false);
@@ -837,6 +840,7 @@ export default function CajaPage() {
     try {
         const newSale: Sale = {
           id: "", // Will be set if online
+          ticketNumber: null,
           total,
           paymentMethod: method,
           items: [...ticket],
@@ -869,6 +873,7 @@ export default function CajaPage() {
 
           const sale = await res.json();
           newSale.id = sale.id;
+          newSale.ticketNumber = typeof sale.ticketNumber === "number" ? sale.ticketNumber : null;
         } else {
           // OFFLINE SAVE (sin conexión)
           try {
@@ -933,6 +938,7 @@ export default function CajaPage() {
       return;
     }
     if (!confirmedSale) return;
+    setTicketSaleId(null);
     setTicket(confirmedSale.items.map((i) => ({ ...i })));
     setConfirmedSale(null);
     if (confirmedSale.id && isOnline) {
@@ -1084,12 +1090,30 @@ export default function CajaPage() {
   // ─── Confirmed sale overlay ────────────────────────────────────────────────
   if (confirmedSale) {
     return (
-      <ConfirmationScreen
-        sale={confirmedSale}
-        onChange={change}
-        onCorregir={handleCorregir}
-        onListo={() => setConfirmedSale(null)}
-      />
+      <>
+        <ConfirmationScreen
+          sale={confirmedSale}
+          onChange={
+            confirmedSale.paymentMethod === "CASH" && typeof confirmedSale.receivedAmount === "number"
+              ? Math.max(0, confirmedSale.receivedAmount - confirmedSale.total)
+              : null
+          }
+          onCorregir={handleCorregir}
+          onListo={() => {
+            setTicketSaleId(null);
+            setConfirmedSale(null);
+          }}
+          onEmitTicket={() => {
+            if (confirmedSale.id) {
+              setTicketSaleId(confirmedSale.id);
+            }
+          }}
+          pauseAutoClose={Boolean(ticketSaleId)}
+        />
+        {ticketSaleId ? (
+          <TicketModal branchId={branchId} saleId={ticketSaleId} onClose={() => setTicketSaleId(null)} />
+        ) : null}
+      </>
     );
   }
 
@@ -1289,24 +1313,6 @@ export default function CajaPage() {
         {isDesktop && (
           <div style={{ padding: "6px 16px 0", color: "var(--text-3)", fontSize: "12px" }}>
             Acepta lectora USB: escaneÃ¡ y el producto entra directo sin tocar el buscador.
-          </div>
-        )}
-
-        {allowNegativeStock && (
-          <div style={{ padding: "10px 16px 0" }}>
-            <div
-              style={{
-                padding: "10px 12px",
-                borderRadius: "14px",
-                border: "1px solid rgba(245,158,11,0.24)",
-                background: "rgba(245,158,11,0.10)",
-                color: "var(--amber)",
-                fontSize: "12px",
-                fontWeight: 700,
-              }}
-            >
-              Venta en negativo activa. Si un item queda debajo de 0, la caja te va a pedir confirmacion.
-            </div>
           </div>
         )}
 

@@ -10,6 +10,7 @@ export type {
   Product,
   InventoryRecord,
   StockLot,
+  TicketSettings,
   SaleLotConsumption,
   Employee,
   Shift,

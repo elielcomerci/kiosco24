@@ -401,7 +401,7 @@ export default function LoginExperience({
             {employeeStep === "key" && (
               <>
                 <p style={{ fontSize: "13px", color: "var(--text-2)", textAlign: "center" }}>
-                  Ingresá el codigo o abrí el enlace que te compartió el dueño del kiosco.
+                  Ingresá el código o abrí el enlace que te compartió el responsable del kiosco.
                 </p>
                 <input
                   type="text"
@@ -550,7 +550,7 @@ export default function LoginExperience({
               disabled={loading}
               style={{ fontSize: "14px", color: "var(--primary)", fontWeight: 700 }}
             >
-              Volver al login de dueño
+              Volver al acceso principal
             </button>
           </div>
         ) : (
@@ -677,9 +677,11 @@ export default function LoginExperience({
         )}
       </div>
 
+      {mode !== "employee" && isRegister && (
         <p style={{ fontSize: "13px", color: "var(--text-3)", textAlign: "center", maxWidth: "320px" }}>
           {SUBSCRIPTION_PROMO_LABEL} {SUBSCRIPTION_CANCEL_LABEL}
         </p>
+      )}
     </div>
   );
 }

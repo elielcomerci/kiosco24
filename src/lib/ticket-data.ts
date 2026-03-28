@@ -57,6 +57,7 @@ export function buildTicketPreviewData(
     branchPhone: snapshot.branchPhone,
     branchLogoUrl: snapshot.branchLogoUrl,
     footerText: snapshot.footerText,
+    orderLink: snapshot.orderLink,
     items: sale.items.map((item) => ({
       name: item.name,
       quantity: item.quantity,

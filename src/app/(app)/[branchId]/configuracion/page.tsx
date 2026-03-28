@@ -706,6 +706,7 @@ export default function ConfiguracionPage() {
   const [ticketShowPhone, setTicketShowPhone] = useState(false);
   const [ticketShowFooterText, setTicketShowFooterText] = useState(true);
   const [ticketFooterText, setTicketFooterText] = useState("¡Gracias por su compra!");
+  const [ticketOrderLink, setTicketOrderLink] = useState("");
   const [savingTicketSettings, setSavingTicketSettings] = useState(false);
   const [ticketSettingsMessage, setTicketSettingsMessage] = useState<string | null>(null);
   const [ticketSettingsError, setTicketSettingsError] = useState<string | null>(null);
@@ -865,6 +866,7 @@ export default function ConfiguracionPage() {
           ? data.footerText
           : "¡Gracias por su compra!",
       );
+      setTicketOrderLink(typeof data?.orderLink === "string" ? data.orderLink : "");
     } finally {
       setLoadingTicketSettings(false);
     }
@@ -942,6 +944,7 @@ export default function ConfiguracionPage() {
           showPhone: ticketShowPhone,
           showFooterText: ticketShowFooterText,
           footerText: ticketFooterText.trim() || null,
+          orderLink: ticketOrderLink.trim() || null,
         }),
       });
       const data = await res.json().catch(() => null);
@@ -960,6 +963,7 @@ export default function ConfiguracionPage() {
           ? data.footerText
           : "¡Gracias por su compra!",
       );
+      setTicketOrderLink(typeof data?.orderLink === "string" ? data.orderLink : "");
       setTicketSettingsMessage("Ticket actualizado.");
     } catch (error) {
       console.error(error);
@@ -1186,6 +1190,7 @@ export default function ConfiguracionPage() {
     branchPhone: editBranchPhone.trim() || null,
     branchLogoUrl: editLogoUrl || null,
     footerText: ticketFooterText.trim() || null,
+    orderLink: ticketOrderLink.trim() || null,
     items: [
       { name: "Coca Cola 500ml", quantity: 2, unitPrice: 800, subtotal: 1600 },
       { name: "Alfajor", quantity: 1, unitPrice: 500, subtotal: 500 },
@@ -1493,12 +1498,27 @@ export default function ConfiguracionPage() {
               <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, display: "block", marginBottom: "4px" }}>
                 PIE DEL TICKET
               </label>
-              <input
+              <textarea
                 className="input"
                 value={ticketFooterText}
-                onChange={(e) => setTicketFooterText(e.target.value.slice(0, 160))}
+                onChange={(e) => setTicketFooterText(e.target.value.slice(0, 400))}
                 placeholder="Opcional"
+                rows={4}
+                style={{ minHeight: "104px", resize: "vertical" }}
                 disabled={loadingTicketSettings || savingTicketSettings || !ticketShowFooterText}
+              />
+            </div>
+
+            <div>
+              <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, display: "block", marginBottom: "4px" }}>
+                LINK PARA PEDIR
+              </label>
+              <input
+                className="input"
+                value={ticketOrderLink}
+                onChange={(e) => setTicketOrderLink(e.target.value.slice(0, 300))}
+                placeholder="https://..."
+                disabled={loadingTicketSettings || savingTicketSettings}
               />
             </div>
 
@@ -1506,7 +1526,7 @@ export default function ConfiguracionPage() {
               <div style={{ fontSize: "12px", color: ticketSettingsError ? "var(--red)" : ticketSettingsMessage ? "var(--green)" : "var(--text-3)" }}>
                 {loadingTicketSettings
                   ? "Cargando ticket..."
-                  : ticketSettingsError || ticketSettingsMessage || "El nombre del negocio siempre se muestra."}
+                  : ticketSettingsError || ticketSettingsMessage || "Si cargas un link, el ticket genera el QR solo."}
               </div>
               <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                 <button

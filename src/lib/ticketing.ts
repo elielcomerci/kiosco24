@@ -8,6 +8,7 @@ export type TicketSettingsShape = {
   showPhone: boolean;
   showFooterText: boolean;
   footerText: string | null;
+  orderLink: string | null;
 };
 
 export type TicketMetaSnapshot = {
@@ -20,6 +21,7 @@ export type TicketMetaSnapshot = {
   showPhone: boolean;
   showFooterText: boolean;
   footerText: string | null;
+  orderLink: string | null;
 };
 
 export function getDefaultTicketSettings(): TicketSettingsShape {
@@ -29,6 +31,7 @@ export function getDefaultTicketSettings(): TicketSettingsShape {
     showPhone: false,
     showFooterText: true,
     footerText: DEFAULT_TICKET_FOOTER_TEXT,
+    orderLink: null,
   };
 }
 
@@ -51,6 +54,7 @@ export async function ensureTicketSettings(
       showPhone: true,
       showFooterText: true,
       footerText: true,
+      orderLink: true,
     },
   });
 }
@@ -74,6 +78,7 @@ export function buildTicketMetaSnapshot(
     showPhone: settings.showPhone,
     showFooterText: settings.showFooterText,
     footerText: settings.footerText || DEFAULT_TICKET_FOOTER_TEXT,
+    orderLink: settings.orderLink,
   };
 }
 
@@ -92,6 +97,7 @@ export function parseTicketMetaSnapshot(value: Prisma.JsonValue | null | undefin
     showFooterText:
       typeof source.showFooterText === "boolean" ? source.showFooterText : defaults.showFooterText,
     footerText: typeof source.footerText === "string" ? source.footerText : defaults.footerText,
+    orderLink: typeof source.orderLink === "string" ? source.orderLink : defaults.orderLink,
   };
 }
 

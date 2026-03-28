@@ -54,6 +54,7 @@ export async function GET(req: Request) {
     showPhone: settings.showPhone,
     showFooterText: settings.showFooterText,
     footerText: settings.footerText,
+    orderLink: settings.orderLink,
     branch: {
       name: branch.name,
       address: branch.address,
@@ -88,8 +89,25 @@ export async function PUT(req: Request) {
     body?.footerText === undefined
       ? undefined
       : typeof body.footerText === "string" && body.footerText.trim()
-        ? body.footerText.trim().slice(0, 160)
+        ? body.footerText.trim().slice(0, 400)
         : null;
+  const nextOrderLink =
+    body?.orderLink === undefined
+      ? undefined
+      : typeof body.orderLink === "string" && body.orderLink.trim()
+        ? body.orderLink.trim().slice(0, 300)
+        : null;
+
+  if (nextOrderLink) {
+    try {
+      const parsed = new URL(nextOrderLink);
+      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+        return NextResponse.json({ error: "El link del QR debe empezar con http o https." }, { status: 400 });
+      }
+    } catch {
+      return NextResponse.json({ error: "El link del QR no es valido." }, { status: 400 });
+    }
+  }
 
   const updated = await prisma.ticketSettings.upsert({
     where: { branchId },
@@ -99,6 +117,7 @@ export async function PUT(req: Request) {
       ...(body?.showPhone !== undefined && { showPhone: Boolean(body.showPhone) }),
       ...(body?.showFooterText !== undefined && { showFooterText: Boolean(body.showFooterText) }),
       ...(body?.footerText !== undefined && { footerText: nextFooterText }),
+      ...(body?.orderLink !== undefined && { orderLink: nextOrderLink }),
     },
     create: {
       branchId,
@@ -108,6 +127,7 @@ export async function PUT(req: Request) {
       ...(body?.showPhone !== undefined && { showPhone: Boolean(body.showPhone) }),
       ...(body?.showFooterText !== undefined && { showFooterText: Boolean(body.showFooterText) }),
       ...(body?.footerText !== undefined && { footerText: nextFooterText }),
+      ...(body?.orderLink !== undefined && { orderLink: nextOrderLink }),
     },
   });
 

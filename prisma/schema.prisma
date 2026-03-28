@@ -136,6 +136,7 @@ model TicketSettings {
   showPhone      Boolean  @default(false)
   showFooterText Boolean  @default(true)
   footerText     String?  @default("¡Gracias por su compra!")
+  orderLink      String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 }

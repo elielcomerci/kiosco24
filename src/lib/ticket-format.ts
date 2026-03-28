@@ -14,6 +14,7 @@ export type TicketPreviewData = {
   branchPhone: string | null;
   branchLogoUrl: string | null;
   footerText: string | null;
+  orderLink: string | null;
   items: TicketPreviewItem[];
   subtotal: number;
   discount: number | null;
@@ -89,6 +90,11 @@ export function generateWhatsAppTicketText(ticket: TicketPreviewData) {
   if (ticket.showFooterText && ticket.footerText) {
     lines.push("");
     lines.push(ticket.footerText);
+  }
+
+  if (ticket.orderLink) {
+    lines.push("");
+    lines.push(`Pedi online: ${ticket.orderLink}`);
   }
 
   return lines.join("\n");

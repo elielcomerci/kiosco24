@@ -72,6 +72,7 @@ export async function GET(
               showPhone: true,
               showFooterText: true,
               footerText: true,
+              orderLink: true,
             },
           },
         },

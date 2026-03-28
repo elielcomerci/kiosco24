@@ -1,5 +1,6 @@
 "use client";
 
+import TicketQr from "@/components/ticket/TicketQr";
 import { formatARS } from "@/lib/utils";
 import { formatTicketIssuedAt, type TicketPreviewData } from "@/lib/ticket-format";
 
@@ -88,6 +89,13 @@ export default function TicketPreview({
 
       {ticket.showFooterText && ticket.footerText ? (
         <footer className="ticket-preview__footer">{ticket.footerText}</footer>
+      ) : null}
+
+      {ticket.orderLink ? (
+        <>
+          <TicketQr value={ticket.orderLink} />
+          <div className="ticket-preview__footer-link">{ticket.orderLink}</div>
+        </>
       ) : null}
 
       {ticket.voided ? <div className="ticket-preview__voided">ANULADO</div> : null}

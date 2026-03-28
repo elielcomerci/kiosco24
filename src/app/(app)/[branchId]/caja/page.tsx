@@ -680,6 +680,40 @@ export default function CajaPage() {
     return true;
   };
 
+  const getSelectionAvailableStock = (product: Product, variant?: Variant) =>
+    variant
+      ? (variant.availableStock ?? variant.stock ?? 0)
+      : (product.availableStock ?? product.stock ?? 0);
+
+  const getItemAvailableStock = (item: TicketItem) => {
+    const product = item.productId ? products.find((candidate) => candidate.id === item.productId) : null;
+    if (!product) return null;
+
+    if (item.variantId) {
+      const variant = product.variants?.find((candidate) => candidate.id === item.variantId);
+      return variant ? (variant.availableStock ?? variant.stock ?? 0) : null;
+    }
+
+    return product.availableStock ?? product.stock ?? 0;
+  };
+
+  const shouldWarnNegativeStock = (availableStock: number, previousQuantity: number, nextQuantity: number) => {
+    if (!allowNegativeStock || nextQuantity <= previousQuantity) return false;
+    if (availableStock <= 0) return previousQuantity === 0 && nextQuantity > 0;
+    return previousQuantity <= availableStock && nextQuantity > availableStock;
+  };
+
+  const confirmNegativeStock = (itemName: string, availableStock: number, nextQuantity: number) => {
+    const projectedStock = availableStock - nextQuantity;
+    return window.confirm(
+      `${itemName} no tiene stock cargado suficiente.\n\n` +
+      `Stock disponible: ${availableStock}.\n` +
+      `En el ticket: ${nextQuantity}.\n` +
+      `Quedaria en ${projectedStock}.\n\n` +
+      "Confirma solo si el producto ya esta en el local y falta cargarlo.",
+    );
+  };
+
   const handleProductTap = useCallback((product: Product, variant?: Variant) => {
     if (!ensureCanOperateCurrentShift()) {
       return;
@@ -692,22 +726,35 @@ export default function CajaPage() {
     }
 
     const targetName = variant ? `${product.name} - ${variant.name}` : product.name;
-    const targetStock = variant
-      ? (variant.availableStock ?? variant.stock)
-      : (product.availableStock ?? product.stock ?? 999999);
+    const targetStock = getSelectionAvailableStock(product, variant);
+    const existing = ticket.find((item) => (variant ? item.variantId === variant.id : item.productId === product.id));
+    const previousQuantity = existing?.quantity ?? 0;
+    const nextQuantity = previousQuantity + 1;
+
+    if (!allowNegativeStock && existing && existing.quantity >= targetStock) {
+      alert(`No hay mÃ¡s stock de ${targetName}`);
+      return;
+    }
+
+    if (!allowNegativeStock && targetStock <= 0) {
+      alert(`${targetName} no tiene stock disponible`);
+      return;
+    }
+
+    if (shouldWarnNegativeStock(targetStock, previousQuantity, nextQuantity) && !confirmNegativeStock(targetName, targetStock, nextQuantity)) {
+      return;
+    }
 
     setTicket((prev) => {
-      const existing = prev.find((i) => (variant ? i.variantId === variant.id : i.productId === product.id));
-      
       if (existing) {
         if (!allowNegativeStock && existing.quantity >= targetStock) {
           alert(`No hay más stock de ${targetName}`);
           return prev;
         }
-        return prev.map((i) =>
-          (variant ? i.variantId === variant.id : i.productId === product.id)
-            ? { ...i, quantity: i.quantity + 1 }
-            : i
+        return prev.map((item) =>
+          (variant ? item.variantId === variant.id : item.productId === product.id)
+            ? { ...item, quantity: item.quantity + 1 }
+            : item
         );
       }
 
@@ -730,7 +777,7 @@ export default function CajaPage() {
     });
 
     if (variant) setVariantSelector(null);
-  }, [activeShift, allowNegativeStock, canOperateCurrentShift]);
+  }, [activeShift, allowNegativeStock, canOperateCurrentShift, ticket]);
 
   // Long press = -1
   const longPressTimer = useRef<NodeJS.Timeout | null>(null);
@@ -946,6 +993,26 @@ export default function CajaPage() {
       return;
     }
 
+    const ticketItem = ticket[index];
+    if (!ticketItem) return;
+
+    const availableStock = getItemAvailableStock(ticketItem);
+    const nextQuantity = ticketItem.quantity + delta;
+
+    if (!allowNegativeStock && delta > 0 && ticketItem.maxStock !== undefined && ticketItem.quantity >= ticketItem.maxStock) {
+      alert("Stock mÃ¡ximo alcanzado");
+      return;
+    }
+
+    if (
+      delta > 0 &&
+      availableStock !== null &&
+      shouldWarnNegativeStock(availableStock, ticketItem.quantity, nextQuantity) &&
+      !confirmNegativeStock(ticketItem.name, availableStock, nextQuantity)
+    ) {
+      return;
+    }
+
     setTicket((prev) => {
       const newTicket = [...prev];
       const item = newTicket[index];
@@ -965,11 +1032,25 @@ export default function CajaPage() {
 
   const commitQtyEdit = (index: number, rawValue: string) => {
     const parsed = parseInt(rawValue, 10);
+    const ticketItem = ticket[index];
     setEditingQty(null);
     if (!rawValue.trim() || isNaN(parsed) || parsed <= 0) {
       setTicket((prev) => prev.filter((_, i) => i !== index));
       return;
     }
+
+    if (!ticketItem) return;
+
+    const availableStock = getItemAvailableStock(ticketItem);
+    if (
+      allowNegativeStock &&
+      availableStock !== null &&
+      shouldWarnNegativeStock(availableStock, ticketItem.quantity, parsed) &&
+      !confirmNegativeStock(ticketItem.name, availableStock, parsed)
+    ) {
+      return;
+    }
+
     setTicket((prev) => {
       const newTicket = [...prev];
       const item = newTicket[index];
@@ -1211,6 +1292,24 @@ export default function CajaPage() {
           </div>
         )}
 
+        {allowNegativeStock && (
+          <div style={{ padding: "10px 16px 0" }}>
+            <div
+              style={{
+                padding: "10px 12px",
+                borderRadius: "14px",
+                border: "1px solid rgba(245,158,11,0.24)",
+                background: "rgba(245,158,11,0.10)",
+                color: "var(--amber)",
+                fontSize: "12px",
+                fontWeight: 700,
+              }}
+            >
+              Venta en negativo activa. Si un item queda debajo de 0, la caja te va a pedir confirmacion.
+            </div>
+          </div>
+        )}
+
       {/* Category Filter Pills (Scrollable Horizontal) */}
       {categories.length > 0 && (
         <div style={{
@@ -1373,10 +1472,32 @@ export default function CajaPage() {
         {/* Collapsible Ticket Detail */}
         {ticket.length > 0 && (isTicketExpanded || isDesktop) && (
           <div className="desktop-ticket-scroll" style={{ padding: "0 16px", maxHeight: "40vh", overflowY: "auto", borderTop: "1px solid var(--border)" }}>
-            {ticket.map((item, idx) => (
+            {ticket.map((item, idx) => {
+              const availableStock = getItemAvailableStock(item);
+              const projectedStock = availableStock === null ? null : availableStock - item.quantity;
+              const itemNeedsNegativeStock = allowNegativeStock && projectedStock !== null && projectedStock < 0;
+
+              return (
               <div key={idx} className="ticket-item">
-                <div style={{ flex: 1 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
                   <span style={{ fontWeight: 600, fontSize: "14px" }}>{item.name}</span>
+                  {itemNeedsNegativeStock && (
+                    <div
+                      style={{
+                        marginTop: "4px",
+                        display: "inline-flex",
+                        padding: "3px 7px",
+                        borderRadius: "999px",
+                        fontSize: "10px",
+                        fontWeight: 700,
+                        color: "var(--red)",
+                        background: "rgba(239,68,68,0.12)",
+                        border: "1px solid rgba(239,68,68,0.24)",
+                      }}
+                    >
+                      Queda en {projectedStock}
+                    </div>
+                  )}
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                   <button
@@ -1447,7 +1568,7 @@ export default function CajaPage() {
                   </span>
                 </div>
               </div>
-            ))}
+            )})}
             {lastSale && ticket.length > 0 && (
               <div style={{ marginTop: "8px", marginBottom: "8px" }}>
                 <button

@@ -3,8 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import {
-  SUBSCRIPTION_CONTINUATION_LABEL,
-  SUBSCRIPTION_ENTRY_LABEL,
+  SUBSCRIPTION_CANCEL_LABEL,
+  SUBSCRIPTION_PROMO_LABEL,
 } from "@/lib/subscription-plan";
 
 type Props = {
@@ -78,7 +78,7 @@ export default function SubscriptionActions({
           lineHeight: 1.6,
         }}
       >
-        Compras {SUBSCRIPTION_ENTRY_LABEL} y luego sigue en {SUBSCRIPTION_CONTINUATION_LABEL}.
+        {SUBSCRIPTION_PROMO_LABEL} {SUBSCRIPTION_CANCEL_LABEL}
       </div>
 
       {canCreateSubscription && (
@@ -89,7 +89,7 @@ export default function SubscriptionActions({
           disabled={loading}
           style={{ width: "100%" }}
         >
-          {loading ? "Generando link..." : `Comprar ${SUBSCRIPTION_ENTRY_LABEL}`}
+          {loading ? "Generando link..." : "Continuar con Mercado Pago"}
         </button>
       )}
 

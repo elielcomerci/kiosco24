@@ -4,8 +4,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 import {
-  SUBSCRIPTION_CONTINUATION_LABEL,
-  SUBSCRIPTION_ENTRY_LABEL,
+  SUBSCRIPTION_CANCEL_LABEL,
+  SUBSCRIPTION_PROMO_LABEL,
 } from "@/lib/subscription-plan";
 
 export default function OnboardingPage() {
@@ -100,13 +100,12 @@ export default function OnboardingPage() {
             className="btn btn-primary btn-lg btn-full"
             disabled={loading || !kioscoName.trim()}
           >
-            {loading ? loadingText : `Comprar ${SUBSCRIPTION_ENTRY_LABEL}`}
+            {loading ? loadingText : "Crear kiosco y continuar"}
           </button>
 
           <p style={{ textAlign: "center", fontSize: "12px", color: "var(--text-3)", marginTop: "-10px" }}>
-            Seras redirigido a MercadoPago para comprar {SUBSCRIPTION_ENTRY_LABEL}. Despues sigue en{" "}
-            {SUBSCRIPTION_CONTINUATION_LABEL}.
-          </p>
+            {SUBSCRIPTION_PROMO_LABEL} {SUBSCRIPTION_CANCEL_LABEL}
+            </p>
         </form>
       </div>
     </div>

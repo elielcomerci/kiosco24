@@ -65,9 +65,14 @@ export default async function LandingPage() {
               </form>
             </>
           ) : (
-            <Link href="/login" className="btn btn-primary" style={{ padding: "8px 20px", fontSize: "14px", borderRadius: "100px" }}>
-              Entrar
-            </Link>
+            <>
+              <Link href="/login" className="btn btn-secondary" style={{ padding: "8px 20px", fontSize: "14px", borderRadius: "100px" }}>
+                Entrar
+              </Link>
+              <Link href="/login?register=1" className="btn btn-primary" style={{ padding: "8px 20px", fontSize: "14px", borderRadius: "100px" }}>
+                Crear cuenta
+              </Link>
+            </>
           )}
         </div>
       </header>
@@ -113,13 +118,20 @@ export default async function LandingPage() {
               {isPlatformAdmin(session.user) ? "Ir al Admin" : "Ir a mi Kiosco 🚀"}
             </Link>
           ) : (
-            <Link href="/login" className="btn btn-primary btn-lg" style={{ padding: "16px 40px" }}>
+            <Link href="/login?register=1" className="btn btn-primary btn-lg" style={{ padding: "16px 40px" }}>
               Crear mi cuenta
             </Link>
           )}
-          <a href="#features" className="btn btn-secondary btn-lg" style={{ padding: "16px 40px" }}>
-            Ver bondades
-          </a>
+          {!session && (
+            <Link href="/login" className="btn btn-secondary btn-lg" style={{ padding: "16px 40px" }}>
+              Ya tengo cuenta
+            </Link>
+          )}
+          {session && (
+            <a href="#features" className="btn btn-secondary btn-lg" style={{ padding: "16px 40px" }}>
+              Ver bondades
+            </a>
+          )}
         </div>
 
         {/* Features Grid */}

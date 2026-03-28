@@ -990,11 +990,11 @@ function ProductModal({
               lineHeight: 1.5,
             }}
           >
-            <div>Este producto queda fuera de la caja hasta que completes precio, costo unitario y stock.</div>
+            <div>Completa precio, costo y stock para venderlo.</div>
             <div style={{ marginTop: "6px" }}>
               {pricingMode === "SHARED"
-                ? "Precio y costo se sincronizan en todas las sucursales. El stock sigue siendo individual por sucursal."
-                : "Precio y costo se editan solo para esta sucursal. Cambiar de modo no borra los valores ya cargados."}
+                ? "Precio y costo: todas las sucursales."
+                : "Precio y costo: solo esta sucursal."}
             </div>
           </div>
 
@@ -1144,11 +1144,11 @@ function ProductModal({
                          onChange={(e) => setVariantQuickAdds((prev) => ({ ...prev, [variantQuickKey]: e.target.value.startsWith("-") ? "" : e.target.value }))}
                          style={{ width: "140px", textAlign: "right" }}
                        />
-                       <span style={{ fontSize: "11px", color: projectedVariantStock !== null && projectedVariantStock >= 0 ? "var(--green)" : "var(--text-2)", fontWeight: 700 }}>
-                         {projectedVariantStock === null
-                           ? `Faltan ${Math.abs(currentVariantStock)} para volver a 0`
-                           : `Queda en ${projectedVariantStock}`}
-                       </span>
+                      <span style={{ fontSize: "11px", color: projectedVariantStock !== null && projectedVariantStock >= 0 ? "var(--green)" : "var(--text-2)", fontWeight: 700 }}>
+                        {projectedVariantStock === null
+                          ? `Faltan ${Math.abs(currentVariantStock)} para volver a 0`
+                          : `Queda en ${projectedVariantStock}`}
+                      </span>
                        <button
                          type="button"
                          className="btn btn-sm btn-ghost"
@@ -1225,7 +1225,7 @@ function ProductModal({
                     Este producto esta en negativo ({originalSimpleStock}).
                   </div>
                   <div style={{ fontSize: "12px", color: "var(--text-2)", marginTop: "4px", lineHeight: 1.5 }}>
-                    Si te llegaron unidades ahora, escribi solo lo que entro fisicamente y te dejamos listo el stock final sin hacer cuentas.
+                    Carga lo que entro ahora y usamos el total.
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
@@ -1552,14 +1552,6 @@ function StockLoadingModal({
       return 0;
     });
 
-  const visibleNegativeCount = eligible.reduce((count, product) => {
-    if (product.variants && product.variants.length > 0) {
-      return count + product.variants.filter((variant) => (variant.stock ?? 0) < 0).length;
-    }
-
-    return count + ((product.stock ?? 0) < 0 ? 1 : 0);
-  }, 0);
-
   const setQty = (
     key: string,
     val: string,
@@ -1599,65 +1591,6 @@ function StockLoadingModal({
     }
 
     return null;
-  };
-
-  const getIncomingQuantity = (productId: string, variantId?: string | null) => {
-    const inputVal = getInputValue(productId, variantId);
-    const parsedInput = parseStockQuantity(inputVal) ?? 0;
-    return parsedInput + getLotSum(productId, variantId);
-  };
-
-  const getStockProjection = (currentStock: number | null, productId: string, variantId?: string | null) => {
-    if (mode !== "sumar") {
-      return null;
-    }
-
-    const current = currentStock ?? 0;
-    const incoming = getIncomingQuantity(productId, variantId);
-
-    if (incoming <= 0 && current >= 0) {
-      return null;
-    }
-
-    const next = current + incoming;
-
-    if (current < 0 && incoming <= 0) {
-      return {
-        tone: "negative" as const,
-        text: `Debe ${Math.abs(current)} para volver a 0.`,
-      };
-    }
-
-    if (current < 0) {
-      const coveredDebt = Math.min(incoming, Math.abs(current));
-      if (next < 0) {
-        return {
-          tone: "negative" as const,
-          text: `Entran ${incoming}. Cubren ${coveredDebt} y todavia quedan ${Math.abs(next)} en negativo.`,
-        };
-      }
-
-      if (next === 0) {
-        return {
-          tone: "warning" as const,
-          text: `Entran ${incoming}. Alcanzan justo para salir del negativo.`,
-        };
-      }
-
-      return {
-        tone: "positive" as const,
-        text: `Entran ${incoming}. Cubren ${Math.abs(current)} y quedan ${next} disponibles.`,
-      };
-    }
-
-    if (incoming <= 0) {
-      return null;
-    }
-
-    return {
-      tone: "neutral" as const,
-      text: `Entran ${incoming}. Queda en ${next}.`,
-    };
   };
 
   const getRowError = (currentStock: number | null, productId: string, variantId?: string | null) => {
@@ -2002,23 +1935,6 @@ function StockLoadingModal({
             <div style={{ fontSize: "11px", color: "var(--text-3)" }}>Ingresá el stock correcto total. Reemplaza el valor actual.</div>
           )}
         </div>
-
-        {mode === "sumar" && visibleNegativeCount > 0 && (
-          <div
-            style={{
-              margin: "0 20px",
-              fontSize: "11px",
-              color: "var(--amber)",
-              background: "rgba(245,158,11,0.08)",
-              border: "1px solid rgba(245,158,11,0.18)",
-              borderRadius: "10px",
-              padding: "8px 10px",
-              lineHeight: 1.5,
-            }}
-          >
-            Hay {visibleNegativeCount} item{visibleNegativeCount === 1 ? "" : "s"} en negativo. CargÃ¡ solo lo que entrÃ³ fÃ­sicamente y te mostramos cuÃ¡nto cubre el faltante y cuÃ¡nto queda disponible.
-          </div>
-        )}
 
         {/* Product list */}
         <div style={{ flex: 1, overflowY: "auto", padding: "8px 20px", display: "flex", flexDirection: "column", gap: "6px" }}>

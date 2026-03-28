@@ -3,8 +3,8 @@
 import { signIn } from "next-auth/react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
-  SUBSCRIPTION_CONTINUATION_LABEL,
-  SUBSCRIPTION_ENTRY_LABEL,
+  SUBSCRIPTION_CANCEL_LABEL,
+  SUBSCRIPTION_PROMO_LABEL,
 } from "@/lib/subscription-plan";
 
 const AUTH_TIMEOUT_MS = 15000;
@@ -22,6 +22,7 @@ interface EmployeeOption {
 type LoginExperienceProps = {
   initialMode?: LoginMode;
   initialAccessKey?: string;
+  initialRegister?: boolean;
 };
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs = AUTH_TIMEOUT_MS): Promise<T> {
@@ -60,10 +61,11 @@ function normalizeAccessKey(value: string) {
 export default function LoginExperience({
   initialMode = "owner",
   initialAccessKey = "",
+  initialRegister = false,
 }: LoginExperienceProps) {
   const [mode, setMode] = useState<LoginMode>(initialAccessKey ? "employee" : initialMode);
   const [loading, setLoading] = useState(false);
-  const [isRegister, setIsRegister] = useState(false);
+  const [isRegister, setIsRegister] = useState(initialRegister);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -373,7 +375,9 @@ export default function LoginExperience({
           <p style={{ fontSize: "13px", color: "var(--text-2)" }}>
             {mode === "employee"
               ? "Entrá con el codigo de tu sucursal y tu identidad."
-              : "Entrá y activá tu kiosco en minutos."}
+              : isRegister
+                ? "Crea tu cuenta y arranca en minutos."
+                : "Ingresa a tu kiosco."}
           </p>
         </div>
 
@@ -551,6 +555,25 @@ export default function LoginExperience({
           </div>
         ) : (
           <>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+              <button
+                type="button"
+                className={`btn btn-sm ${isRegister ? "btn-primary" : "btn-ghost"}`}
+                onClick={() => setIsRegister(true)}
+                disabled={loading}
+              >
+                Crear cuenta
+              </button>
+              <button
+                type="button"
+                className={`btn btn-sm ${isRegister ? "btn-ghost" : "btn-primary"}`}
+                onClick={() => setIsRegister(false)}
+                disabled={loading}
+              >
+                Ya tengo cuenta
+              </button>
+            </div>
+
             <form onSubmit={handleCredentialsSubmit} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
               <input
                 type="email"
@@ -644,15 +667,6 @@ export default function LoginExperience({
 
             <button
               className="btn-ghost"
-              onClick={() => setIsRegister(!isRegister)}
-              disabled={loading}
-              style={{ fontSize: "14px", color: "var(--text-3)" }}
-            >
-              {isRegister ? "Ya tenes cuenta? Ingresa" : "No tenes cuenta? Registrate"}
-            </button>
-
-            <button
-              className="btn-ghost"
               onClick={switchToEmployeeMode}
               disabled={loading}
               style={{ fontSize: "14px", color: "var(--primary)", fontWeight: 700 }}
@@ -663,9 +677,9 @@ export default function LoginExperience({
         )}
       </div>
 
-      <p style={{ fontSize: "13px", color: "var(--text-3)", textAlign: "center", maxWidth: "320px" }}>
-        {SUBSCRIPTION_ENTRY_LABEL}. Luego, {SUBSCRIPTION_CONTINUATION_LABEL}.
-      </p>
+        <p style={{ fontSize: "13px", color: "var(--text-3)", textAlign: "center", maxWidth: "320px" }}>
+          {SUBSCRIPTION_PROMO_LABEL} {SUBSCRIPTION_CANCEL_LABEL}
+        </p>
     </div>
   );
 }

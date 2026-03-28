@@ -7,9 +7,9 @@ import BackButton from "@/components/ui/BackButton";
 import ModalPortal from "@/components/ui/ModalPortal";
 import ThemeEditor from "@/components/ui/ThemeEditor";
 import {
-  SUBSCRIPTION_CONTINUATION_LABEL,
-  SUBSCRIPTION_ENTRY_LABEL,
+  SUBSCRIPTION_CANCEL_LABEL,
   SUBSCRIPTION_PRICE_LABEL,
+  SUBSCRIPTION_PROMO_LABEL,
 } from "@/lib/subscription-plan";
 
 interface Employee {
@@ -1114,10 +1114,10 @@ export default function ConfiguracionPage() {
               </div>
               <div>
                 <h2 style={{ fontSize: "32px", lineHeight: 1.05, fontWeight: 800, margin: 0, color: "#fff" }}>
-                  Configuracion clara para operar mejor
+                  Configuracion del kiosco
                 </h2>
                 <p style={{ margin: "10px 0 0", maxWidth: "740px", color: "rgba(255,255,255,0.78)", fontSize: "14px", lineHeight: 1.6 }}>
-                  Ordenamos identidad, reglas del negocio, cobros y equipo en bloques mas faciles de revisar para que cualquier cambio importante se encuentre rapido.
+                  Todo lo importante, en un solo lugar.
                 </p>
               </div>
             </div>
@@ -1180,7 +1180,7 @@ export default function ConfiguracionPage() {
             </span>
             <h2 style={{ margin: 0, fontSize: "26px", fontWeight: 800 }}>Identidad, caja y acceso</h2>
             <p style={{ margin: 0, color: "var(--text-3)", fontSize: "14px", lineHeight: 1.6 }}>
-              Los cambios de esta seccion afectan como se presenta la sucursal, como cobra y que reglas operativas tiene activas.
+              Imagen, tema, cobros y acceso.
             </p>
           </div>
 
@@ -1307,9 +1307,9 @@ export default function ConfiguracionPage() {
             <span style={{ fontSize: "11px", letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-3)", fontWeight: 700 }}>
               Catalogo y operacion
             </span>
-            <h2 style={{ margin: 0, fontSize: "26px", fontWeight: 800 }}>Reglas del negocio y estructura</h2>
+            <h2 style={{ margin: 0, fontSize: "26px", fontWeight: 800 }}>Catalogo y reglas</h2>
             <p style={{ margin: 0, color: "var(--text-3)", fontSize: "14px", lineHeight: 1.6 }}>
-              Acá quedan juntos los criterios de precios, vencimientos, stock, cobro y organización del kiosco para que sea más fácil auditar todo.
+              Precios, stock y vencimientos.
             </p>
           </div>
 
@@ -1335,9 +1335,9 @@ export default function ConfiguracionPage() {
             }}
           >
             <div>
-              <div style={{ fontWeight: 700, marginBottom: "4px" }}>Cómo se editan entre sucursales</div>
+              <div style={{ fontWeight: 700, marginBottom: "4px" }}>Modo de precios</div>
               <div style={{ fontSize: "13px", color: "var(--text-3)", lineHeight: 1.5 }}>
-                El stock siempre sigue siendo individual. Acá solo definís si precio y costo se comparten entre sucursales o si cada una los maneja por separado.
+                El stock no cambia. Solo define si precio y costo son compartidos o por sucursal.
               </div>
             </div>
 
@@ -1380,8 +1380,8 @@ export default function ConfiguracionPage() {
               }}
             >
               {pricingMode === "SHARED"
-                ? "Al guardar, esta sucursal se usa como base para copiar precio y costo al resto. El stock, mínimos y vencimientos no se modifican."
-                : "Al separar, no se borra nada: cada sucursal se queda con los últimos valores que ya tenía y desde ahí sigue editando localmente."}
+                ? "Al guardar, esta sucursal copia precio y costo al resto."
+                : "Al separar, cada sucursal conserva sus valores."}
             </div>
 
             <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
@@ -1421,9 +1421,9 @@ export default function ConfiguracionPage() {
           }}
         >
           <div>
-            <div style={{ fontWeight: 700, marginBottom: "4px" }}>Alerta de vencimiento próximo</div>
+            <div style={{ fontWeight: 700, marginBottom: "4px" }}>Alerta de vencimiento</div>
             <div style={{ fontSize: "13px", color: "var(--text-3)", lineHeight: 1.5 }}>
-              Define cuántos días antes querés ver el badge en el catálogo. El detalle fino sigue apareciendo solo dentro de Cargar stock.
+              Define cuántos dias antes queres ver la alerta.
             </div>
           </div>
 
@@ -1485,7 +1485,7 @@ export default function ConfiguracionPage() {
               <div style={{ flex: 1 }}>
                 <div style={{ fontWeight: 700, marginBottom: "4px" }}>Permitir venta con stock en 0</div>
                 <div style={{ fontSize: "13px", color: "var(--text-3)", lineHeight: 1.5 }}>
-                  Si la mercadería está físicamente en el local, el equipo podrá vender igual y el sistema dejará el faltante en negativo para regularizarlo después.
+                  Permite vender y dejar faltante en negativo.
                 </div>
               </div>
               <button
@@ -1906,9 +1906,9 @@ export default function ConfiguracionPage() {
             <span style={{ fontSize: "11px", letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-3)", fontWeight: 700 }}>
               Cuenta y equipo
             </span>
-            <h2 style={{ margin: 0, fontSize: "26px", fontWeight: 800 }}>Suscripcion, accesos y personas</h2>
+            <h2 style={{ margin: 0, fontSize: "26px", fontWeight: 800 }}>Cuenta y equipo</h2>
             <p style={{ margin: 0, color: "var(--text-3)", fontSize: "14px", lineHeight: 1.6 }}>
-              Unificamos lo administrativo y el equipo para que las tareas del owner queden en un solo lugar y sea mas rapido revisar estado y permisos.
+              Suscripcion, accesos y empleados.
             </p>
           </div>
 
@@ -1939,7 +1939,7 @@ export default function ConfiguracionPage() {
               <div style={{ fontSize: "20px", fontWeight: 800 }}>{SUBSCRIPTION_PRICE_LABEL}<span style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 500 }}> por mes</span></div>
             </div>
             <div style={{ fontSize: "12px", color: "var(--text-3)" }}>
-              {SUBSCRIPTION_ENTRY_LABEL}. Luego, {SUBSCRIPTION_CONTINUATION_LABEL}.
+              {SUBSCRIPTION_PROMO_LABEL} {SUBSCRIPTION_CANCEL_LABEL}
             </div>
             
             {subscription?.managementUrl && (

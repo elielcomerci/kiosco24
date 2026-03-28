@@ -7,8 +7,8 @@ import { isPlatformAdmin } from "@/lib/platform-admin";
 import { prisma } from "@/lib/prisma";
 import { syncSubscriptionFromMercadoPago } from "@/lib/subscription";
 import {
-  SUBSCRIPTION_CONTINUATION_LABEL,
-  SUBSCRIPTION_ENTRY_LABEL,
+  SUBSCRIPTION_CANCEL_LABEL,
+  SUBSCRIPTION_PROMO_LABEL,
 } from "@/lib/subscription-plan";
 import SubscriptionActions from "@/components/subscription/SubscriptionActions";
 import { redirect } from "next/navigation";
@@ -152,7 +152,7 @@ export default async function SubscriptionPage({
           </p>
           {session.user.role !== "EMPLOYEE" && (
             <p style={{ margin: 0, color: "var(--text-3)", lineHeight: 1.6, fontSize: "14px" }}>
-              {SUBSCRIPTION_ENTRY_LABEL}. Luego, {SUBSCRIPTION_CONTINUATION_LABEL}.
+              {SUBSCRIPTION_PROMO_LABEL} {SUBSCRIPTION_CANCEL_LABEL}
             </p>
           )}
         </div>

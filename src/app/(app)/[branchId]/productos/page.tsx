@@ -55,12 +55,14 @@ const EMOJIS = ["🧃", "🥤", "🍫", "🍬", "🍭", "🥜", "🧀", "🍞", 
 // ─── Product Form Modal ────────────────────────────────────────────────────────
 function ProductModal({
   product,
+  branchId,
   categories,
   onClose,
   onSave,
   onCategoriesChange,
 }: {
   product: Product | null;
+  branchId: string;
   categories: Category[];
   onClose: () => void;
   onSave: () => void;
@@ -128,7 +130,9 @@ function ProductModal({
   };
 
   const refreshCategories = async (selectedCategoryId?: string) => {
-    const catRes = await fetch("/api/categorias");
+    const catRes = await fetch("/api/categorias", {
+      headers: { "x-branch-id": branchId },
+    });
     if (!catRes.ok) {
       alert("No se pudieron actualizar las categorias.");
       return null;
@@ -159,7 +163,7 @@ function ProductModal({
 
     const res = await fetch("/api/categorias", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "x-branch-id": branchId },
       body: JSON.stringify({
         name: trimmedCategoryName,
         color: AUTO_SUGGESTED_CATEGORY_COLOR,
@@ -289,13 +293,13 @@ function ProductModal({
     if (isNew) {
       await fetch("/api/productos", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "x-branch-id": branchId },
         body: JSON.stringify(payload),
       });
     } else {
       await fetch(`/api/productos/${product.id}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "x-branch-id": branchId },
         body: JSON.stringify(payload),
       });
     }
@@ -307,7 +311,10 @@ function ProductModal({
   const handleDelete = async () => {
     if (!confirming) { setConfirming(true); return; }
     setLoading(true);
-    await fetch(`/api/productos/${product!.id}`, { method: "DELETE" });
+    await fetch(`/api/productos/${product!.id}`, {
+      method: "DELETE",
+      headers: { "x-branch-id": branchId },
+    });
     setLoading(false);
     onSave();
   };
@@ -1639,17 +1646,21 @@ export default function ProductosPage() {
   const fetchProducts = useCallback(async () => {
     setLoading(true);
     // We use showInGrid=false to get ALL products (including hidden)
-    const res = await fetch("/api/productos?all=1");
+    const res = await fetch("/api/productos?all=1", {
+      headers: { "x-branch-id": branchId },
+    });
     const data = await res.json();
     setProducts(Array.isArray(data) ? data : []);
     
     // Fetch categories para pasarlas al modal y mostrarlas
-    const catRes = await fetch("/api/categorias");
+    const catRes = await fetch("/api/categorias", {
+      headers: { "x-branch-id": branchId },
+    });
     const catData = await catRes.json();
     setCategories(Array.isArray(catData) ? catData : []);
 
     setLoading(false);
-  }, []);
+  }, [branchId]);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -1685,7 +1696,7 @@ export default function ProductosPage() {
     setLoading(true);
     await fetch("/api/productos", {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "x-branch-id": branchId },
       body: JSON.stringify({
         productIds: filtered.map((p) => p.id),
         percentage: percent,
@@ -1764,7 +1775,10 @@ export default function ProductosPage() {
     // Delete products one by one (could be batched later)
     await Promise.all(
       Array.from(selected).map((id) =>
-        fetch(`/api/productos/${id}`, { method: "DELETE" })
+        fetch(`/api/productos/${id}`, {
+          method: "DELETE",
+          headers: { "x-branch-id": branchId },
+        })
       )
     );
     setDeleting(false);
@@ -1780,7 +1794,7 @@ export default function ProductosPage() {
 
     await fetch("/api/productos", {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "x-branch-id": branchId },
       body: JSON.stringify({
         productIds: Array.from(selected),
         categoryId: bulkCategoryId || null, // null clears category
@@ -2150,6 +2164,7 @@ export default function ProductosPage() {
       {modal && (
         <ProductModal
           product={modal === "new" ? null : modal}
+          branchId={branchId}
           categories={categories}
           onClose={() => setModal(null)}
           onSave={() => { setModal(null); fetchProducts(); }}

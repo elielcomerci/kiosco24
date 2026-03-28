@@ -23,6 +23,9 @@ interface Variant {
   stock: number | null;
   availableStock?: number | null;
   minStock: number | null;
+  isNegativeStock?: boolean;
+  isOutOfStock?: boolean;
+  isBelowMinStock?: boolean;
   expiredQuantity?: number;
   expiringSoonQuantity?: number;
   nextExpiryOn?: string | null;
@@ -49,7 +52,11 @@ interface Product {
   minStock: number | null;
   showInGrid: boolean;
   readyForSale?: boolean;
+  allowNegativeStock?: boolean;
   platformProductId?: string | null;
+  isNegativeStock?: boolean;
+  isOutOfStock?: boolean;
+  isBelowMinStock?: boolean;
   expiredQuantity?: number;
   expiringSoonQuantity?: number;
   nextExpiryOn?: string | null;
@@ -156,6 +163,106 @@ function renderExpiryBadge(product: Product) {
     >
       {isExpired ? "Vencido" : "Próximo"}
       <span style={{ fontWeight: 600 }}>{label}</span>
+    </span>
+  );
+}
+
+function getProductStockBadge(product: Product) {
+  if (product.variants && product.variants.length > 0) {
+    const negativeCount = product.variants.filter((variant) => variant.isNegativeStock).length;
+    const outCount = product.variants.filter((variant) => variant.isOutOfStock).length;
+    const lowCount = product.variants.filter((variant) => variant.isBelowMinStock).length;
+
+    if (negativeCount > 0) {
+      return {
+        tone: "negative" as const,
+        label: `${negativeCount} variante${negativeCount === 1 ? "" : "s"} en negativo`,
+      };
+    }
+
+    if (outCount > 0) {
+      return {
+        tone: "out" as const,
+        label: `${outCount} variante${outCount === 1 ? "" : "s"} sin stock`,
+      };
+    }
+
+    if (lowCount > 0) {
+      return {
+        tone: "low" as const,
+        label: `${lowCount} variante${lowCount === 1 ? "" : "s"} bajo mínimo`,
+      };
+    }
+
+    return null;
+  }
+
+  if (product.isNegativeStock) {
+    return {
+      tone: "negative" as const,
+      label: `Stock negativo: ${product.availableStock ?? product.stock ?? 0}`,
+    };
+  }
+
+  if (product.isOutOfStock) {
+    return {
+      tone: "out" as const,
+      label: "Sin stock",
+    };
+  }
+
+  if (product.isBelowMinStock) {
+    return {
+      tone: "low" as const,
+      label: `Stock bajo${typeof product.minStock === "number" && product.minStock > 0 ? ` · mín. ${product.minStock}` : ""}`,
+    };
+  }
+
+  return null;
+}
+
+function renderStockBadge(product: Product) {
+  const badge = getProductStockBadge(product);
+  if (!badge) {
+    return null;
+  }
+
+  const palette =
+    badge.tone === "negative"
+      ? {
+          color: "var(--red)",
+          background: "rgba(239,68,68,0.12)",
+          border: "rgba(239,68,68,0.25)",
+        }
+      : badge.tone === "out"
+        ? {
+            color: "var(--text-2)",
+            background: "rgba(148,163,184,0.14)",
+            border: "rgba(148,163,184,0.22)",
+          }
+        : {
+            color: "var(--amber)",
+            background: "rgba(245,158,11,0.12)",
+            border: "rgba(245,158,11,0.25)",
+          };
+
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "6px",
+        marginTop: "6px",
+        padding: "4px 8px",
+        borderRadius: "999px",
+        fontSize: "11px",
+        fontWeight: 700,
+        color: palette.color,
+        background: palette.background,
+        border: `1px solid ${palette.border}`,
+      }}
+    >
+      {badge.label}
     </span>
   );
 }
@@ -2416,6 +2523,7 @@ export default function ProductosPage() {
           {filtered.map((p) => {
             const isSelected = selected.has(p.id);
             const expiryBadge = renderExpiryBadge(p);
+            const stockBadge = renderStockBadge(p);
             return selectionMode ? (
               // ─── Selection Mode Card
               <button
@@ -2466,11 +2574,12 @@ export default function ProductosPage() {
                       : p.stock;
                     
                     return totalStock !== null && (
-                      <div style={{ fontSize: "12px", color: totalStock > 0 ? "var(--text-3)" : "var(--red)" }}>
+                      <div style={{ fontSize: "12px", color: typeof totalStock === "number" && totalStock < 0 ? "var(--red)" : totalStock > 0 ? "var(--text-3)" : "var(--red)" }}>
                         Stock: {totalStock}
                       </div>
                     );
                   })()}
+                  {stockBadge}
                   {expiryBadge}
                 </div>
                 <div style={{ fontSize: "16px", fontWeight: 700, color: "var(--text-2)" }}>{formatARS(p.price)}</div>
@@ -2512,11 +2621,12 @@ export default function ProductosPage() {
                       : p.stock;
                     
                     return totalStock !== null && (
-                      <div style={{ fontSize: "12px", color: totalStock > 0 ? "var(--text-3)" : "var(--red)" }}>
+                      <div style={{ fontSize: "12px", color: typeof totalStock === "number" && totalStock < 0 ? "var(--red)" : totalStock > 0 ? "var(--text-3)" : "var(--red)" }}>
                         Stock: {totalStock}
                       </div>
                     );
                   })()}
+                  {stockBadge}
                   {expiryBadge}
                 </div>
                 <div style={{ fontSize: "18px", fontWeight: 700 }}>{formatARS(p.price)}</div>

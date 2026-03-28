@@ -97,6 +97,7 @@ model Branch {
   primaryColor       String?            @default("#22c55e")
   bgColor            String?            @default("#0f172a")
   ownerPin           String?
+  allowNegativeStock Boolean            @default(false)
   accessKey          String?            @unique // Código para vincular dispositivos
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt

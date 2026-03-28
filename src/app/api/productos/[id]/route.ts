@@ -81,6 +81,26 @@ function minDate(left: Date | null, right: Date | null) {
   return left < right ? left : right;
 }
 
+function getStockFlags(availableStock: number | null | undefined, minStock: number | null | undefined) {
+  if (typeof availableStock !== "number") {
+    return {
+      isNegativeStock: false,
+      isOutOfStock: false,
+      isBelowMinStock: false,
+    };
+  }
+
+  return {
+    isNegativeStock: availableStock < 0,
+    isOutOfStock: availableStock === 0,
+    isBelowMinStock:
+      typeof minStock === "number" &&
+      minStock > 0 &&
+      availableStock > 0 &&
+      availableStock <= minStock,
+  };
+}
+
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -132,9 +152,13 @@ export async function GET(
 
   const expirySettings = await prisma.branch.findUnique({
     where: { id: branchId },
-    select: { kiosco: { select: { expiryAlertDays: true } } },
+    select: {
+      allowNegativeStock: true,
+      kiosco: { select: { expiryAlertDays: true } },
+    },
   });
   const expiryAlertDays = expirySettings?.kiosco?.expiryAlertDays ?? 30;
+  const allowNegativeStock = expirySettings?.allowNegativeStock ?? false;
   const mappedInventory = inventory as ProductInventoryPayload;
   const baseSummary = summarizeTrackedLots(
     mappedInventory.stock,
@@ -144,20 +168,34 @@ export async function GET(
   const variants = mappedInventory.product.variants.map((variant) => {
     const variantLots = lots.filter((lot) => lot.variantId === variant.id);
     const variantSummary = summarizeTrackedLots(variant.inventory[0]?.stock ?? 0, variantLots, expiryAlertDays);
+    const availableStock = variantSummary.availableStock ?? (variant.inventory[0]?.stock ?? 0);
+    const variantFlags = getStockFlags(availableStock, variant.inventory[0]?.minStock ?? 0);
 
     return {
       id: variant.id,
       name: variant.name,
       barcode: variant.barcode,
       stock: variant.inventory[0]?.stock ?? 0,
-      availableStock: variantSummary.availableStock ?? (variant.inventory[0]?.stock ?? 0),
+      availableStock,
       minStock: variant.inventory[0]?.minStock ?? 0,
       expiredQuantity: variantSummary.expiredQuantity,
       expiringSoonQuantity: variantSummary.expiringSoonQuantity,
       nextExpiryOn: variantSummary.nextExpiryOn,
       hasTrackedLots: variantSummary.hasTrackedLots,
+      ...variantFlags,
     };
   });
+  const baseAvailableStock = baseSummary.availableStock ?? mappedInventory.stock;
+  const baseFlags = getStockFlags(baseAvailableStock, mappedInventory.minStock);
+  const aggregateFlags = variants.length > 0
+    ? {
+        isNegativeStock: variants.some((variant) => variant.isNegativeStock),
+        isOutOfStock: variants.length > 0 && variants.every((variant) => !variant.isNegativeStock && variant.isOutOfStock),
+        isBelowMinStock:
+          variants.some((variant) => variant.isBelowMinStock) ||
+          variants.some((variant) => !variant.isNegativeStock && variant.isOutOfStock),
+      }
+    : baseFlags;
 
   return NextResponse.json({
     id: mappedInventory.product.id,
@@ -175,9 +213,10 @@ export async function GET(
     price: mappedInventory.price,
     cost: mappedInventory.cost,
     stock: mappedInventory.stock,
-    availableStock: baseSummary.availableStock ?? mappedInventory.stock,
+    availableStock: baseAvailableStock,
     minStock: mappedInventory.minStock,
     showInGrid: mappedInventory.showInGrid,
+    allowNegativeStock,
     expiredQuantity: variants.length > 0
       ? variants.reduce((sum, variant) => sum + variant.expiredQuantity, 0)
       : baseSummary.expiredQuantity,
@@ -190,6 +229,7 @@ export async function GET(
     hasTrackedLots: variants.length > 0
       ? variants.some((variant) => variant.hasTrackedLots)
       : baseSummary.hasTrackedLots,
+    ...aggregateFlags,
     variants,
   });
 }

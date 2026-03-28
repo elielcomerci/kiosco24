@@ -134,7 +134,7 @@ export function summarizeTrackedLots(
     expiredQuantity,
     expiringSoonQuantity,
     nextExpiryOn,
-    availableStock: normalizedTotal === null ? null : Math.max(normalizedTotal - expiredQuantity, 0),
+    availableStock: normalizedTotal === null ? null : normalizedTotal - expiredQuantity,
     hasTrackedLots: trackedQuantity > 0,
     hasExpiredLots: expiredQuantity > 0,
   };

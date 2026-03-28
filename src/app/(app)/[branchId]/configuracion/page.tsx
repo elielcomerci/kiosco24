@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import BackButton from "@/components/ui/BackButton";
 import ThemeEditor from "@/components/ui/ThemeEditor";
 import {
@@ -33,6 +34,7 @@ interface Branch {
   logoUrl: string | null;
   primaryColor: string | null;
   bgColor: string | null;
+  allowNegativeStock: boolean;
   mpUserId: string | null;
   mpStoreId: string | null;
   mpPosId: string | null;
@@ -635,6 +637,8 @@ function CategoryModal({
 export default function ConfiguracionPage() {
   const { branchId } = useParams() as { branchId: string };
   const router = useRouter();
+  const { data: session } = useSession();
+  const isOwner = session?.user?.role === "OWNER";
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -665,6 +669,10 @@ export default function ConfiguracionPage() {
   const [savingBranch, setSavingBranch] = useState(false);
   const [branchSettingsMessage, setBranchSettingsMessage] = useState<string | null>(null);
   const [branchSettingsError, setBranchSettingsError] = useState<string | null>(null);
+  const [allowNegativeStock, setAllowNegativeStock] = useState(false);
+  const [savingStockRules, setSavingStockRules] = useState(false);
+  const [stockRulesMessage, setStockRulesMessage] = useState<string | null>(null);
+  const [stockRulesError, setStockRulesError] = useState<string | null>(null);
 
   // MercadoPago
   const [mpSetupLoading, setMpSetupLoading] = useState(false);
@@ -729,6 +737,7 @@ export default function ConfiguracionPage() {
     setEditLogoUrl(branch.logoUrl || "");
     setEditPrimaryColor(branch.primaryColor || "#22c55e");
     setEditBgColor(branch.bgColor || "#0f172a");
+    setAllowNegativeStock(branch.allowNegativeStock ?? false);
     setBranches((prev) => {
       if (prev.some((candidate) => candidate.id === branch.id)) {
         return prev.map((candidate) => (candidate.id === branch.id ? branch : candidate));
@@ -877,6 +886,39 @@ export default function ConfiguracionPage() {
       setExpirySettingsError("No se pudo guardar la alerta de vencimientos.");
     } finally {
       setSavingExpirySettings(false);
+    }
+  };
+
+  const handleSaveStockRules = async () => {
+    setStockRulesError(null);
+    setStockRulesMessage(null);
+    setSavingStockRules(true);
+
+    try {
+      const res = await fetch(`/api/branches/${branchId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "x-branch-id": branchId,
+        },
+        body: JSON.stringify({
+          allowNegativeStock,
+        }),
+      });
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        setStockRulesError(data?.error || "No se pudo guardar la regla de stock.");
+        return;
+      }
+
+      applyBranchDraft(data as Branch);
+      setStockRulesMessage("Regla de venta con stock bajo actualizada.");
+    } catch (error) {
+      console.error(error);
+      setStockRulesError("No se pudo guardar la regla de stock.");
+    } finally {
+      setSavingStockRules(false);
     }
   };
 
@@ -1104,6 +1146,95 @@ export default function ConfiguracionPage() {
           </div>
         </div>
       </section>
+
+      {isOwner && (
+        <section style={{ marginBottom: "32px" }}>
+          <div style={{ marginBottom: "12px" }}>
+            <h2 style={{ fontSize: "16px", fontWeight: 700, color: "var(--text-2)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              📦 Reglas de Stock
+            </h2>
+          </div>
+
+          <div
+            style={{
+              background: "var(--surface)",
+              border: "1px solid var(--border)",
+              borderRadius: "var(--radius)",
+              padding: "20px",
+              display: "flex",
+              flexDirection: "column",
+              gap: "14px",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center" }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 700, marginBottom: "4px" }}>Permitir venta con stock en 0</div>
+                <div style={{ fontSize: "13px", color: "var(--text-3)", lineHeight: 1.5 }}>
+                  Si la mercadería está físicamente en el local, el equipo podrá vender igual y el sistema dejará el faltante en negativo para regularizarlo después.
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAllowNegativeStock((prev) => !prev)}
+                disabled={loadingCurrentBranch || savingStockRules}
+                style={{
+                  width: "52px",
+                  height: "30px",
+                  borderRadius: "99px",
+                  border: "none",
+                  background: allowNegativeStock ? "var(--green)" : "var(--border)",
+                  position: "relative",
+                  cursor: loadingCurrentBranch || savingStockRules ? "not-allowed" : "pointer",
+                  flexShrink: 0,
+                }}
+              >
+                <span
+                  style={{
+                    position: "absolute",
+                    top: "3px",
+                    left: allowNegativeStock ? "25px" : "3px",
+                    width: "24px",
+                    height: "24px",
+                    borderRadius: "50%",
+                    background: "#fff",
+                    transition: "left 0.2s",
+                  }}
+                />
+              </button>
+            </div>
+
+            <div
+              style={{
+                padding: "12px 14px",
+                borderRadius: "12px",
+                background: allowNegativeStock ? "rgba(34,197,94,0.08)" : "var(--surface-2)",
+                border: `1px solid ${allowNegativeStock ? "rgba(34,197,94,0.2)" : "var(--border)"}`,
+                fontSize: "12px",
+                color: "var(--text-2)",
+                lineHeight: 1.5,
+              }}
+            >
+              {allowNegativeStock
+                ? "Activo: productos sin stock seguirán visibles en caja, con badges de Sin stock o Stock negativo."
+                : "Inactivo: la sucursal mantiene el comportamiento actual y no deja vender cuando el stock vendible llega a 0."}
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
+              <div style={{ fontSize: "12px", color: stockRulesError ? "var(--red)" : stockRulesMessage ? "var(--green)" : "var(--text-3)" }}>
+                {stockRulesError || stockRulesMessage || "Esta opción aplica solo a la sucursal actual."}
+              </div>
+              <button
+                className="btn btn-ghost btn-sm"
+                style={{ border: "1px solid var(--border)" }}
+                onClick={handleSaveStockRules}
+                disabled={loadingCurrentBranch || savingStockRules}
+              >
+                {savingStockRules ? "Guardando..." : "Guardar regla"}
+              </button>
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* MercadoPago Section */}
       <section style={{ marginBottom: "32px" }}>

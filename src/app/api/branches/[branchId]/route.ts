@@ -20,7 +20,7 @@ export async function PATCH(
 
   try {
     const { branchId } = await params;
-    const { logoUrl, primaryColor, bgColor, name } = await req.json();
+    const { logoUrl, primaryColor, bgColor, name, allowNegativeStock } = await req.json();
 
     const branch = await prisma.branch.findFirst({
       where: {
@@ -42,6 +42,7 @@ export async function PATCH(
         ...(logoUrl !== undefined && { logoUrl }),
         ...(primaryColor !== undefined && { primaryColor }),
         ...(bgColor !== undefined && { bgColor }),
+        ...(allowNegativeStock !== undefined && { allowNegativeStock: Boolean(allowNegativeStock) }),
       },
     });
 

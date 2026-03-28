@@ -71,6 +71,7 @@ async function buildSaleSnapshot(
   tx: Prisma.TransactionClient | typeof prisma,
   branchId: string,
   rawItems: RawSaleItem[],
+  allowNegativeStock: boolean,
 ) {
   if (!Array.isArray(rawItems) || rawItems.length === 0) {
     throw new RouteError("El ticket esta vacio.");
@@ -272,7 +273,7 @@ async function buildSaleSnapshot(
       });
       const availableStock = summarizeTrackedLots(inventory.stock, lots, 0).availableStock;
 
-      if (typeof availableStock === "number" && adjustment.requestedQuantity > availableStock) {
+      if (!allowNegativeStock && typeof availableStock === "number" && adjustment.requestedQuantity > availableStock) {
         throw new RouteError(
           `No hay stock suficiente para ${inventory.variant.product.name} - ${inventory.variant.name}.`,
           409,
@@ -299,7 +300,7 @@ async function buildSaleSnapshot(
       });
       const availableStock = summarizeTrackedLots(inventory.stock, lots, 0).availableStock;
 
-      if (typeof availableStock === "number" && adjustment.requestedQuantity > availableStock) {
+      if (!allowNegativeStock && typeof availableStock === "number" && adjustment.requestedQuantity > availableStock) {
         throw new RouteError(`No hay stock suficiente para ${inventory.product.name}.`, 409);
       }
     }
@@ -391,7 +392,18 @@ export async function POST(req: Request) {
         }
       }
 
-      const { saleItems, total, inventoryAdjustments } = await buildSaleSnapshot(tx, branchId, items);
+      const branchSettings = await tx.branch.findUnique({
+        where: { id: branchId },
+        select: { allowNegativeStock: true },
+      });
+      const allowNegativeStock = branchSettings?.allowNegativeStock ?? false;
+
+      const { saleItems, total, inventoryAdjustments } = await buildSaleSnapshot(
+        tx,
+        branchId,
+        items,
+        allowNegativeStock,
+      );
 
       if (receivedAmount !== null && receivedAmount < total) {
         throw new RouteError("El efectivo recibido no alcanza para cubrir el total.");
@@ -424,29 +436,47 @@ export async function POST(req: Request) {
         }
 
         if (adjustment.type === "variant") {
-          const updated = await tx.variantInventory.updateMany({
-            where: {
-              id: adjustment.id,
-              stock: { gte: adjustment.requestedQuantity },
-            },
-            data: {
-              stock: { decrement: adjustment.requestedQuantity },
-            },
-          });
+          const updated = allowNegativeStock
+            ? await tx.variantInventory.updateMany({
+                where: {
+                  id: adjustment.id,
+                },
+                data: {
+                  stock: { decrement: adjustment.requestedQuantity },
+                },
+              })
+            : await tx.variantInventory.updateMany({
+                where: {
+                  id: adjustment.id,
+                  stock: { gte: adjustment.requestedQuantity },
+                },
+                data: {
+                  stock: { decrement: adjustment.requestedQuantity },
+                },
+              });
 
           if (updated.count !== 1) {
             throw new RouteError("El stock de una variante cambio mientras registrabas la venta.", 409);
           }
         } else {
-          const updated = await tx.inventoryRecord.updateMany({
-            where: {
-              id: adjustment.id,
-              stock: { gte: adjustment.requestedQuantity },
-            },
-            data: {
-              stock: { decrement: adjustment.requestedQuantity },
-            },
-          });
+          const updated = allowNegativeStock
+            ? await tx.inventoryRecord.updateMany({
+                where: {
+                  id: adjustment.id,
+                },
+                data: {
+                  stock: { decrement: adjustment.requestedQuantity },
+                },
+              })
+            : await tx.inventoryRecord.updateMany({
+                where: {
+                  id: adjustment.id,
+                  stock: { gte: adjustment.requestedQuantity },
+                },
+                data: {
+                  stock: { decrement: adjustment.requestedQuantity },
+                },
+              });
 
           if (updated.count !== 1) {
             throw new RouteError("El stock de un producto cambio mientras registrabas la venta.", 409);

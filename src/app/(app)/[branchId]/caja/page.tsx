@@ -29,6 +29,9 @@ interface Variant {
   stock: number;
   availableStock?: number | null;
   minStock: number;
+  isNegativeStock?: boolean;
+  isOutOfStock?: boolean;
+  isBelowMinStock?: boolean;
 }
 
 interface Product {
@@ -43,6 +46,10 @@ interface Product {
   minStock?: number | null;
   showInGrid?: boolean;
   readyForSale?: boolean;
+  allowNegativeStock?: boolean;
+  isNegativeStock?: boolean;
+  isOutOfStock?: boolean;
+  isBelowMinStock?: boolean;
   categoryShowInGrid?: boolean;
   variants?: Variant[];
 }
@@ -127,6 +134,103 @@ function AddStockActionIcon() {
   );
 }
 
+function getVariantStockBadge(variant: Variant) {
+  if (variant.isNegativeStock) {
+    return {
+      label: "Stock negativo",
+      color: "var(--red)",
+      background: "rgba(239,68,68,0.12)",
+      border: "rgba(239,68,68,0.24)",
+    };
+  }
+
+  if (variant.isOutOfStock) {
+    return {
+      label: "Sin stock",
+      color: "var(--text-2)",
+      background: "rgba(148,163,184,0.14)",
+      border: "rgba(148,163,184,0.22)",
+    };
+  }
+
+  if (variant.isBelowMinStock) {
+    return {
+      label: "Stock bajo",
+      color: "var(--amber)",
+      background: "rgba(245,158,11,0.12)",
+      border: "rgba(245,158,11,0.24)",
+    };
+  }
+
+  return null;
+}
+
+function getProductStockBadge(product: Product) {
+  if (product.variants && product.variants.length > 0) {
+    const negativeCount = product.variants.filter((variant) => variant.isNegativeStock).length;
+    const outCount = product.variants.filter((variant) => variant.isOutOfStock).length;
+    const lowCount = product.variants.filter((variant) => variant.isBelowMinStock).length;
+
+    if (negativeCount > 0) {
+      return {
+        label: `${negativeCount} en negativo`,
+        color: "var(--red)",
+        background: "rgba(239,68,68,0.12)",
+        border: "rgba(239,68,68,0.24)",
+      };
+    }
+
+    if (outCount > 0) {
+      return {
+        label: `${outCount} sin stock`,
+        color: "var(--text-2)",
+        background: "rgba(148,163,184,0.14)",
+        border: "rgba(148,163,184,0.22)",
+      };
+    }
+
+    if (lowCount > 0) {
+      return {
+        label: `${lowCount} bajo mínimo`,
+        color: "var(--amber)",
+        background: "rgba(245,158,11,0.12)",
+        border: "rgba(245,158,11,0.24)",
+      };
+    }
+
+    return null;
+  }
+
+  if (product.isNegativeStock) {
+    return {
+      label: "Stock negativo",
+      color: "var(--red)",
+      background: "rgba(239,68,68,0.12)",
+      border: "rgba(239,68,68,0.24)",
+    };
+  }
+
+  if (product.isOutOfStock) {
+    return {
+      label: "Sin stock",
+      color: "var(--text-2)",
+      background: "rgba(148,163,184,0.14)",
+      border: "rgba(148,163,184,0.22)",
+    };
+  }
+
+  if (product.isBelowMinStock) {
+    return {
+      label: "Stock bajo",
+      color: "var(--amber)",
+      background: "rgba(245,158,11,0.12)",
+      border: "rgba(245,158,11,0.24)",
+    };
+  }
+
+  return null;
+}
+
 function createClientSaleId() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return crypto.randomUUID();
@@ -192,6 +296,7 @@ export default function CajaPage() {
   const manualSearchTimerRef = useRef<number | null>(null);
 
   const isOnline = useOnlineStatus();
+  const allowNegativeStock = products[0]?.allowNegativeStock ?? false;
   const total = ticket.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const cashSuggestions = getCashSuggestions(total);
   const shiftResponsibleName = activeShift?.employee?.name || activeShift?.employeeName || "Dueño";
@@ -594,7 +699,7 @@ export default function CajaPage() {
       const existing = prev.find((i) => (variant ? i.variantId === variant.id : i.productId === product.id));
       
       if (existing) {
-        if (existing.quantity >= targetStock) {
+        if (!allowNegativeStock && existing.quantity >= targetStock) {
           alert(`No hay más stock de ${targetName}`);
           return prev;
         }
@@ -605,7 +710,7 @@ export default function CajaPage() {
         );
       }
 
-      if (targetStock <= 0) {
+      if (!allowNegativeStock && targetStock <= 0) {
         alert(`${targetName} no tiene stock disponible`);
         return prev;
       }
@@ -618,13 +723,13 @@ export default function CajaPage() {
           name: targetName,
           price: product.price,
           quantity: 1,
-          maxStock: targetStock
+          maxStock: allowNegativeStock ? undefined : targetStock
         },
       ];
     });
 
     if (variant) setVariantSelector(null);
-  }, [activeShift, canOperateCurrentShift]);
+  }, [activeShift, allowNegativeStock, canOperateCurrentShift]);
 
   // Long press = -1
   const longPressTimer = useRef<NodeJS.Timeout | null>(null);
@@ -844,7 +949,7 @@ export default function CajaPage() {
       const newTicket = [...prev];
       const item = newTicket[index];
 
-      if (delta > 0 && item.maxStock !== undefined && item.quantity >= item.maxStock) {
+      if (!allowNegativeStock && delta > 0 && item.maxStock !== undefined && item.quantity >= item.maxStock) {
         alert("Stock máximo alcanzado");
         return prev;
       }
@@ -867,7 +972,7 @@ export default function CajaPage() {
     setTicket((prev) => {
       const newTicket = [...prev];
       const item = newTicket[index];
-      const clamped = item.maxStock !== undefined ? Math.min(parsed, item.maxStock) : parsed;
+      const clamped = !allowNegativeStock && item.maxStock !== undefined ? Math.min(parsed, item.maxStock) : parsed;
       newTicket[index] = { ...item, quantity: clamped };
       return newTicket;
     });
@@ -1168,6 +1273,7 @@ export default function CajaPage() {
           {filteredProducts.map((product, i) => {
             const inTicket = ticket.find((t) => t.productId === product.id && !t.variantId);
             const isSelected = i === selectedIndex && cajaSearch.length > 0;
+            const stockBadge = getProductStockBadge(product);
             
             return (
               <button
@@ -1188,6 +1294,23 @@ export default function CajaPage() {
               >
                 <span className="product-btn-name">{product.name}</span>
                 <span className="product-btn-price">{formatARS(product.price)}</span>
+                {stockBadge && (
+                  <span
+                    style={{
+                      marginTop: "6px",
+                      alignSelf: "flex-start",
+                      padding: "3px 7px",
+                      borderRadius: "999px",
+                      fontSize: "10px",
+                      fontWeight: 700,
+                      color: stockBadge.color,
+                      background: stockBadge.background,
+                      border: `1px solid ${stockBadge.border}`,
+                    }}
+                  >
+                    {stockBadge.label}
+                  </span>
+                )}
                 {inTicket && (
                   <span
                     style={{
@@ -1530,21 +1653,43 @@ export default function CajaPage() {
             <h2 style={{ fontSize: "18px", fontWeight: 700, marginBottom: "16px" }}>Seleccionar {variantSelector.product.name}</h2>
             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
               {variantSelector.product.variants?.map((v) => (
-                <button
-                  key={v.id}
-                  className="btn btn-ghost"
-                  style={{ justifyContent: "space-between", padding: "16px", borderRadius: "12px", background: "var(--surface-2)", border: "1px solid var(--border)" }}
-                  onClick={() => handleProductTap(variantSelector.product, v)}
-                  disabled={(v.availableStock ?? v.stock) <= 0}
-                >
-                  <div style={{ textAlign: "left" }}>
-                    <div style={{ fontWeight: 600 }}>{v.name}</div>
-                    <div style={{ fontSize: "12px", color: "var(--text-3)" }}>
-                      Stock: {v.availableStock ?? v.stock}
-                    </div>
-                  </div>
-                  <div style={{ fontWeight: 700, color: "var(--primary)" }}>{formatARS(variantSelector.product.price)}</div>
-                </button>
+                (() => {
+                  const stockBadge = getVariantStockBadge(v);
+                  return (
+                    <button
+                      key={v.id}
+                      className="btn btn-ghost"
+                      style={{ justifyContent: "space-between", padding: "16px", borderRadius: "12px", background: "var(--surface-2)", border: "1px solid var(--border)" }}
+                      onClick={() => handleProductTap(variantSelector.product, v)}
+                      disabled={!allowNegativeStock && (v.availableStock ?? v.stock) <= 0}
+                    >
+                      <div style={{ textAlign: "left" }}>
+                        <div style={{ fontWeight: 600 }}>{v.name}</div>
+                        <div style={{ fontSize: "12px", color: "var(--text-3)" }}>
+                          Stock: {v.availableStock ?? v.stock}
+                        </div>
+                        {stockBadge && (
+                          <div
+                            style={{
+                              marginTop: "6px",
+                              display: "inline-flex",
+                              padding: "3px 7px",
+                              borderRadius: "999px",
+                              fontSize: "10px",
+                              fontWeight: 700,
+                              color: stockBadge.color,
+                              background: stockBadge.background,
+                              border: `1px solid ${stockBadge.border}`,
+                            }}
+                          >
+                            {stockBadge.label}
+                          </div>
+                        )}
+                      </div>
+                      <div style={{ fontWeight: 700, color: "var(--primary)" }}>{formatARS(variantSelector.product.price)}</div>
+                    </button>
+                  );
+                })()
               ))}
             </div>
             <button className="btn btn-ghost" style={{ width: "100%", marginTop: "16px" }} onClick={() => setVariantSelector(null)}>

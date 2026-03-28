@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { auth } from "@/lib/auth";
 import { getBranchContext } from "@/lib/branch";
+import { DEFAULT_PRICING_MODE } from "@/lib/pricing-mode";
 import { prisma } from "@/lib/prisma";
 
 export async function POST(req: Request) {
@@ -16,7 +17,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "No branch selected" }, { status: 400 });
     }
 
-    // Solo owners pueden replicar catálogo entre sucursales
     if (session.user.role !== "OWNER") {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
@@ -48,17 +48,25 @@ export async function POST(req: Request) {
       }
     }
 
-    // Validar que todas las sucursales destino pertenecen al mismo kiosco
     const targetBranches = await prisma.branch.findMany({
       where: { id: { in: targetBranchIds }, kioscoId },
       select: { id: true },
     });
 
     if (targetBranches.length !== targetBranchIds.length) {
-      return NextResponse.json({ error: "Una o más sucursales destino no pertenecen a tu kiosco" }, { status: 403 });
+      return NextResponse.json(
+        { error: "Una o más sucursales destino no pertenecen a tu kiosco" },
+        { status: 403 },
+      );
     }
 
-    // Obtener las colisiones (productos que ya existen en destino)
+    const kioscoSettings = await prisma.kiosco.findUnique({
+      where: { id: kioscoId },
+      select: { pricingMode: true },
+    });
+    const effectiveCopyPrice =
+      (kioscoSettings?.pricingMode ?? DEFAULT_PRICING_MODE) === "SHARED" ? true : Boolean(copyPrice);
+
     const existingRecords = await prisma.inventoryRecord.findMany({
       where: { productId: { in: productIds }, branchId: { in: targetBranchIds } },
       include: {
@@ -67,18 +75,24 @@ export async function POST(req: Request) {
       },
     });
 
-    const pendingCollisions: { productId: string; branchId: string; productName: string; branchName: string; emoji: string | null }[] = [];
+    const pendingCollisions: {
+      productId: string;
+      branchId: string;
+      productName: string;
+      branchName: string;
+      emoji: string | null;
+    }[] = [];
     const safeOverwriteConfig = overwriteConfig || {};
 
-    for (const r of existingRecords) {
-      const key = `${r.productId}:${r.branchId}`;
+    for (const record of existingRecords) {
+      const key = `${record.productId}:${record.branchId}`;
       if (!safeOverwriteConfig[key]) {
         pendingCollisions.push({
-          productId: r.productId,
-          branchId: r.branchId,
-          productName: r.product.name,
-          emoji: r.product.emoji,
-          branchName: r.branch.name,
+          productId: record.productId,
+          branchId: record.branchId,
+          productName: record.product.name,
+          emoji: record.product.emoji,
+          branchName: record.branch.name,
         });
       }
     }
@@ -90,24 +104,33 @@ export async function POST(req: Request) {
       });
     }
 
-    // Si llegamos acá, o no había colisiones, o todas están resueltas en overwriteConfig
-    // Obtener los productos origen para precio y stock
     const sourceRecords = await prisma.inventoryRecord.findMany({
       where: { productId: { in: productIds }, branchId },
-      select: { productId: true, price: true, stock: true },
+      select: { productId: true, price: true, cost: true, stock: true },
     });
-    const priceByProduct = Object.fromEntries(sourceRecords.map((r) => [r.productId, r.price]));
-    const stockByProduct = Object.fromEntries(sourceRecords.map((r) => [r.productId, r.stock]));
+    const pricingByProduct = new Map(
+      sourceRecords.map((record) => [
+        record.productId,
+        {
+          price: record.price,
+          cost: record.cost,
+          stock: record.stock,
+        },
+      ]),
+    );
 
     let upsertCount = 0;
 
     for (const targetBranchId of targetBranchIds) {
       for (const productId of productIds) {
         const key = `${productId}:${targetBranchId}`;
-        const existingRecord = existingRecords.find((r) => r.productId === productId && r.branchId === targetBranchId);
-
-        const sourcePrice = priceByProduct[productId] ?? 0;
-        const sourceStock = stockByProduct[productId] ?? 0;
+        const existingRecord = existingRecords.find(
+          (record) => record.productId === productId && record.branchId === targetBranchId,
+        );
+        const sourcePricing = pricingByProduct.get(productId);
+        const sourcePrice = sourcePricing?.price ?? 0;
+        const sourceCost = sourcePricing?.cost ?? null;
+        const sourceStock = sourcePricing?.stock ?? 0;
 
         if (existingRecord) {
           const action = safeOverwriteConfig[key];
@@ -118,21 +141,21 @@ export async function POST(req: Request) {
             await prisma.inventoryRecord.update({
               where: { id: existingRecord.id },
               data: {
-                ...(copyPrice && { price: sourcePrice }),
+                ...(effectiveCopyPrice && { price: sourcePrice, cost: sourceCost }),
                 ...(copyStock && { stock: sourceStock }),
               },
             });
             upsertCount++;
           }
         } else {
-          // No existe: crear
           await prisma.inventoryRecord.create({
             data: {
               productId,
               branchId: targetBranchId,
               stock: copyStock ? sourceStock : 0,
               showInGrid: true,
-              price: copyPrice ? sourcePrice : 0,
+              price: effectiveCopyPrice ? sourcePrice : 0,
+              cost: effectiveCopyPrice ? sourceCost : null,
             },
           });
           upsertCount++;

@@ -78,6 +78,8 @@ type ProductModalSavePayload = {
   hasVariants?: boolean;
 };
 
+type PricingMode = "SHARED" | "BRANCH";
+
 type StockModalPreset = {
   initialSearch?: string;
   initialMode?: "sumar" | "corregir";
@@ -271,6 +273,7 @@ function renderStockBadge(product: Product) {
 function ProductModal({
   product,
   branchId,
+  pricingMode,
   categories,
   onClose,
   onSave,
@@ -278,6 +281,7 @@ function ProductModal({
 }: {
   product: Product | null;
   branchId: string;
+  pricingMode: PricingMode;
   categories: Category[];
   onClose: () => void;
   onSave: (payload?: ProductModalSavePayload) => void;
@@ -914,7 +918,12 @@ function ProductModal({
               lineHeight: 1.5,
             }}
           >
-            Este producto queda fuera de la caja hasta que completes precio, costo unitario y stock.
+            <div>Este producto queda fuera de la caja hasta que completes precio, costo unitario y stock.</div>
+            <div style={{ marginTop: "6px" }}>
+              {pricingMode === "SHARED"
+                ? "Precio y costo se sincronizan en todas las sucursales. El stock sigue siendo individual por sucursal."
+                : "Precio y costo se editan solo para esta sucursal. Cambiar de modo no borra los valores ya cargados."}
+            </div>
           </div>
 
           {/* Price & Cost */}
@@ -1891,24 +1900,32 @@ type Collision = { productId: string; branchId: string; productName: string; bra
 function ReplicarModal({
   products,
   branches,
+  pricingMode,
   sourceBranchId,
   onClose,
   onDone,
 }: {
   products: Product[];
   branches: { id: string; name: string }[];
+  pricingMode: PricingMode;
   sourceBranchId: string;
   onClose: () => void;
   onDone: () => void;
 }) {
   const [selectedBranches, setSelectedBranches] = useState<Set<string>>(new Set());
-  const [copyPrice, setCopyPrice] = useState(true);
+  const [copyPrice, setCopyPrice] = useState(pricingMode === "SHARED");
   const [copyStock, setCopyStock] = useState(false);
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
 
   const [collisions, setCollisions] = useState<Collision[]>([]);
   const [overwriteConfig, setOverwriteConfig] = useState<Record<string, "overwrite" | "skip">>({});
+
+  useEffect(() => {
+    if (pricingMode === "SHARED") {
+      setCopyPrice(true);
+    }
+  }, [pricingMode]);
 
   const toggleBranch = (id: string) => {
     setSelectedBranches((prev) => {
@@ -1928,7 +1945,7 @@ function ReplicarModal({
         body: JSON.stringify({
           productIds: products.map((p) => p.id),
           targetBranchIds: Array.from(selectedBranches),
-          copyPrice,
+          copyPrice: pricingMode === "SHARED" ? true : copyPrice,
           copyStock,
           overwriteConfig: Object.keys(overwriteConfig).length > 0 ? overwriteConfig : undefined,
         }),
@@ -2040,8 +2057,19 @@ function ReplicarModal({
 
             <div style={{ display: "flex", flexDirection: "column", gap: "8px", padding: "12px 0" }}>
               <label style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }}>
-                <input type="checkbox" checked={copyPrice} onChange={(e) => setCopyPrice(e.target.checked)} />
-                <span style={{ fontSize: "14px", fontWeight: 500 }}>{copyPrice ? "✅ Sincronizar" : "❌ No sincronizar"} precio actual</span>
+                <input
+                  type="checkbox"
+                  checked={pricingMode === "SHARED" ? true : copyPrice}
+                  onChange={(e) => setCopyPrice(e.target.checked)}
+                  disabled={pricingMode === "SHARED"}
+                />
+                <span style={{ fontSize: "14px", fontWeight: 500 }}>
+                  {pricingMode === "SHARED"
+                    ? "✅ Precio y costo actuales obligatorios porque el kiosco usa precios compartidos"
+                    : copyPrice
+                      ? "✅ Sincronizar precio y costo actuales"
+                      : "❌ No sincronizar precio y costo actuales"}
+                </span>
               </label>
               
               <label style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }}>
@@ -2239,6 +2267,7 @@ export default function ProductosPage() {
   interface Branch { id: string; name: string; }
   const [branches, setBranches] = useState<Branch[]>([]);
   const [branchesLoaded, setBranchesLoaded] = useState(false);
+  const [pricingMode, setPricingMode] = useState<PricingMode>("BRANCH");
   const [showStockModal, setShowStockModal] = useState(false);
   const [stockModalPreset, setStockModalPreset] = useState<StockModalPreset | null>(null);
   const [showReplicarModal, setShowReplicarModal] = useState(false);
@@ -2250,7 +2279,7 @@ export default function ProductosPage() {
       const res = await fetch("/api/branches", { headers: { "x-branch-id": branchId } });
       if (res.ok) {
         const data = await res.json();
-        setBranches(Array.isArray(data) ? data : []);
+        setBranches(Array.isArray(data?.branches) ? data.branches : []);
       }
     } finally {
       setBranchesLoaded(true);
@@ -2277,6 +2306,14 @@ export default function ProductosPage() {
     });
     const catData = await catRes.json();
     setCategories(Array.isArray(catData) ? catData : []);
+
+    const settingsRes = await fetch("/api/kiosco/settings", {
+      headers: { "x-branch-id": branchId },
+    });
+    if (settingsRes.ok) {
+      const settingsData = await settingsRes.json();
+      setPricingMode(settingsData?.pricingMode === "SHARED" ? "SHARED" : "BRANCH");
+    }
 
     setLoading(false);
   }, [branchId]);
@@ -2763,6 +2800,11 @@ export default function ProductosPage() {
             <p style={{ color: "var(--text-2)", fontSize: "14px" }}>
               Aplica un % a los {filtered.length} productos filtrados. Los nuevos precios se redondean a los $10.
             </p>
+            {pricingMode === "SHARED" && (
+              <p style={{ color: "var(--text-3)", fontSize: "12px", marginTop: "-4px" }}>
+                Como este kiosco usa precios compartidos, el cambio se replica a todas las sucursales. El stock no se toca.
+              </p>
+            )}
 
             <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
               <input
@@ -2813,6 +2855,7 @@ export default function ProductosPage() {
         <ProductModal
           product={modal === "new" ? null : modal}
           branchId={branchId}
+          pricingMode={pricingMode}
           categories={categories}
           onClose={() => setModal(null)}
           onSave={handleProductModalSave}
@@ -2846,6 +2889,7 @@ export default function ProductosPage() {
         <ReplicarModal
           products={selectionMode && selected.size > 0 ? products.filter(p => selected.has(p.id)) : filtered}
           branches={branches.filter(b => b.id !== branchId)}
+          pricingMode={pricingMode}
           sourceBranchId={branchId}
           onClose={() => setShowReplicarModal(false)}
           onDone={() => { setShowReplicarModal(false); fetchProducts(); }}

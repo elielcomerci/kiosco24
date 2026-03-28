@@ -41,6 +41,8 @@ interface Branch {
   accessKey: string | null;
 }
 
+type PricingMode = "SHARED" | "BRANCH";
+
 // ─── Employee Form Modal ───────────────────────────────────────────────────────
 function EmployeeModal({
   branchId,
@@ -393,9 +395,13 @@ function EmployeeModal({
 
 // ─── Branch Form Modal ─────────────────────────────────────────────────────────
 function BranchModal({
+  branchId,
+  pricingMode,
   onClose,
   onSave,
 }: {
+  branchId: string;
+  pricingMode: PricingMode;
   onClose: () => void;
   onSave: () => void;
 }) {
@@ -409,8 +415,14 @@ function BranchModal({
     // Create new branch
     await fetch("/api/branches", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name }),
+      headers: {
+        "Content-Type": "application/json",
+        "x-branch-id": branchId,
+      },
+      body: JSON.stringify({
+        name,
+        sourceBranchId: branchId,
+      }),
     });
     
     setLoading(false);
@@ -441,7 +453,9 @@ function BranchModal({
           Nueva Sucursal
         </h2>
         <p style={{ fontSize: "13px", color: "var(--text-3)", marginBottom: "12px", lineHeight: "1.4" }}>
-          Tu catálogo actual se va a copiar a la nueva sucursal con el <strong style={{color: "var(--text)"}}>stock y precio en 0</strong> para que puedas configurarlo localmente.
+          {pricingMode === "SHARED"
+            ? <>Tu catálogo actual se va a copiar a la nueva sucursal con el <strong style={{ color: "var(--text)" }}>mismo precio y costo</strong>, pero con <strong style={{ color: "var(--text)" }}>stock en 0</strong> porque sigue siendo individual.</>
+            : <>Tu catálogo actual se va a copiar a la nueva sucursal con <strong style={{ color: "var(--text)" }}>stock y precio en 0</strong> para que puedas configurarlo localmente.</>}
         </p>
 
         <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
@@ -653,9 +667,14 @@ export default function ConfiguracionPage() {
 
   const [subscription, setSubscription] = useState<{status: string, managementUrl: string | null} | null>(null);
   const [expiryAlertDays, setExpiryAlertDays] = useState("30");
+  const [pricingMode, setPricingMode] = useState<PricingMode>("BRANCH");
+  const [savedPricingMode, setSavedPricingMode] = useState<PricingMode>("BRANCH");
   const [savingExpirySettings, setSavingExpirySettings] = useState(false);
   const [expirySettingsMessage, setExpirySettingsMessage] = useState<string | null>(null);
   const [expirySettingsError, setExpirySettingsError] = useState<string | null>(null);
+  const [savingPricingSettings, setSavingPricingSettings] = useState(false);
+  const [pricingSettingsMessage, setPricingSettingsMessage] = useState<string | null>(null);
+  const [pricingSettingsError, setPricingSettingsError] = useState<string | null>(null);
 
   const [employeeModal, setEmployeeModal] = useState<"new" | Employee | null>(null);
   const [branchModal, setBranchModal] = useState(false);
@@ -794,6 +813,9 @@ export default function ConfiguracionPage() {
       if (res.ok) {
         const data = await res.json();
         setExpiryAlertDays(String(data?.expiryAlertDays ?? 30));
+        const nextPricingMode = data?.pricingMode === "SHARED" ? "SHARED" : "BRANCH";
+        setPricingMode(nextPricingMode);
+        setSavedPricingMode(nextPricingMode);
       }
     } finally {
       setLoadingExpirySettings(false);
@@ -886,6 +908,56 @@ export default function ConfiguracionPage() {
       setExpirySettingsError("No se pudo guardar la alerta de vencimientos.");
     } finally {
       setSavingExpirySettings(false);
+    }
+  };
+
+  const handleSavePricingSettings = async () => {
+    setPricingSettingsError(null);
+    setPricingSettingsMessage(null);
+
+    const isSwitchingToShared = pricingMode === "SHARED" && savedPricingMode !== "SHARED";
+    if (
+      isSwitchingToShared &&
+      !window.confirm(
+        "Vamos a usar esta sucursal como base para copiar precio y costo al resto. El stock no se toca. ¿Continuar?",
+      )
+    ) {
+      return;
+    }
+
+    setSavingPricingSettings(true);
+
+    try {
+      const res = await fetch("/api/kiosco/settings", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "x-branch-id": branchId,
+        },
+        body: JSON.stringify({
+          pricingMode,
+          sourceBranchId: branchId,
+        }),
+      });
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        setPricingSettingsError(data?.error || "No se pudo guardar el modo de precios.");
+        return;
+      }
+
+      setPricingMode(data?.pricingMode === "SHARED" ? "SHARED" : "BRANCH");
+      setSavedPricingMode(data?.pricingMode === "SHARED" ? "SHARED" : "BRANCH");
+      setPricingSettingsMessage(
+        data?.pricingMode === "SHARED"
+          ? "Precios compartidos activados. Esta sucursal quedó como base."
+          : "Precios separados por sucursal activados. Se conservaron los valores actuales.",
+      );
+    } catch (error) {
+      console.error(error);
+      setPricingSettingsError("No se pudo guardar el modo de precios.");
+    } finally {
+      setSavingPricingSettings(false);
     }
   };
 
@@ -1085,6 +1157,92 @@ export default function ConfiguracionPage() {
           )}
         </div>
       </section>
+
+      {isOwner && (
+        <section style={{ marginBottom: "32px" }}>
+          <div style={{ marginBottom: "12px" }}>
+            <h2 style={{ fontSize: "16px", fontWeight: 700, color: "var(--text-2)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              💸 Precios
+            </h2>
+          </div>
+
+          <div
+            style={{
+              background: "var(--surface)",
+              border: "1px solid var(--border)",
+              borderRadius: "var(--radius)",
+              padding: "20px",
+              display: "flex",
+              flexDirection: "column",
+              gap: "14px",
+            }}
+          >
+            <div>
+              <div style={{ fontWeight: 700, marginBottom: "4px" }}>Cómo se editan entre sucursales</div>
+              <div style={{ fontSize: "13px", color: "var(--text-3)", lineHeight: 1.5 }}>
+                El stock siempre sigue siendo individual. Acá solo definís si precio y costo se comparten entre sucursales o si cada una los maneja por separado.
+              </div>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+              <button
+                type="button"
+                className={`btn ${pricingMode === "SHARED" ? "btn-green" : "btn-ghost"}`}
+                style={{ border: "1px solid var(--border)", minHeight: "70px", justifyContent: "flex-start", textAlign: "left", flexDirection: "column", alignItems: "flex-start" }}
+                onClick={() => setPricingMode("SHARED")}
+                disabled={loadingExpirySettings || savingPricingSettings}
+              >
+                <span style={{ fontWeight: 700 }}>Iguales en todas</span>
+                <span style={{ fontSize: "12px", color: pricingMode === "SHARED" ? "rgba(255,255,255,0.9)" : "var(--text-3)" }}>
+                  Editás una vez y se copia precio/costo al resto.
+                </span>
+              </button>
+              <button
+                type="button"
+                className={`btn ${pricingMode === "BRANCH" ? "btn-green" : "btn-ghost"}`}
+                style={{ border: "1px solid var(--border)", minHeight: "70px", justifyContent: "flex-start", textAlign: "left", flexDirection: "column", alignItems: "flex-start" }}
+                onClick={() => setPricingMode("BRANCH")}
+                disabled={loadingExpirySettings || savingPricingSettings}
+              >
+                <span style={{ fontWeight: 700 }}>Separados por sucursal</span>
+                <span style={{ fontSize: "12px", color: pricingMode === "BRANCH" ? "rgba(255,255,255,0.9)" : "var(--text-3)" }}>
+                  Cada sucursal conserva y edita sus valores propios.
+                </span>
+              </button>
+            </div>
+
+            <div
+              style={{
+                padding: "12px 14px",
+                borderRadius: "12px",
+                background: pricingMode === "SHARED" ? "rgba(34,197,94,0.08)" : "var(--surface-2)",
+                border: `1px solid ${pricingMode === "SHARED" ? "rgba(34,197,94,0.2)" : "var(--border)"}`,
+                fontSize: "12px",
+                color: "var(--text-2)",
+                lineHeight: 1.5,
+              }}
+            >
+              {pricingMode === "SHARED"
+                ? "Al guardar, esta sucursal se usa como base para copiar precio y costo al resto. El stock, mínimos y vencimientos no se modifican."
+                : "Al separar, no se borra nada: cada sucursal se queda con los últimos valores que ya tenía y desde ahí sigue editando localmente."}
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
+              <div style={{ fontSize: "12px", color: pricingSettingsError ? "var(--red)" : pricingSettingsMessage ? "var(--green)" : "var(--text-3)" }}>
+                {pricingSettingsError || pricingSettingsMessage || "Esto aplica a todo el kiosco, no solo a la sucursal actual."}
+              </div>
+              <button
+                className="btn btn-ghost"
+                style={{ border: "1px solid var(--border)" }}
+                onClick={handleSavePricingSettings}
+                disabled={loadingExpirySettings || savingPricingSettings || pricingMode === savedPricingMode}
+              >
+                {savingPricingSettings ? "Guardando..." : "Guardar modo de precios"}
+              </button>
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* Expiry Alerts Section */}
       <section style={{ marginBottom: "32px" }}>
@@ -1742,6 +1900,8 @@ export default function ConfiguracionPage() {
 
       {branchModal && (
         <BranchModal
+          branchId={branchId}
+          pricingMode={pricingMode}
           onClose={handleBranchModalClose}
           onSave={handleBranchModalSave}
         />

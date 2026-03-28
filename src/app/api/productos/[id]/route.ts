@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { getBranchContext } from "@/lib/branch";
 import { hasBlockingStockLots, summarizeTrackedLots } from "@/lib/inventory-expiry";
+import { DEFAULT_PRICING_MODE, syncSharedPricingFromBranch } from "@/lib/pricing-mode";
 import { Prisma, prisma } from "@/lib/prisma";
 import {
   findApprovedPlatformProductByBarcode,
@@ -423,6 +424,11 @@ export async function PATCH(
   const platformProduct = lookupBarcode
     ? await findApprovedPlatformProductByBarcode(lookupBarcode)
     : null;
+  const kioscoSettings = await prisma.kiosco.findUnique({
+    where: { id: kioscoId },
+    select: { pricingMode: true },
+  });
+  const pricingMode = kioscoSettings?.pricingMode ?? DEFAULT_PRICING_MODE;
 
   await prisma.product.update({
     where: { id },
@@ -533,6 +539,14 @@ export async function PATCH(
       ...(showInGrid !== undefined && { showInGrid }),
     },
   });
+
+  if (pricingMode === "SHARED" && (price !== undefined || cost !== undefined)) {
+    await syncSharedPricingFromBranch(prisma, {
+      kioscoId,
+      sourceBranchId: branchId,
+      productIds: [id],
+    });
+  }
 
   if (
     (effectiveBarcode || normalizedVariants.some((variant) => variant.barcode)) &&

@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { getBranchContext } from "@/lib/branch";
 import { summarizeTrackedLots } from "@/lib/inventory-expiry";
+import { DEFAULT_PRICING_MODE, syncSharedPricingFromBranch } from "@/lib/pricing-mode";
 import { Prisma, prisma } from "@/lib/prisma";
 import {
   findApprovedPlatformProductByBarcode,
@@ -307,6 +308,11 @@ export async function POST(req: Request) {
 
   try {
     const normalizedVariants = normalizeVariantPayload(variants);
+    const kioscoSettings = await prisma.kiosco.findUnique({
+      where: { id: kioscoId },
+      select: { pricingMode: true },
+    });
+    const pricingMode = kioscoSettings?.pricingMode ?? DEFAULT_PRICING_MODE;
     const resolvedCategory = await resolveCategorySelection(kioscoId, categoryId);
     const normalizedBarcode =
       normalizedVariants.length > 0 || typeof barcode !== "string" ? null : barcode.trim() || null;
@@ -353,8 +359,18 @@ export async function POST(req: Request) {
         data: branches.map((branch) => ({
           productId: product.id,
           branchId: branch.id,
-          price: typeof price === "number" ? price : 0,
-          cost: typeof cost === "number" ? cost : null,
+          price:
+            pricingMode === "SHARED"
+              ? (typeof price === "number" ? price : 0)
+              : branch.id === branchId
+                ? (typeof price === "number" ? price : 0)
+                : 0,
+          cost:
+            pricingMode === "SHARED"
+              ? (typeof cost === "number" ? cost : null)
+              : branch.id === branchId
+                ? (typeof cost === "number" ? cost : null)
+                : null,
           stock: branch.id === branchId ? (typeof stock === "number" ? stock : 0) : 0,
           minStock: branch.id === branchId ? (typeof minStock === "number" ? minStock : 0) : 0,
           showInGrid: typeof showInGrid === "boolean" ? showInGrid : true,
@@ -431,8 +447,8 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { branchId } = await getBranchContext(req, session.user.id);
-  if (!branchId) {
+  const { branchId, kioscoId } = await getBranchContext(req, session.user.id);
+  if (!branchId || !kioscoId) {
     return NextResponse.json({ error: "No branch" }, { status: 404 });
   }
 
@@ -448,6 +464,11 @@ export async function PATCH(req: Request) {
   }
 
   if (Number.isFinite(percentageValue) && percentageValue !== 0) {
+    const kioscoSettings = await prisma.kiosco.findUnique({
+      where: { id: kioscoId },
+      select: { pricingMode: true },
+    });
+    const pricingMode = kioscoSettings?.pricingMode ?? DEFAULT_PRICING_MODE;
     const multiplier = 1 + percentageValue / 100;
     const inventoryToUpdate = await prisma.inventoryRecord.findMany({
       where: { branchId, productId: { in: normalizedProductIds } },
@@ -461,6 +482,14 @@ export async function PATCH(req: Request) {
       }),
     );
     await prisma.$transaction(transactions);
+
+    if (pricingMode === "SHARED") {
+      await syncSharedPricingFromBranch(prisma, {
+        kioscoId,
+        sourceBranchId: branchId,
+        productIds: normalizedProductIds,
+      });
+    }
   }
 
   if (categoryId !== undefined) {

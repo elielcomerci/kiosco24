@@ -52,6 +52,12 @@ enum InvoiceStatus {
   FAILED
 }
 
+enum TicketPrintMode {
+  STANDARD
+  THERMAL_58
+  THERMAL_80
+}
+
 model Account {
   id                String  @id @default(cuid())
   userId            String
@@ -183,6 +189,7 @@ model TicketSettings {
   showFooterText Boolean  @default(true)
   footerText     String?  @default("¡Gracias por su compra!")
   orderLink      String?
+  printMode      TicketPrintMode @default(STANDARD)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 }

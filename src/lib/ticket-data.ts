@@ -52,6 +52,7 @@ export function buildTicketPreviewData(
     saleId: sale.id,
     ticketNumber: formatTicketNumberValue(sale.ticketNumber),
     issuedAt: (sale.ticketIssuedAt ?? sale.createdAt).toISOString(),
+    printMode: snapshot.printMode,
     branchName: snapshot.branchName,
     branchAddress: snapshot.branchAddress,
     branchPhone: snapshot.branchPhone,

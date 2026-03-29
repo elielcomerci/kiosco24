@@ -53,6 +53,22 @@
   font-family: "Inter", "Segoe UI", sans-serif;
 }
 
+.ticket-preview--standard {
+  width: min(100%, 360px);
+}
+
+.ticket-preview--thermal_80 {
+  width: min(100%, 320px);
+  font-family: "Courier New", monospace;
+}
+
+.ticket-preview--thermal_58 {
+  width: min(100%, 240px);
+  font-family: "Courier New", monospace;
+  padding: 18px 14px;
+  gap: 10px;
+}
+
 .ticket-preview--compact {
   transform: scale(0.96);
   transform-origin: top center;
@@ -205,7 +221,7 @@
   }
 
   .ticket-preview {
-    width: min(100%, 76mm);
+    width: min(100%, 96mm);
     max-width: none;
     border: none;
     border-radius: 0;
@@ -215,8 +231,21 @@
     font-family: "Courier New", monospace;
   }
 
+  .ticket-preview--thermal_80 {
+    width: min(100%, 76mm);
+  }
+
+  .ticket-preview--thermal_58 {
+    width: min(100%, 54mm);
+    font-size: 10px;
+  }
+
   .ticket-preview__branch {
     font-size: 16px;
+  }
+
+  .ticket-preview--thermal_58 .ticket-preview__branch {
+    font-size: 13px;
   }
 
   .ticket-preview__meta-line,
@@ -227,13 +256,30 @@
     font-size: 11px;
   }
 
+  .ticket-preview--thermal_58 .ticket-preview__meta-line,
+  .ticket-preview--thermal_58 .ticket-preview__row,
+  .ticket-preview--thermal_58 .ticket-preview__item-top,
+  .ticket-preview--thermal_58 .ticket-preview__item-bottom,
+  .ticket-preview--thermal_58 .ticket-preview__footer {
+    font-size: 9px;
+  }
+
   .ticket-preview__row--total {
     font-size: 14px;
+  }
+
+  .ticket-preview--thermal_58 .ticket-preview__row--total {
+    font-size: 12px;
   }
 
   .ticket-preview__logo {
     width: 48px;
     height: 48px;
+  }
+
+  .ticket-preview--thermal_58 .ticket-preview__logo {
+    width: 36px;
+    height: 36px;
   }
 
   .ticket-modal-shell {

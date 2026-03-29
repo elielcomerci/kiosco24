@@ -1,6 +1,9 @@
 import type { Prisma } from "@/lib/prisma";
 
-export const DEFAULT_TICKET_FOOTER_TEXT = "¡Gracias por su compra!";
+export const DEFAULT_TICKET_FOOTER_TEXT = "Gracias por su compra!";
+export const TICKET_PRINT_MODES = ["STANDARD", "THERMAL_58", "THERMAL_80"] as const;
+
+export type TicketPrintMode = (typeof TICKET_PRINT_MODES)[number];
 
 export type TicketSettingsShape = {
   showLogo: boolean;
@@ -9,6 +12,7 @@ export type TicketSettingsShape = {
   showFooterText: boolean;
   footerText: string | null;
   orderLink: string | null;
+  printMode: TicketPrintMode;
 };
 
 export type TicketMetaSnapshot = {
@@ -22,6 +26,7 @@ export type TicketMetaSnapshot = {
   showFooterText: boolean;
   footerText: string | null;
   orderLink: string | null;
+  printMode: TicketPrintMode;
 };
 
 export function getDefaultTicketSettings(): TicketSettingsShape {
@@ -32,7 +37,18 @@ export function getDefaultTicketSettings(): TicketSettingsShape {
     showFooterText: true,
     footerText: DEFAULT_TICKET_FOOTER_TEXT,
     orderLink: null,
+    printMode: "STANDARD",
   };
+}
+
+export function isTicketPrintMode(value: unknown): value is TicketPrintMode {
+  return typeof value === "string" && TICKET_PRINT_MODES.includes(value as TicketPrintMode);
+}
+
+export function getTicketPrintModeLabel(mode: TicketPrintMode) {
+  if (mode === "THERMAL_58") return "Termica 58 mm";
+  if (mode === "THERMAL_80") return "Termica 80 mm";
+  return "Normal";
 }
 
 export async function ensureTicketSettings(
@@ -55,6 +71,7 @@ export async function ensureTicketSettings(
       showFooterText: true,
       footerText: true,
       orderLink: true,
+      printMode: true,
     },
   });
 }
@@ -79,12 +96,13 @@ export function buildTicketMetaSnapshot(
     showFooterText: settings.showFooterText,
     footerText: settings.footerText || DEFAULT_TICKET_FOOTER_TEXT,
     orderLink: settings.orderLink,
+    printMode: settings.printMode,
   };
 }
 
 export function parseTicketMetaSnapshot(value: Prisma.JsonValue | null | undefined): TicketMetaSnapshot {
   const defaults = getDefaultTicketSettings();
-  const source = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  const source = value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 
   return {
     branchName: typeof source.branchName === "string" ? source.branchName : null,
@@ -98,6 +116,7 @@ export function parseTicketMetaSnapshot(value: Prisma.JsonValue | null | undefin
       typeof source.showFooterText === "boolean" ? source.showFooterText : defaults.showFooterText,
     footerText: typeof source.footerText === "string" ? source.footerText : defaults.footerText,
     orderLink: typeof source.orderLink === "string" ? source.orderLink : defaults.orderLink,
+    printMode: isTicketPrintMode(source.printMode) ? source.printMode : defaults.printMode,
   };
 }
 

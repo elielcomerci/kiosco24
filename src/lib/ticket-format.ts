@@ -9,6 +9,7 @@ export type TicketPreviewData = {
   saleId: string;
   ticketNumber: string | null;
   issuedAt: string;
+  printMode: "STANDARD" | "THERMAL_58" | "THERMAL_80";
   branchName: string | null;
   branchAddress: string | null;
   branchPhone: string | null;

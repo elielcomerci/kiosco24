@@ -53,6 +53,7 @@ const saleSelect = {
           showFooterText: true,
           footerText: true,
           orderLink: true,
+          printMode: true,
         },
       },
     },

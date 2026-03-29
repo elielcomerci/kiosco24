@@ -14,6 +14,7 @@ import {
 } from "@/lib/subscription-plan";
 import { optimizeBrandingImage } from "@/lib/image-upload";
 import type { TicketPreviewData } from "@/lib/ticket-format";
+import { getTicketPrintModeLabel, type TicketPrintMode } from "@/lib/ticketing";
 
 interface Employee {
   id: string;
@@ -709,6 +710,7 @@ export default function ConfiguracionPage() {
   const [ticketShowFooterText, setTicketShowFooterText] = useState(true);
   const [ticketFooterText, setTicketFooterText] = useState("¡Gracias por su compra!");
   const [ticketOrderLink, setTicketOrderLink] = useState("");
+  const [ticketPrintMode, setTicketPrintMode] = useState<TicketPrintMode>("STANDARD");
   const [savingTicketSettings, setSavingTicketSettings] = useState(false);
   const [ticketSettingsMessage, setTicketSettingsMessage] = useState<string | null>(null);
   const [ticketSettingsError, setTicketSettingsError] = useState<string | null>(null);
@@ -887,6 +889,7 @@ export default function ConfiguracionPage() {
           : "¡Gracias por su compra!",
       );
       setTicketOrderLink(typeof data?.orderLink === "string" ? data.orderLink : "");
+      setTicketPrintMode(data?.printMode === "THERMAL_58" || data?.printMode === "THERMAL_80" ? data.printMode : "STANDARD");
     } finally {
       setLoadingTicketSettings(false);
     }
@@ -1006,6 +1009,7 @@ export default function ConfiguracionPage() {
           showFooterText: ticketShowFooterText,
           footerText: ticketFooterText.trim() || null,
           orderLink: ticketOrderLink.trim() || null,
+          printMode: ticketPrintMode,
         }),
       });
       const data = await res.json().catch(() => null);
@@ -1025,6 +1029,7 @@ export default function ConfiguracionPage() {
           : "¡Gracias por su compra!",
       );
       setTicketOrderLink(typeof data?.orderLink === "string" ? data.orderLink : "");
+      setTicketPrintMode(data?.printMode === "THERMAL_58" || data?.printMode === "THERMAL_80" ? data.printMode : "STANDARD");
       setTicketSettingsMessage("Ticket actualizado.");
     } catch (error) {
       console.error(error);
@@ -1311,6 +1316,7 @@ export default function ConfiguracionPage() {
     saleId: "demo-ticket",
     ticketNumber: "000123",
     issuedAt: new Date().toISOString(),
+    printMode: ticketPrintMode,
     branchName: editBranchName.trim() || currentBranch?.name || "Mi kiosco",
     branchAddress: editBranchAddress.trim() || null,
     branchPhone: editBranchPhone.trim() || null,
@@ -1648,11 +1654,32 @@ export default function ConfiguracionPage() {
               />
             </div>
 
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, display: "block" }}>
+                MODO DE IMPRESION
+              </label>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "10px" }}>
+                {(["STANDARD", "THERMAL_58", "THERMAL_80"] as TicketPrintMode[]).map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    className={`btn ${ticketPrintMode === mode ? "btn-green" : "btn-ghost"}`}
+                    style={{ border: "1px solid var(--border)", justifyContent: "space-between" }}
+                    onClick={() => setTicketPrintMode(mode)}
+                    disabled={loadingTicketSettings || savingTicketSettings}
+                  >
+                    <span>{getTicketPrintModeLabel(mode)}</span>
+                    <span style={{ fontSize: "12px", opacity: 0.9 }}>{ticketPrintMode === mode ? "ACTIVO" : "Usar"}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
               <div style={{ fontSize: "12px", color: ticketSettingsError ? "var(--red)" : ticketSettingsMessage ? "var(--green)" : "var(--text-3)" }}>
                 {loadingTicketSettings
                   ? "Cargando ticket..."
-                  : ticketSettingsError || ticketSettingsMessage || "Si cargas un link, el ticket genera el QR solo."}
+                  : ticketSettingsError || ticketSettingsMessage || `Si cargas un link, el ticket genera el QR solo. Modo actual: ${getTicketPrintModeLabel(ticketPrintMode)}.`}
               </div>
               <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                 <button

@@ -4,11 +4,13 @@ import { put } from "@vercel/blob";
 import QRCode from "qrcode";
 
 import { AFIP_DOCUMENT_TYPES, formatDateForHuman, getEmitterIvaLabel, getSaleConditionLabel, type FiscalEmitterSnapshot } from "@/lib/fiscal";
+import type { TicketPrintMode } from "@/lib/ticketing";
 
 type InvoicePdfInput = {
   emitter: FiscalEmitterSnapshot;
   voucherNumber: number;
   pointOfSale: number;
+  printMode: TicketPrintMode;
   issueDate: Date;
   cae: string;
   caeDueDate: Date;
@@ -26,8 +28,16 @@ type InvoicePdfInput = {
   }>;
 };
 
-const RECEIPT_WIDTH = 226.77;
+const STANDARD_RECEIPT_WIDTH = 283.46;
+const THERMAL_80_RECEIPT_WIDTH = 226.77;
+const THERMAL_58_RECEIPT_WIDTH = 164.41;
 const RECEIPT_PAGE_HEIGHT = 841.89;
+
+function getReceiptWidth(printMode: TicketPrintMode) {
+  if (printMode === "THERMAL_58") return THERMAL_58_RECEIPT_WIDTH;
+  if (printMode === "THERMAL_80") return THERMAL_80_RECEIPT_WIDTH;
+  return STANDARD_RECEIPT_WIDTH;
+}
 
 function sanitizeSegment(value: string, fallback: string) {
   const normalized = value
@@ -292,6 +302,12 @@ function InvoicePdfDocument({
   const voucherNumber = formatVoucherNumber(input.pointOfSale, input.voucherNumber);
   const issueDate = formatDateForHuman(input.issueDate);
   const caeDueDate = formatDateForHuman(input.caeDueDate);
+  const receiptWidth = getReceiptWidth(input.printMode);
+  const isThermal58 = input.printMode === "THERMAL_58";
+  const titleSize = isThermal58 ? 13 : 15;
+  const subtitleSize = isThermal58 ? 9 : 10;
+  const qrSize = isThermal58 ? 88 : 110;
+  const totalSize = isThermal58 ? 13 : 15;
 
   return (
     <Document
@@ -301,16 +317,20 @@ function InvoicePdfDocument({
       creator="Kiosco24"
       producer="Kiosco24"
     >
-      <Page size={{ width: RECEIPT_WIDTH, height: RECEIPT_PAGE_HEIGHT }} style={styles.page} wrap>
+      <Page
+        size={{ width: receiptWidth, height: RECEIPT_PAGE_HEIGHT }}
+        style={input.printMode === "STANDARD" ? styles.page : [styles.page, { fontFamily: "Courier" }]}
+        wrap
+      >
         <View style={styles.centered}>
-          <Text style={styles.title}>FACTURA C</Text>
+          <Text style={[styles.title, { fontSize: titleSize }]}>FACTURA C</Text>
           <Text style={[styles.tinySubtitle, styles.strong]}>ORIGINAL</Text>
-          <Text style={styles.subtitle}>{input.emitter.razonSocial}</Text>
-          <Text style={[styles.subtitle, styles.muted]}>CUIT: {input.emitter.cuit}</Text>
-          <Text style={[styles.subtitle, styles.muted]}>Ing. Brutos: {getGrossIncomeLabel(input.emitter.ingresosBrutos)}</Text>
-          <Text style={[styles.subtitle, styles.muted]}>{getEmitterIvaLabel(input.emitter.condicionIva)}</Text>
-          <Text style={[styles.subtitle, styles.muted]}>Inicio de actividad: {input.emitter.inicioActividad}</Text>
-          <Text style={[styles.subtitle, styles.muted]}>Domicilio fiscal: {input.emitter.domicilioFiscal}</Text>
+          <Text style={[styles.subtitle, { fontSize: subtitleSize }]}>{input.emitter.razonSocial}</Text>
+          <Text style={[styles.subtitle, styles.muted, { fontSize: subtitleSize }]}>CUIT: {input.emitter.cuit}</Text>
+          <Text style={[styles.subtitle, styles.muted, { fontSize: subtitleSize }]}>Ing. Brutos: {getGrossIncomeLabel(input.emitter.ingresosBrutos)}</Text>
+          <Text style={[styles.subtitle, styles.muted, { fontSize: subtitleSize }]}>{getEmitterIvaLabel(input.emitter.condicionIva)}</Text>
+          <Text style={[styles.subtitle, styles.muted, { fontSize: subtitleSize }]}>Inicio de actividad: {input.emitter.inicioActividad}</Text>
+          <Text style={[styles.subtitle, styles.muted, { fontSize: subtitleSize }]}>Domicilio fiscal: {input.emitter.domicilioFiscal}</Text>
         </View>
 
         <View style={styles.rule} />
@@ -368,7 +388,7 @@ function InvoicePdfDocument({
 
         <View style={styles.rule} />
 
-        <View style={styles.totalRow}>
+        <View style={[styles.totalRow, { fontSize: totalSize }]}>
           <Text>TOTAL $</Text>
           <Text>{formatArsPlain(input.total)}</Text>
         </View>
@@ -377,7 +397,7 @@ function InvoicePdfDocument({
 
         <View style={styles.qrWrap}>
           <Text style={styles.strong}>Comprobante electronico autorizado</Text>
-          <Image src={qrDataUrl} style={styles.qrImage} />
+          <Image src={qrDataUrl} style={[styles.qrImage, { width: qrSize, height: qrSize }]} />
           <Text style={styles.legalText}>Escanea para verificar el comprobante en ARCA</Text>
         </View>
 

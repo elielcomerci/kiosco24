@@ -6,6 +6,7 @@ import { getBranchId } from "@/lib/branch";
 import { buildInvoicePreviewData } from "@/lib/invoice-format";
 import { getPaymentMethodLabel } from "@/lib/ticket-format";
 import { InvoiceStatus, prisma } from "@/lib/prisma";
+import { getDefaultTicketSettings } from "@/lib/ticketing";
 
 function canManageFiscalPending(user: { role?: string | null; employeeRole?: string | null }) {
   return user.role === "OWNER" || user.employeeRole === "MANAGER";
@@ -58,6 +59,15 @@ export async function GET(
       pdfAfipUrl: true,
       lastError: true,
       emitterSnapshot: true,
+      branch: {
+        select: {
+          ticketSettings: {
+            select: {
+              printMode: true,
+            },
+          },
+        },
+      },
       sale: {
         select: {
           paymentMethod: true,
@@ -82,6 +92,7 @@ export async function GET(
     buildInvoicePreviewData(
       invoice,
       getPaymentMethodLabel(invoice.sale.paymentMethod, invoice.sale.creditCustomer?.name ?? null),
+      invoice.branch.ticketSettings?.printMode ?? getDefaultTicketSettings().printMode,
     ),
   );
 }
@@ -165,6 +176,15 @@ export async function PATCH(
       pdfAfipUrl: true,
       lastError: true,
       emitterSnapshot: true,
+      branch: {
+        select: {
+          ticketSettings: {
+            select: {
+              printMode: true,
+            },
+          },
+        },
+      },
       sale: {
         select: {
           paymentMethod: true,
@@ -185,6 +205,7 @@ export async function PATCH(
     buildInvoicePreviewData(
       updated,
       getPaymentMethodLabel(updated.sale.paymentMethod, updated.sale.creditCustomer?.name ?? null),
+      updated.branch.ticketSettings?.printMode ?? getDefaultTicketSettings().printMode,
     ),
   );
 }

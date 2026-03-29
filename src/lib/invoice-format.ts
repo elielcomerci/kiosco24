@@ -7,6 +7,7 @@ import {
   getReceiverIvaConditionOption,
   parseEmitterSnapshot,
 } from "@/lib/fiscal";
+import type { TicketPrintMode } from "@/lib/ticketing";
 
 export type InvoicePreviewItem = {
   name: string;
@@ -19,6 +20,7 @@ export type InvoicePreviewData = {
   invoiceId: string;
   saleId: string;
   status: "PENDING" | "ISSUED" | "FAILED";
+  printMode: TicketPrintMode;
   invoiceTypeLabel: string;
   voucherNumberFormatted: string | null;
   issuedAt: string | null;
@@ -79,6 +81,7 @@ export function buildInvoicePreviewData(
     };
   },
   paymentMethodLabel: string,
+  printMode: TicketPrintMode = "STANDARD",
 ): InvoicePreviewData {
   const emitter = parseEmitterSnapshot(invoice.emitterSnapshot);
   const receiverCondition =
@@ -97,6 +100,7 @@ export function buildInvoicePreviewData(
     invoiceId: invoice.id,
     saleId: invoice.saleId,
     status: invoice.status,
+    printMode,
     invoiceTypeLabel: getInvoiceTypeLabel(invoice.comprobanteTipo),
     voucherNumberFormatted: formatFiscalVoucherNumber(invoice.puntoDeVenta, invoice.comprobanteNro),
     issuedAt: invoice.fechaEmision ? invoice.fechaEmision.toISOString() : null,

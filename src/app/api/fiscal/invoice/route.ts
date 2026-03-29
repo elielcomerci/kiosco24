@@ -9,6 +9,7 @@ import { sanitizeReceiverName } from "@/lib/fiscal-invoices";
 import { getAfipInstance } from "@/lib/fiscal-server";
 import { buildInvoicePreviewData } from "@/lib/invoice-format";
 import { getPaymentMethodLabel } from "@/lib/ticket-format";
+import { getDefaultTicketSettings } from "@/lib/ticketing";
 import { FiscalVatCondition, InvoiceStatus, Prisma, prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
@@ -131,6 +132,11 @@ export async function POST(req: Request) {
     select: {
       name: true,
       fiscalSettings: true,
+      ticketSettings: {
+        select: {
+          printMode: true,
+        },
+      },
       kiosco: {
         select: {
           fiscalProfile: true,
@@ -145,6 +151,7 @@ export async function POST(req: Request) {
 
   const fiscalProfile = branch.kiosco.fiscalProfile;
   const branchFiscalSettings = branch.fiscalSettings;
+  const branchPrintMode = branch.ticketSettings?.printMode ?? getDefaultTicketSettings().printMode;
 
   if (!fiscalProfile || !branchFiscalSettings?.activo || !branchFiscalSettings.puntoDeVenta) {
     return NextResponse.json(
@@ -252,6 +259,7 @@ export async function POST(req: Request) {
         emitter: emitterSnapshot,
         voucherNumber,
         pointOfSale: branchFiscalSettings.puntoDeVenta,
+        printMode: branchPrintMode,
         issueDate: issuedAt,
         cae: String(afipResponse?.CAE || ""),
         caeDueDate: caeDueDate ?? issuedAt,
@@ -336,6 +344,7 @@ export async function POST(req: Request) {
       invoice: buildInvoicePreviewData(
         issuedInvoice,
         getPaymentMethodLabel(issuedInvoice.sale.paymentMethod, issuedInvoice.sale.creditCustomer?.name ?? null),
+        branchPrintMode,
       ),
     });
   } catch (error) {
@@ -397,6 +406,7 @@ export async function POST(req: Request) {
         invoice: buildInvoicePreviewData(
           failedInvoice,
           getPaymentMethodLabel(failedInvoice.sale.paymentMethod, failedInvoice.sale.creditCustomer?.name ?? null),
+          branchPrintMode,
         ),
       },
       { status: ambiguous ? 202 : 400 },

@@ -17,10 +17,15 @@ export default function InvoicePreview({ invoice }: { invoice: InvoicePreviewDat
   const issuedAt = invoice.issuedAt ? new Date(invoice.issuedAt) : null;
   const caeDueDate = invoice.caeDueDate ? new Date(invoice.caeDueDate) : null;
   const receiverLegend = getReceiverLegend(invoice.receiverIvaConditionLabel);
+  const previewWidth =
+    invoice.printMode === "THERMAL_58" ? "min(100%, 260px)" : invoice.printMode === "THERMAL_80" ? "min(100%, 340px)" : "min(100%, 460px)";
+  const previewFontSize = invoice.printMode === "THERMAL_58" ? "12px" : "13px";
 
   return (
     <div
       style={{
+        width: previewWidth,
+        margin: "0 auto",
         borderRadius: "18px",
         border: "1px solid var(--border)",
         background: "linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01))",
@@ -28,6 +33,7 @@ export default function InvoicePreview({ invoice }: { invoice: InvoicePreviewDat
         display: "flex",
         flexDirection: "column",
         gap: "14px",
+        fontSize: previewFontSize,
       }}
     >
       <div style={{ textAlign: "center", display: "flex", flexDirection: "column", gap: "4px" }}>

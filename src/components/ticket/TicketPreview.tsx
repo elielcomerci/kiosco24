@@ -12,7 +12,15 @@ export default function TicketPreview({
   compact?: boolean;
 }) {
   return (
-    <article className={`ticket-preview ${compact ? "ticket-preview--compact" : ""}`}>
+    <article
+      className={[
+        "ticket-preview",
+        compact ? "ticket-preview--compact" : "",
+        `ticket-preview--${ticket.printMode.toLowerCase()}`,
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
       {ticket.showLogo && ticket.branchLogoUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={ticket.branchLogoUrl} alt={ticket.branchName ?? "Logo"} className="ticket-preview__logo" />

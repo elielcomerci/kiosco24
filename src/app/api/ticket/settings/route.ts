@@ -4,7 +4,7 @@ import { auth } from "@/lib/auth";
 import { guardOperationalAccess } from "@/lib/access-control";
 import { getBranchId } from "@/lib/branch";
 import { prisma } from "@/lib/prisma";
-import { getDefaultTicketSettings } from "@/lib/ticketing";
+import { getDefaultTicketSettings, isTicketPrintMode } from "@/lib/ticketing";
 
 export async function GET(req: Request) {
   const session = await auth();
@@ -55,6 +55,7 @@ export async function GET(req: Request) {
     showFooterText: settings.showFooterText,
     footerText: settings.footerText,
     orderLink: settings.orderLink,
+    printMode: settings.printMode,
     branch: {
       name: branch.name,
       address: branch.address,
@@ -97,6 +98,16 @@ export async function PUT(req: Request) {
       : typeof body.orderLink === "string" && body.orderLink.trim()
         ? body.orderLink.trim().slice(0, 300)
         : null;
+  const nextPrintMode =
+    body?.printMode === undefined
+      ? undefined
+      : isTicketPrintMode(body.printMode)
+        ? body.printMode
+        : null;
+
+  if (body?.printMode !== undefined && !nextPrintMode) {
+    return NextResponse.json({ error: "El modo de impresion no es valido." }, { status: 400 });
+  }
 
   if (nextOrderLink) {
     try {
@@ -118,6 +129,7 @@ export async function PUT(req: Request) {
       ...(body?.showFooterText !== undefined && { showFooterText: Boolean(body.showFooterText) }),
       ...(body?.footerText !== undefined && { footerText: nextFooterText }),
       ...(body?.orderLink !== undefined && { orderLink: nextOrderLink }),
+      ...(body?.printMode !== undefined && { printMode: nextPrintMode }),
     },
     create: {
       branchId,
@@ -128,6 +140,7 @@ export async function PUT(req: Request) {
       ...(body?.showFooterText !== undefined && { showFooterText: Boolean(body.showFooterText) }),
       ...(body?.footerText !== undefined && { footerText: nextFooterText }),
       ...(body?.orderLink !== undefined && { orderLink: nextOrderLink }),
+      ...(body?.printMode !== undefined && { printMode: nextPrintMode }),
     },
   });
 

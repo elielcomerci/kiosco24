@@ -249,7 +249,6 @@ export async function POST(req: Request) {
 
     try {
       const pdf = await createInvoicePdf({
-        afip,
         emitter: emitterSnapshot,
         voucherNumber,
         pointOfSale: branchFiscalSettings.puntoDeVenta,
@@ -272,8 +271,8 @@ export async function POST(req: Request) {
 
       pdfBlobUrl = pdf.blobUrl;
       pdfAfipUrl = pdf.afipUrl;
-      if (!pdf.blobUrl && pdf.afipUrl) {
-        pdfWarning = "La factura se emitio, pero el PDF estable no pudo guardarse en Blob.";
+      if (!pdf.blobUrl) {
+        pdfWarning = "La factura se emitio, pero el PDF no pudo guardarse en Blob.";
       }
     } catch (pdfError) {
       console.error("[Fiscal] Error generando PDF", pdfError);

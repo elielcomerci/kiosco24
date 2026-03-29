@@ -8,7 +8,6 @@ import { UserRole } from "@prisma/client";
 import { NextResponse } from "next/server";
 
 import { canOperateShift, createShiftForbiddenResponse, getActiveShift } from "@/lib/shift-access";
-import { buildTicketMetaSnapshot, ensureTicketSettings } from "@/lib/ticketing";
 
 type RawSaleItem = {
   productId?: string | null;
@@ -485,23 +484,6 @@ export async function POST(req: Request) {
         }
       }
 
-      const ticketSettings = await ensureTicketSettings(tx, branchId);
-      const branchTicketData = await tx.branch.update({
-        where: { id: branchId },
-        data: {
-          ticketCounter: { increment: 1 },
-        },
-        select: {
-          ticketCounter: true,
-          name: true,
-          address: true,
-          phone: true,
-          logoUrl: true,
-        },
-      });
-      const ticketIssuedAt = new Date();
-      const ticketMetaSnapshot = buildTicketMetaSnapshot(branchTicketData, ticketSettings);
-
       const createdSale = await tx.sale.create({
         data: {
           branchId,
@@ -509,9 +491,6 @@ export async function POST(req: Request) {
           total,
           paymentMethod,
           receivedAmount,
-          ticketNumber: branchTicketData.ticketCounter,
-          ticketIssuedAt,
-          ticketMetaSnapshot: ticketMetaSnapshot as Prisma.InputJsonValue,
           shiftId: activeShift.id,
           creditCustomerId,
           createdByEmployeeId,

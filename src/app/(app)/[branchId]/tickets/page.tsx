@@ -259,7 +259,7 @@ export default function TicketsPage() {
                 <div style={{ minWidth: 0 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
                     <span style={{ fontSize: "18px", fontWeight: 800 }}>
-                      {ticket.ticketNumberFormatted ? `Ticket ${ticket.ticketNumberFormatted}` : "Venta sin numero"}
+                      {ticket.ticketNumberFormatted ? `Ticket ${ticket.ticketNumberFormatted}` : "Ticket emitido"}
                     </span>
                     {ticket.voided ? (
                       <span

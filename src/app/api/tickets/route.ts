@@ -31,7 +31,10 @@ export async function GET(req: Request) {
   const from = url.searchParams.get("from");
   const to = url.searchParams.get("to");
 
-  const where: Prisma.SaleWhereInput = { branchId };
+  const where: Prisma.SaleWhereInput = {
+    branchId,
+    ticketNumber: { not: null },
+  };
 
   if (employeeId) {
     where.createdByEmployeeId = employeeId;
@@ -52,14 +55,14 @@ export async function GET(req: Request) {
   }
 
   if (from || to) {
-    const createdAtFilter: Prisma.DateTimeFilter = {};
+    const issuedAtFilter: Prisma.DateTimeFilter = {};
     if (from) {
-      createdAtFilter.gte = new Date(`${from}T00:00:00.000`);
+      issuedAtFilter.gte = new Date(`${from}T00:00:00.000`);
     }
     if (to) {
-      createdAtFilter.lte = new Date(`${to}T23:59:59.999`);
+      issuedAtFilter.lte = new Date(`${to}T23:59:59.999`);
     }
-    where.createdAt = createdAtFilter;
+    where.ticketIssuedAt = issuedAtFilter;
   }
 
   if (q) {
@@ -74,7 +77,7 @@ export async function GET(req: Request) {
 
   const sales = await prisma.sale.findMany({
     where,
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ ticketIssuedAt: "desc" }, { createdAt: "desc" }],
     take: 200,
     select: {
       id: true,

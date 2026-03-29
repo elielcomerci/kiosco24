@@ -24,6 +24,8 @@ interface ConfirmationScreenProps {
   onListo: () => void;
   onEmitTicket: () => void;
   onEmitInvoice: () => void;
+  canEmitTicket?: boolean;
+  ticketActionLabel?: string;
   pauseAutoClose?: boolean;
 }
 
@@ -34,6 +36,8 @@ export default function ConfirmationScreen({
   onListo,
   onEmitTicket,
   onEmitInvoice,
+  canEmitTicket = true,
+  ticketActionLabel = "EMITIR TICKET",
   pauseAutoClose = false,
 }: ConfirmationScreenProps) {
   const [seconds, setSeconds] = useState(30);
@@ -169,9 +173,11 @@ export default function ConfirmationScreen({
         <button className="btn btn-ghost" style={{ width: "100%" }} onClick={onCorregir}>
           CORREGIR
         </button>
-        <button className="btn btn-ghost" style={{ width: "100%" }} onClick={onEmitTicket} disabled={!sale.id}>
-          EMITIR TICKET
-        </button>
+        {canEmitTicket ? (
+          <button className="btn btn-ghost" style={{ width: "100%" }} onClick={onEmitTicket} disabled={!sale.id}>
+            {ticketActionLabel}
+          </button>
+        ) : null}
         <button className="btn btn-ghost" style={{ width: "100%" }} onClick={onEmitInvoice} disabled={!sale.id}>
           FACTURA
         </button>

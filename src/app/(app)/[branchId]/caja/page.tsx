@@ -1145,16 +1145,34 @@ export default function CajaPage() {
               setInvoiceSaleId(confirmedSale.id);
             }
           }}
+          canEmitTicket={confirmedInvoice?.status !== "ISSUED"}
+          ticketActionLabel={confirmedSale.ticketNumber ? "VER TICKET" : "EMITIR TICKET"}
           pauseAutoClose={Boolean(ticketSaleId || invoiceSaleId)}
         />
         {ticketSaleId ? (
-          <TicketModal branchId={branchId} saleId={ticketSaleId} onClose={() => setTicketSaleId(null)} />
+          <TicketModal
+            branchId={branchId}
+            saleId={ticketSaleId}
+            emitOnOpen={!confirmedSale.ticketNumber}
+            onResolved={(nextTicket) => {
+              const nextTicketNumber = nextTicket.ticketNumber ? Number(nextTicket.ticketNumber) : null;
+              setConfirmedSale((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      ticketNumber: Number.isInteger(nextTicketNumber) ? nextTicketNumber : prev.ticketNumber ?? null,
+                    }
+                  : prev,
+              );
+            }}
+            onClose={() => setTicketSaleId(null)}
+          />
         ) : null}
         {invoiceSaleId ? (
           <InvoiceModal
             branchId={branchId}
             saleId={invoiceSaleId}
-            mode="emit"
+            mode={confirmedInvoice ? "view" : "emit"}
             initialDraft={invoiceDraft}
             onResolved={(nextInvoice) => setConfirmedInvoice(nextInvoice)}
             onClose={() => setInvoiceSaleId(null)}

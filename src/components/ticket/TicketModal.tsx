@@ -2,19 +2,23 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-import ModalPortal from "@/components/ui/ModalPortal";
 import TicketPreview from "@/components/ticket/TicketPreview";
+import ModalPortal from "@/components/ui/ModalPortal";
 import { generateWhatsAppTicketText, type TicketPreviewData } from "@/lib/ticket-format";
 
 export default function TicketModal({
   branchId,
   saleId,
   initialTicket,
+  emitOnOpen = false,
+  onResolved,
   onClose,
 }: {
   branchId: string;
   saleId?: string | null;
   initialTicket?: TicketPreviewData | null;
+  emitOnOpen?: boolean;
+  onResolved?: (ticket: TicketPreviewData) => void;
   onClose: () => void;
 }) {
   const [ticket, setTicket] = useState<TicketPreviewData | null>(initialTicket ?? null);
@@ -31,6 +35,7 @@ export default function TicketModal({
       setError(null);
       try {
         const res = await fetch(`/api/tickets/${saleId}`, {
+          method: emitOnOpen ? "POST" : "GET",
           headers: {
             "x-branch-id": branchId,
           },
@@ -41,6 +46,7 @@ export default function TicketModal({
         }
         if (active) {
           setTicket(data);
+          onResolved?.(data);
         }
       } catch (err) {
         if (active) {
@@ -58,7 +64,7 @@ export default function TicketModal({
     return () => {
       active = false;
     };
-  }, [branchId, initialTicket, saleId]);
+  }, [branchId, emitOnOpen, initialTicket, onResolved, saleId]);
 
   const whatsappUrl = useMemo(() => {
     if (!ticket) return null;
@@ -80,7 +86,9 @@ export default function TicketModal({
           <div className="no-print" style={{ padding: "18px 18px 12px", borderBottom: "1px solid var(--border)" }}>
             <div style={{ fontSize: "18px", fontWeight: 800 }}>Ticket no fiscal</div>
             <div style={{ fontSize: "13px", color: "var(--text-3)", marginTop: "4px" }}>
-              Compartí o imprimí el comprobante de la venta.
+              {emitOnOpen
+                ? "Emitilo, compartilo o imprimilo despues de la venta."
+                : "Comparti o imprimi el comprobante de la venta."}
             </div>
           </div>
 
@@ -88,7 +96,15 @@ export default function TicketModal({
             {loading ? (
               <div style={{ padding: "30px 0", textAlign: "center", color: "var(--text-3)" }}>Cargando ticket...</div>
             ) : error ? (
-              <div style={{ padding: "20px", borderRadius: "14px", background: "rgba(239,68,68,0.08)", color: "var(--red)", fontSize: "14px" }}>
+              <div
+                style={{
+                  padding: "20px",
+                  borderRadius: "14px",
+                  background: "rgba(239,68,68,0.08)",
+                  color: "var(--red)",
+                  fontSize: "14px",
+                }}
+              >
                 {error}
               </div>
             ) : ticket ? (

@@ -48,7 +48,7 @@ function formatArsPlain(value: number) {
 }
 
 function formatVoucherNumber(pointOfSale: number, voucherNumber: number) {
-  return `${String(pointOfSale).padStart(4, "0")}-${String(voucherNumber).padStart(8, "0")}`;
+  return `${String(pointOfSale).padStart(5, "0")}-${String(voucherNumber).padStart(8, "0")}`;
 }
 
 function formatIsoDate(date: Date) {
@@ -59,6 +59,14 @@ function getDocumentLabel(documentType: number) {
   if (documentType === AFIP_DOCUMENT_TYPES.CUIT) return "CUIT";
   if (documentType === AFIP_DOCUMENT_TYPES.DNI) return "DNI";
   return "Consumidor final";
+}
+
+function getReceiverLegend(receiverIvaConditionLabel: string) {
+  return `A ${receiverIvaConditionLabel.toUpperCase()}`;
+}
+
+function getGrossIncomeLabel(value: string | null) {
+  return value?.trim() ? value.trim() : "No contribuyente";
 }
 
 function buildFiscalQrUrl(input: InvoicePdfInput) {
@@ -201,6 +209,11 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: 2,
   },
+  tinySubtitle: {
+    fontSize: 8,
+    textAlign: "center",
+    marginBottom: 2,
+  },
   muted: {
     color: "#4b5563",
   },
@@ -291,11 +304,13 @@ function InvoicePdfDocument({
       <Page size={{ width: RECEIPT_WIDTH, height: RECEIPT_PAGE_HEIGHT }} style={styles.page} wrap>
         <View style={styles.centered}>
           <Text style={styles.title}>FACTURA C</Text>
+          <Text style={[styles.tinySubtitle, styles.strong]}>ORIGINAL</Text>
           <Text style={styles.subtitle}>{input.emitter.razonSocial}</Text>
           <Text style={[styles.subtitle, styles.muted]}>CUIT: {input.emitter.cuit}</Text>
+          <Text style={[styles.subtitle, styles.muted]}>Ing. Brutos: {getGrossIncomeLabel(input.emitter.ingresosBrutos)}</Text>
           <Text style={[styles.subtitle, styles.muted]}>{getEmitterIvaLabel(input.emitter.condicionIva)}</Text>
           <Text style={[styles.subtitle, styles.muted]}>Inicio de actividad: {input.emitter.inicioActividad}</Text>
-          <Text style={[styles.subtitle, styles.muted]}>{input.emitter.domicilioFiscal}</Text>
+          <Text style={[styles.subtitle, styles.muted]}>Domicilio fiscal: {input.emitter.domicilioFiscal}</Text>
         </View>
 
         <View style={styles.rule} />
@@ -315,6 +330,7 @@ function InvoicePdfDocument({
 
         <View style={styles.section}>
           <Text style={styles.strong}>Receptor</Text>
+          <Text>{getReceiverLegend(input.receiverIvaConditionLabel)}</Text>
           <Text>{input.receiverName}</Text>
           <Text style={styles.muted}>
             {getDocumentLabel(input.receiverDocumentType)}:{" "}

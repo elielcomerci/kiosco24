@@ -24,6 +24,7 @@ export default function TicketModal({
   const [ticket, setTicket] = useState<TicketPreviewData | null>(initialTicket ?? null);
   const [loading, setLoading] = useState(Boolean(saleId && !initialTicket));
   const [error, setError] = useState<string | null>(null);
+  const [shouldEmitOnOpen] = useState(emitOnOpen);
 
   useEffect(() => {
     if (!saleId || initialTicket) return;
@@ -35,7 +36,7 @@ export default function TicketModal({
       setError(null);
       try {
         const res = await fetch(`/api/tickets/${saleId}`, {
-          method: emitOnOpen ? "POST" : "GET",
+          method: shouldEmitOnOpen ? "POST" : "GET",
           headers: {
             "x-branch-id": branchId,
           },
@@ -64,7 +65,7 @@ export default function TicketModal({
     return () => {
       active = false;
     };
-  }, [branchId, emitOnOpen, initialTicket, onResolved, saleId]);
+  }, [branchId, initialTicket, onResolved, saleId, shouldEmitOnOpen]);
 
   const whatsappUrl = useMemo(() => {
     if (!ticket) return null;
@@ -72,7 +73,17 @@ export default function TicketModal({
   }, [ticket]);
 
   const handlePrint = () => {
-    window.print();
+    document.body.classList.add("print-ticket-mode");
+
+    const cleanup = () => {
+      document.body.classList.remove("print-ticket-mode");
+      window.removeEventListener("afterprint", cleanup);
+    };
+
+    window.addEventListener("afterprint", cleanup);
+    window.setTimeout(() => {
+      window.print();
+    }, 0);
   };
 
   return (
@@ -86,7 +97,7 @@ export default function TicketModal({
           <div className="no-print" style={{ padding: "18px 18px 12px", borderBottom: "1px solid var(--border)" }}>
             <div style={{ fontSize: "18px", fontWeight: 800 }}>Ticket no fiscal</div>
             <div style={{ fontSize: "13px", color: "var(--text-3)", marginTop: "4px" }}>
-              {emitOnOpen
+              {shouldEmitOnOpen
                 ? "Emitilo, compartilo o imprimilo despues de la venta."
                 : "Comparti o imprimi el comprobante de la venta."}
             </div>

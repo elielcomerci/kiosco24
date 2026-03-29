@@ -4,9 +4,19 @@ import { formatARS } from "@/lib/utils";
 import { formatDateForHuman, getInvoiceTypeLabel } from "@/lib/fiscal";
 import type { InvoicePreviewData } from "@/lib/invoice-format";
 
+function getReceiverLegend(receiverIvaConditionLabel: string | null) {
+  if (!receiverIvaConditionLabel) return null;
+  return `A ${receiverIvaConditionLabel.toUpperCase()}`;
+}
+
+function getGrossIncomeLabel(value: string | null) {
+  return value?.trim() ? value.trim() : "No contribuyente";
+}
+
 export default function InvoicePreview({ invoice }: { invoice: InvoicePreviewData }) {
   const issuedAt = invoice.issuedAt ? new Date(invoice.issuedAt) : null;
   const caeDueDate = invoice.caeDueDate ? new Date(invoice.caeDueDate) : null;
+  const receiverLegend = getReceiverLegend(invoice.receiverIvaConditionLabel);
 
   return (
     <div
@@ -21,9 +31,11 @@ export default function InvoicePreview({ invoice }: { invoice: InvoicePreviewDat
       }}
     >
       <div style={{ textAlign: "center", display: "flex", flexDirection: "column", gap: "4px" }}>
+        <div style={{ fontSize: "12px", fontWeight: 800, letterSpacing: "0.08em", color: "var(--text-3)" }}>ORIGINAL</div>
         <div style={{ fontSize: "18px", fontWeight: 800 }}>{invoice.emitterBusinessName || "Emisor fiscal"}</div>
         {invoice.emitterCuit ? <div style={{ color: "var(--text-2)", fontSize: "13px" }}>CUIT: {invoice.emitterCuit}</div> : null}
-        {invoice.emitterAddress ? <div style={{ color: "var(--text-3)", fontSize: "12px" }}>{invoice.emitterAddress}</div> : null}
+        <div style={{ color: "var(--text-3)", fontSize: "12px" }}>Ing. Brutos: {getGrossIncomeLabel(invoice.emitterGrossIncome)}</div>
+        {invoice.emitterAddress ? <div style={{ color: "var(--text-3)", fontSize: "12px" }}>Domicilio fiscal: {invoice.emitterAddress}</div> : null}
         {invoice.emitterIvaCondition ? <div style={{ color: "var(--text-3)", fontSize: "12px" }}>{invoice.emitterIvaCondition}</div> : null}
       </div>
 
@@ -44,6 +56,12 @@ export default function InvoicePreview({ invoice }: { invoice: InvoicePreviewDat
           <span style={{ color: "var(--text-3)" }}>Receptor</span>
           <strong>{invoice.receiverName || "Consumidor Final"}</strong>
         </div>
+        {receiverLegend ? (
+          <div style={{ display: "flex", justifyContent: "space-between", gap: "12px" }}>
+            <span style={{ color: "var(--text-3)" }}>Condicion</span>
+            <strong>{receiverLegend}</strong>
+          </div>
+        ) : null}
         <div style={{ display: "flex", justifyContent: "space-between", gap: "12px" }}>
           <span style={{ color: "var(--text-3)" }}>Documento</span>
           <strong>{invoice.receiverDocumentNumber}</strong>

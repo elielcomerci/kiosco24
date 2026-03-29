@@ -12,6 +12,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import PlatformProductBackupManager from "@/app/admin/productos/PlatformProductBackupManager";
 import PlatformProductBulkImporter from "@/app/admin/productos/PlatformProductBulkImporter";
+import PlatformImagePushManager from "@/app/admin/productos/PlatformImagePushManager";
 import PlatformProductQuickEditor from "@/app/admin/productos/PlatformProductQuickEditor";
 
 async function ensurePlatformAdmin() {
@@ -418,6 +419,8 @@ export default async function AdminProductsPage() {
             })),
           }))}
         />
+
+        <PlatformImagePushManager />
 
         <PlatformProductBackupManager />
 

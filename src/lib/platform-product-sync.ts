@@ -207,3 +207,49 @@ export async function syncAutoProductsFromPlatformProduct(
   return linkedProducts.length;
 }
 
+export async function pushPlatformImagesToLinkedProducts(client: SyncDbClient) {
+  const platformProducts = await client.platformProduct.findMany({
+    where: {
+      status: PlatformProductStatus.APPROVED,
+      image: {
+        not: null,
+      },
+    },
+    select: {
+      id: true,
+      image: true,
+      updatedAt: true,
+    },
+  });
+
+  let updatedProducts = 0;
+  let processedSources = 0;
+
+  for (const platformProduct of platformProducts) {
+    const image = normalizeText(platformProduct.image);
+    if (!image) {
+      continue;
+    }
+
+    const result = await client.product.updateMany({
+      where: {
+        platformProductId: platformProduct.id,
+        NOT: {
+          image,
+        },
+      },
+      data: {
+        image,
+        platformSourceUpdatedAt: platformProduct.updatedAt,
+      },
+    });
+
+    processedSources += 1;
+    updatedProducts += result.count;
+  }
+
+  return {
+    processedSources,
+    updatedProducts,
+  };
+}

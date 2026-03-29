@@ -766,9 +766,9 @@ export default function PlatformProductQuickEditor({
               <label
                 style={{
                   position: "relative",
-                  width: "72px",
-                  height: "72px",
-                  borderRadius: "18px",
+                  width: "96px",
+                  height: "96px",
+                  borderRadius: "22px",
                   border: "1px dashed rgba(148,163,184,.18)",
                   background: "rgba(2,6,23,.5)",
                   overflow: "hidden",
@@ -790,7 +790,7 @@ export default function PlatformProductQuickEditor({
                 ) : uploadingImage ? (
                   <span style={{ color: "#cbd5e1", fontSize: "12px", fontWeight: 700 }}>...</span>
                 ) : (
-                  <span style={{ color: "#94a3b8", fontSize: "12px", fontWeight: 700, textAlign: "center", padding: "8px" }}>
+                  <span style={{ color: "#94a3b8", fontSize: "12px", fontWeight: 700, textAlign: "center", padding: "10px" }}>
                     Subir foto
                   </span>
                 )}
@@ -809,14 +809,14 @@ export default function PlatformProductQuickEditor({
                   }}
                 />
               </label>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontWeight: 800, fontSize: "18px" }}>
+              <div style={{ minWidth: 0, display: "grid", gap: "6px" }}>
+                <div style={{ fontWeight: 800, fontSize: "22px", lineHeight: 1.15 }}>
                   {draft.name.trim() || "Producto nuevo"}
                 </div>
-                <div style={{ color: "#94a3b8", fontSize: "13px", marginTop: "4px" }}>
+                <div style={{ color: "#94a3b8", fontSize: "13px" }}>
                   {draft.id ? "Editando ficha global" : "Creando ficha global"}
                 </div>
-                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "8px" }}>
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "2px" }}>
                   <span
                     style={{
                       padding: "4px 10px",
@@ -846,10 +846,10 @@ export default function PlatformProductQuickEditor({
                     </span>
                   )}
                 </div>
-                <div style={{ color: "#cbd5e1", fontSize: "13px", marginTop: "6px", lineHeight: 1.5 }}>
+                <div style={{ color: "#cbd5e1", fontSize: "13px", marginTop: "2px", lineHeight: 1.5 }}>
                   Se sincronizan foto y textos. Stock y precios quedan en cada kiosco.
                 </div>
-                <div style={{ color: uploadingImage ? "#7dd3fc" : "#94a3b8", fontSize: "12px", marginTop: "6px" }}>
+                <div style={{ color: uploadingImage ? "#7dd3fc" : "#94a3b8", fontSize: "12px" }}>
                   {uploadingImage ? "Subiendo imagen optimizada..." : "Toca la miniatura para subir una foto nueva."}
                 </div>
               </div>
@@ -915,130 +915,189 @@ export default function PlatformProductQuickEditor({
               </div>
             )}
 
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "10px" }}>
-              <FieldGroup
-                label={FIELD_LABELS.barcode}
-                changed={changedFieldSet.has("barcode")}
-                hint={usesVariants ? "Con variantes, el codigo principal se limpia." : undefined}
-              >
-                <div style={{ display: "flex", gap: "8px" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: "16px", alignItems: "start" }}>
+              <div style={{ display: "grid", gap: "12px" }}>
+                <FieldGroup label={FIELD_LABELS.name} changed={changedFieldSet.has("name")}>
                   <input
                     className="input"
-                    placeholder={usesVariants ? "Se limpia al usar variantes" : "Codigo de barras base"}
-                    value={draft.barcode}
-                    onChange={(e) => handleChange("barcode", e.target.value)}
-                    disabled={usesVariants}
+                    placeholder="Nombre del producto"
+                    value={draft.name}
+                    onChange={(e) => handleChange("name", e.target.value)}
+                    onBlur={() => normalizeField("name")}
                   />
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    style={{ minWidth: "52px", paddingInline: "12px" }}
-                    onClick={() => setScannerTarget("barcode")}
-                    title="Escanear codigo principal"
-                    disabled={usesVariants}
+                </FieldGroup>
+
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: "10px" }}>
+                  <FieldGroup
+                    label={FIELD_LABELS.barcode}
+                    changed={changedFieldSet.has("barcode")}
+                    hint={usesVariants ? "Con variantes, el codigo principal se limpia." : undefined}
                   >
-                    |||
-                  </button>
-                </div>
-              </FieldGroup>
-              <FieldGroup label={FIELD_LABELS.name} changed={changedFieldSet.has("name")}>
-                <input
-                  className="input"
-                  placeholder="Nombre del producto"
-                  value={draft.name}
-                  onChange={(e) => handleChange("name", e.target.value)}
-                  onBlur={() => normalizeField("name")}
-                />
-              </FieldGroup>
-              <FieldGroup label={FIELD_LABELS.brand} changed={changedFieldSet.has("brand")}>
-                <input
-                  className="input"
-                  placeholder="Marca"
-                  value={draft.brand}
-                  onChange={(e) => handleChange("brand", e.target.value)}
-                  onBlur={() => normalizeField("brand")}
-                />
-              </FieldGroup>
-              <FieldGroup label={FIELD_LABELS.categoryName} changed={changedFieldSet.has("categoryName")}>
-                <input
-                  className="input"
-                  placeholder="Categoria"
-                  value={draft.categoryName}
-                  onChange={(e) => handleChange("categoryName", e.target.value)}
-                  onBlur={() => normalizeField("categoryName")}
-                />
-              </FieldGroup>
-              <FieldGroup label={FIELD_LABELS.presentation} changed={changedFieldSet.has("presentation")}>
-                <input
-                  className="input"
-                  placeholder="Presentacion"
-                  value={draft.presentation}
-                  onChange={(e) => handleChange("presentation", e.target.value)}
-                  onBlur={() => normalizeField("presentation")}
-                />
-              </FieldGroup>
-              <FieldGroup label={FIELD_LABELS.image} changed={changedFieldSet.has("image")}>
-                <div style={{ display: "grid", gap: "8px" }}>
-                  <input
-                    className="input"
-                    placeholder="URL de imagen"
-                    value={draft.image}
-                    onChange={(e) => handleChange("image", e.target.value)}
-                    onBlur={() => normalizeField("image")}
-                  />
-                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                    <label className="btn btn-secondary" style={{ cursor: uploadingImage ? "progress" : "pointer" }}>
-                      {uploadingImage ? "Subiendo..." : "Subir archivo"}
+                    <div style={{ display: "flex", gap: "8px" }}>
                       <input
-                        type="file"
-                        accept="image/*"
-                        style={{ display: "none" }}
-                        disabled={uploadingImage}
-                        onChange={async (event) => {
-                          const file = event.target.files?.[0];
-                          if (file) {
-                            await handleImageUpload(file);
-                          }
-                          event.target.value = "";
-                        }}
+                        className="input"
+                        placeholder={usesVariants ? "Se limpia al usar variantes" : "Codigo de barras base"}
+                        value={draft.barcode}
+                        onChange={(e) => handleChange("barcode", e.target.value)}
+                        disabled={usesVariants}
                       />
-                    </label>
-                    {draft.image && (
                       <button
                         type="button"
-                        className="btn btn-ghost"
-                        onClick={() => handleChange("image", "")}
-                        disabled={uploadingImage}
+                        className="btn btn-secondary"
+                        style={{ minWidth: "52px", paddingInline: "12px" }}
+                        onClick={() => setScannerTarget("barcode")}
+                        title="Escanear codigo principal"
+                        disabled={usesVariants}
                       >
-                        Quitar imagen
+                        |||
                       </button>
-                    )}
-                  </div>
-                </div>
-              </FieldGroup>
-              <FieldGroup label={FIELD_LABELS.status} changed={changedFieldSet.has("status")}>
-                <select
-                  className="input"
-                  value={draft.status}
-                  onChange={(e) => handleChange("status", e.target.value as PlatformProductStatusValue)}
-                >
-                  <option value="APPROVED">Aprobado</option>
-                  <option value="HIDDEN">Oculto</option>
-                </select>
-              </FieldGroup>
-            </div>
+                    </div>
+                  </FieldGroup>
 
-            <FieldGroup label={FIELD_LABELS.description} changed={changedFieldSet.has("description")}>
-              <textarea
-                className="input"
-                placeholder="Descripcion corta"
-                rows={4}
-                value={draft.description}
-                onChange={(e) => handleChange("description", e.target.value)}
-                onBlur={() => normalizeField("description")}
-                style={{ resize: "vertical" }}
-              />
-            </FieldGroup>
+                  <FieldGroup label={FIELD_LABELS.brand} changed={changedFieldSet.has("brand")}>
+                    <input
+                      className="input"
+                      placeholder="Marca"
+                      value={draft.brand}
+                      onChange={(e) => handleChange("brand", e.target.value)}
+                      onBlur={() => normalizeField("brand")}
+                    />
+                  </FieldGroup>
+
+                  <FieldGroup label={FIELD_LABELS.categoryName} changed={changedFieldSet.has("categoryName")}>
+                    <input
+                      className="input"
+                      placeholder="Categoria"
+                      value={draft.categoryName}
+                      onChange={(e) => handleChange("categoryName", e.target.value)}
+                      onBlur={() => normalizeField("categoryName")}
+                    />
+                  </FieldGroup>
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: "10px" }}>
+                  <FieldGroup label={FIELD_LABELS.presentation} changed={changedFieldSet.has("presentation")}>
+                    <input
+                      className="input"
+                      placeholder="Presentacion"
+                      value={draft.presentation}
+                      onChange={(e) => handleChange("presentation", e.target.value)}
+                      onBlur={() => normalizeField("presentation")}
+                    />
+                  </FieldGroup>
+
+                  <FieldGroup label={FIELD_LABELS.status} changed={changedFieldSet.has("status")}>
+                    <select
+                      className="input"
+                      value={draft.status}
+                      onChange={(e) => handleChange("status", e.target.value as PlatformProductStatusValue)}
+                    >
+                      <option value="APPROVED">Aprobado</option>
+                      <option value="HIDDEN">Oculto</option>
+                    </select>
+                  </FieldGroup>
+                </div>
+
+                <FieldGroup label={FIELD_LABELS.description} changed={changedFieldSet.has("description")}>
+                  <textarea
+                    className="input"
+                    placeholder="Descripcion corta"
+                    rows={5}
+                    value={draft.description}
+                    onChange={(e) => handleChange("description", e.target.value)}
+                    onBlur={() => normalizeField("description")}
+                    style={{ resize: "vertical" }}
+                  />
+                </FieldGroup>
+              </div>
+
+              <div
+                style={{
+                  display: "grid",
+                  gap: "12px",
+                  padding: "14px 16px",
+                  borderRadius: "18px",
+                  background: "rgba(30,41,59,.62)",
+                  border: "1px solid rgba(148,163,184,.12)",
+                }}
+              >
+                <FieldGroup
+                  label={FIELD_LABELS.image}
+                  changed={changedFieldSet.has("image")}
+                  hint="Se optimiza antes de subir y se replica a los kioscos cuando corresponde."
+                >
+                  <div style={{ display: "grid", gap: "10px" }}>
+                    <div
+                      style={{
+                        width: "100%",
+                        maxWidth: "260px",
+                        aspectRatio: "1 / 1",
+                        justifySelf: "center",
+                        borderRadius: "20px",
+                        border: "1px dashed rgba(148,163,184,.18)",
+                        background: "rgba(2,6,23,.45)",
+                        overflow: "hidden",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      {draft.image ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={draft.image}
+                          alt={draft.name || "Producto global"}
+                          style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                        />
+                      ) : uploadingImage ? (
+                        <span style={{ color: "#cbd5e1", fontSize: "13px", fontWeight: 700 }}>Subiendo...</span>
+                      ) : (
+                        <span style={{ color: "#94a3b8", fontSize: "13px", fontWeight: 700, textAlign: "center", padding: "16px" }}>
+                          Sin imagen cargada
+                        </span>
+                      )}
+                    </div>
+
+                    <input
+                      className="input"
+                      placeholder="URL de imagen"
+                      value={draft.image}
+                      onChange={(e) => handleChange("image", e.target.value)}
+                      onBlur={() => normalizeField("image")}
+                    />
+
+                    <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                      <label className="btn btn-secondary" style={{ cursor: uploadingImage ? "progress" : "pointer" }}>
+                        {uploadingImage ? "Subiendo..." : "Subir archivo"}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          style={{ display: "none" }}
+                          disabled={uploadingImage}
+                          onChange={async (event) => {
+                            const file = event.target.files?.[0];
+                            if (file) {
+                              await handleImageUpload(file);
+                            }
+                            event.target.value = "";
+                          }}
+                        />
+                      </label>
+                      {draft.image && (
+                        <button
+                          type="button"
+                          className="btn btn-ghost"
+                          onClick={() => handleChange("image", "")}
+                          disabled={uploadingImage}
+                        >
+                          Quitar imagen
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </FieldGroup>
+              </div>
+            </div>
 
             <div
               style={{

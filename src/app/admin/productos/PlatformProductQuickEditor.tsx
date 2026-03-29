@@ -3,6 +3,7 @@
 import { type ReactNode, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import BarcodeScanner from "@/components/caja/BarcodeScanner";
+import { optimizeProductImage } from "@/lib/image-upload";
 
 type PlatformProductStatusValue = "APPROVED" | "HIDDEN";
 
@@ -219,6 +220,7 @@ export default function PlatformProductQuickEditor({
   const [baselineDraft, setBaselineDraft] = useState<DraftState>(() => buildDraft());
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [scannerTarget, setScannerTarget] = useState<"search" | "barcode" | null>(null);
   const [isPending, startTransition] = useTransition();
   const usesVariants = draft.variants.length > 0;
@@ -360,6 +362,46 @@ export default function PlatformProductQuickEditor({
       barcode: "",
       variants: [...current.variants, { name: "", barcode: null }],
     }));
+  };
+
+  const handleImageUpload = async (file: File) => {
+    setError(null);
+    setMessage(null);
+    setUploadingImage(true);
+
+    try {
+      const optimizedFile = await optimizeProductImage(file);
+      const formData = new FormData();
+      formData.append("file", optimizedFile);
+      formData.append("folder", "products");
+
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        setError(data?.error || "No se pudo subir la imagen.");
+        return;
+      }
+
+      if (typeof data?.secure_url !== "string" || !data.secure_url) {
+        setError("La subida no devolvio una URL valida.");
+        return;
+      }
+
+      setDraft((current) => ({
+        ...current,
+        image: data.secure_url,
+      }));
+      setMessage("Imagen cargada. Guarda la ficha para publicarla.");
+    } catch (uploadError) {
+      console.error(uploadError);
+      setError("No se pudo subir la imagen.");
+    } finally {
+      setUploadingImage(false);
+    }
   };
 
   const removeVariant = (index: number) => {
@@ -579,24 +621,52 @@ export default function PlatformProductQuickEditor({
                 border: "1px solid rgba(148,163,184,.12)",
               }}
             >
-              {draft.image ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={draft.image}
-                  alt={draft.name || "Producto global"}
-                  style={{ width: "64px", height: "64px", borderRadius: "16px", objectFit: "cover", border: "1px solid rgba(148,163,184,.18)" }}
-                />
-              ) : (
-                <div
-                  style={{
-                    width: "64px",
-                    height: "64px",
-                    borderRadius: "16px",
-                    border: "1px dashed rgba(148,163,184,.18)",
-                    background: "rgba(2,6,23,.5)",
+              <label
+                style={{
+                  position: "relative",
+                  width: "72px",
+                  height: "72px",
+                  borderRadius: "18px",
+                  border: "1px dashed rgba(148,163,184,.18)",
+                  background: "rgba(2,6,23,.5)",
+                  overflow: "hidden",
+                  cursor: uploadingImage ? "progress" : "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0,
+                }}
+                title="Subir imagen"
+              >
+                {draft.image ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={draft.image}
+                    alt={draft.name || "Producto global"}
+                    style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                  />
+                ) : uploadingImage ? (
+                  <span style={{ color: "#cbd5e1", fontSize: "12px", fontWeight: 700 }}>...</span>
+                ) : (
+                  <span style={{ color: "#94a3b8", fontSize: "12px", fontWeight: 700, textAlign: "center", padding: "8px" }}>
+                    Subir foto
+                  </span>
+                )}
+
+                <input
+                  type="file"
+                  accept="image/*"
+                  style={{ position: "absolute", inset: 0, opacity: 0, cursor: uploadingImage ? "progress" : "pointer" }}
+                  disabled={uploadingImage}
+                  onChange={async (event) => {
+                    const file = event.target.files?.[0];
+                    if (file) {
+                      await handleImageUpload(file);
+                    }
+                    event.target.value = "";
                   }}
                 />
-              )}
+              </label>
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontWeight: 800, fontSize: "18px" }}>
                   {draft.name.trim() || "Producto nuevo"}
@@ -636,6 +706,9 @@ export default function PlatformProductQuickEditor({
                 </div>
                 <div style={{ color: "#cbd5e1", fontSize: "13px", marginTop: "6px", lineHeight: 1.5 }}>
                   Se sincronizan foto y textos. Stock y precios quedan en cada kiosco.
+                </div>
+                <div style={{ color: uploadingImage ? "#7dd3fc" : "#94a3b8", fontSize: "12px", marginTop: "6px" }}>
+                  {uploadingImage ? "Subiendo imagen optimizada..." : "Toca la miniatura para subir una foto nueva."}
                 </div>
               </div>
             </div>
@@ -763,12 +836,43 @@ export default function PlatformProductQuickEditor({
                 />
               </FieldGroup>
               <FieldGroup label={FIELD_LABELS.image} changed={changedFieldSet.has("image")}>
-                <input
-                  className="input"
-                  placeholder="URL de imagen"
-                  value={draft.image}
-                  onChange={(e) => handleChange("image", e.target.value)}
-                />
+                <div style={{ display: "grid", gap: "8px" }}>
+                  <input
+                    className="input"
+                    placeholder="URL de imagen"
+                    value={draft.image}
+                    onChange={(e) => handleChange("image", e.target.value)}
+                    onBlur={() => normalizeField("image")}
+                  />
+                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                    <label className="btn btn-secondary" style={{ cursor: uploadingImage ? "progress" : "pointer" }}>
+                      {uploadingImage ? "Subiendo..." : "Subir archivo"}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        style={{ display: "none" }}
+                        disabled={uploadingImage}
+                        onChange={async (event) => {
+                          const file = event.target.files?.[0];
+                          if (file) {
+                            await handleImageUpload(file);
+                          }
+                          event.target.value = "";
+                        }}
+                      />
+                    </label>
+                    {draft.image && (
+                      <button
+                        type="button"
+                        className="btn btn-ghost"
+                        onClick={() => handleChange("image", "")}
+                        disabled={uploadingImage}
+                      >
+                        Quitar imagen
+                      </button>
+                    )}
+                  </div>
+                </div>
               </FieldGroup>
               <FieldGroup label={FIELD_LABELS.status} changed={changedFieldSet.has("status")}>
                 <select

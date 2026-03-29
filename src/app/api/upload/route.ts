@@ -1,3 +1,4 @@
+import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { put } from "@vercel/blob";
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
@@ -23,6 +24,46 @@ function getSafeFolder(rawFolder: string | null) {
   return rawFolder && allowedFolders.has(rawFolder) ? rawFolder : "uploads";
 }
 
+function getR2Config() {
+  const endpoint = process.env.R2_ENDPOINT?.trim();
+  const bucket = process.env.R2_BUCKET_NAME?.trim();
+  const accessKeyId = process.env.R2_ACCESS_KEY_ID?.trim();
+  const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY?.trim();
+  const publicBaseUrl = process.env.R2_PUBLIC_BASE_URL?.trim() || null;
+
+  if (!endpoint || !bucket || !accessKeyId || !secretAccessKey) {
+    return null;
+  }
+
+  return {
+    endpoint,
+    bucket,
+    accessKeyId,
+    secretAccessKey,
+    publicBaseUrl,
+  };
+}
+
+function getR2Client(config: NonNullable<ReturnType<typeof getR2Config>>) {
+  return new S3Client({
+    region: "auto",
+    endpoint: config.endpoint,
+    forcePathStyle: true,
+    credentials: {
+      accessKeyId: config.accessKeyId,
+      secretAccessKey: config.secretAccessKey,
+    },
+  });
+}
+
+function buildR2Url(baseUrl: string | null, key: string) {
+  if (baseUrl) {
+    return `${baseUrl.replace(/\/+$/, "")}/${key}`;
+  }
+
+  return key;
+}
+
 export async function POST(req: Request) {
   try {
     const session = await auth();
@@ -33,13 +74,6 @@ export async function POST(req: Request) {
     const accessResponse = await guardOperationalAccess(session.user);
     if (accessResponse) {
       return accessResponse;
-    }
-
-    if (!process.env.BLOB_READ_WRITE_TOKEN) {
-      return NextResponse.json(
-        { error: "Falta configurar BLOB_READ_WRITE_TOKEN en el entorno." },
-        { status: 500 },
-      );
     }
 
     const formData = await req.formData();
@@ -65,6 +99,39 @@ export async function POST(req: Request) {
     const safeBaseName = sanitizeSegment(baseName, "image");
     const safeExtension = sanitizeSegment(hasExtension ? originalName.split(".").pop() || extensionFromType : extensionFromType, extensionFromType);
     const pathname = `${folder}/${safeBaseName}.${safeExtension}`;
+    const r2Config = getR2Config();
+
+    if (r2Config) {
+      const key = `${folder}/${crypto.randomUUID()}-${safeBaseName}.${safeExtension}`;
+      const client = getR2Client(r2Config);
+
+      await client.send(
+        new PutObjectCommand({
+          Bucket: r2Config.bucket,
+          Key: key,
+          Body: Buffer.from(await file.arrayBuffer()),
+          ContentType: file.type,
+          CacheControl: "public, max-age=31536000, immutable",
+        }),
+      );
+
+      const url = buildR2Url(r2Config.publicBaseUrl, key);
+
+      return NextResponse.json({
+        url,
+        secure_url: url,
+        pathname: key,
+        contentType: file.type,
+        storage: "r2",
+      });
+    }
+
+    if (!process.env.BLOB_READ_WRITE_TOKEN) {
+      return NextResponse.json(
+        { error: "Falta configurar R2 o BLOB_READ_WRITE_TOKEN en el entorno." },
+        { status: 500 },
+      );
+    }
 
     const blob = await put(pathname, file, {
       access: "public",
@@ -78,9 +145,10 @@ export async function POST(req: Request) {
       secure_url: blob.url,
       pathname: blob.pathname,
       contentType: blob.contentType,
+      storage: "blob",
     });
   } catch (error) {
-    console.error("Vercel Blob upload error:", error);
+    console.error("Image upload error:", error);
     return NextResponse.json({ error: "Upload failed" }, { status: 500 });
   }
 }

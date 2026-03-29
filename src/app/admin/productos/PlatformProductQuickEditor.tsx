@@ -3,6 +3,7 @@
 import { type ReactNode, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import BarcodeScanner from "@/components/caja/BarcodeScanner";
+import ModalPortal from "@/components/ui/ModalPortal";
 import { optimizeProductImage } from "@/lib/image-upload";
 
 type PlatformProductStatusValue = "APPROVED" | "HIDDEN";
@@ -220,6 +221,7 @@ export default function PlatformProductQuickEditor({
   const [baselineDraft, setBaselineDraft] = useState<DraftState>(() => buildDraft());
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [editorOpen, setEditorOpen] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [scannerTarget, setScannerTarget] = useState<"search" | "barcode" | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -309,6 +311,7 @@ export default function PlatformProductQuickEditor({
     setSearch(product.barcode ?? product.variants[0]?.barcode ?? product.name);
     setMessage(null);
     setError(null);
+    setEditorOpen(true);
   };
 
   const startNewDraft = (barcodeHint?: string) => {
@@ -317,6 +320,12 @@ export default function PlatformProductQuickEditor({
     setBaselineDraft(nextDraft);
     setMessage(null);
     setError(null);
+    setEditorOpen(true);
+  };
+
+  const closeEditor = () => {
+    setEditorOpen(false);
+    setScannerTarget(null);
   };
 
   const handleChange = (field: keyof Omit<DraftState, "variants">, value: string) => {
@@ -450,6 +459,7 @@ export default function PlatformProductQuickEditor({
           setSearch(savedProduct.barcode ?? savedProduct.variants[0]?.barcode ?? savedProduct.name);
         }
         setMessage(draft.id ? "Producto actualizado." : "Producto global creado.");
+        setEditorOpen(false);
         router.refresh();
       } catch (err) {
         console.error(err);
@@ -485,6 +495,11 @@ export default function PlatformProductQuickEditor({
             <div style={{ color: "#94a3b8", fontSize: "14px", marginTop: "4px" }}>
               Busca, corrige y publica desde una sola ficha.
             </div>
+            {(message || error) && (
+              <div style={{ color: error ? "#fca5a5" : "#86efac", fontSize: "13px", marginTop: "8px" }}>
+                {error || message}
+              </div>
+            )}
           </div>
           <button type="button" className="btn btn-ghost" onClick={() => startNewDraft(search.trim())}>
             Nuevo
@@ -608,8 +623,75 @@ export default function PlatformProductQuickEditor({
             </div>
           </div>
 
-          <div style={{ display: "grid", gap: "12px" }}>
+          <div
+            style={{
+              display: "grid",
+              gap: "12px",
+              alignContent: "start",
+              padding: "18px",
+              borderRadius: "18px",
+              background: "rgba(30,41,59,.55)",
+              border: "1px dashed rgba(148,163,184,.18)",
+              color: "#cbd5e1",
+            }}
+          >
+            <div style={{ fontWeight: 800, fontSize: "18px" }}>
+              {draft.id ? "Ficha lista para editar" : "Abrir editor"}
+            </div>
+            <div style={{ color: "#94a3b8", fontSize: "14px", lineHeight: 1.6 }}>
+              Elegi un producto de la lista o crea uno nuevo. La ficha se abre en un modal para editar rapido y se cierra sola al guardar.
+            </div>
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+              <button type="button" className="btn btn-secondary" onClick={() => setEditorOpen(true)}>
+                {draft.id ? "Seguir editando" : "Abrir ficha vacia"}
+              </button>
+              <button type="button" className="btn btn-ghost" onClick={() => startNewDraft(search.trim())}>
+                Nuevo
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {editorOpen && (
+        <ModalPortal>
+          <div className="modal-overlay" onClick={closeEditor} style={{ padding: "20px" }}>
             <div
+              onClick={(event) => event.stopPropagation()}
+              style={{
+                width: "min(960px, 100%)",
+                maxHeight: "calc(100vh - 40px)",
+                overflowY: "auto",
+                borderRadius: "24px",
+                padding: "20px",
+                background: "linear-gradient(180deg, rgba(15,23,42,.98), rgba(2,6,23,.98))",
+                border: "1px solid rgba(148,163,184,.18)",
+                boxShadow: "0 30px 80px rgba(2,6,23,.55)",
+                display: "grid",
+                gap: "16px",
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
+                <div>
+                  <div style={{ fontWeight: 800, fontSize: "22px" }}>
+                    {draft.id ? "Editar producto global" : "Nuevo producto global"}
+                  </div>
+                  <div style={{ color: "#94a3b8", fontSize: "14px", marginTop: "4px" }}>
+                    La ficha se guarda y vuelve sola al listado.
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={closeEditor}
+                  disabled={isPending || uploadingImage}
+                >
+                  Cerrar
+                </button>
+              </div>
+
+              <div style={{ display: "grid", gap: "12px" }}>
+                <div
               style={{
                 display: "flex",
                 gap: "12px",
@@ -1006,6 +1088,14 @@ export default function PlatformProductQuickEditor({
                 </button>
                 <button
                   type="button"
+                  className="btn btn-secondary"
+                  onClick={closeEditor}
+                  disabled={isPending || uploadingImage}
+                >
+                  Cerrar
+                </button>
+                <button
+                  type="button"
                   className="btn btn-primary"
                   onClick={handleSubmit}
                   disabled={!canSave || isPending}
@@ -1016,7 +1106,9 @@ export default function PlatformProductQuickEditor({
             </div>
           </div>
         </div>
-      </section>
+      </div>
+        </ModalPortal>
+      )}
 
       {scannerTarget && (
         <BarcodeScanner

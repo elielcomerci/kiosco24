@@ -58,6 +58,11 @@ enum TicketPrintMode {
   THERMAL_80
 }
 
+enum PlatformSyncMode {
+  MANUAL
+  AUTO
+}
+
 model Account {
   id                String  @id @default(cuid())
   userId            String
@@ -224,6 +229,8 @@ model Product {
   category          Category?         @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   platformProductId String?
   platformProduct   PlatformProduct?  @relation(fields: [platformProductId], references: [id], onDelete: SetNull)
+  platformSyncMode  PlatformSyncMode  @default(MANUAL)
+  platformSourceUpdatedAt DateTime?
   kioscoId          String
   kiosco            Kiosco            @relation(fields: [kioscoId], references: [id], onDelete: Cascade)
   inventory         InventoryRecord[]

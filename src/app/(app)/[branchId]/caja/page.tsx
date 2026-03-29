@@ -15,6 +15,7 @@ import OpenShiftModal, { type ShiftAssignee } from "@/components/turnos/OpenShif
 import CloseShiftModal from "@/components/turnos/CloseShiftModal";
 import TransferShiftModal from "@/components/turnos/TransferShiftModal";
 import BarcodeScanner from "@/components/caja/BarcodeScanner";
+import ProductThumb from "@/components/products/ProductThumb";
 import ModalPortal from "@/components/ui/ModalPortal";
 import TicketModal from "@/components/ticket/TicketModal";
 import InvoiceModal from "@/components/fiscal/InvoiceModal";
@@ -44,6 +45,7 @@ interface Product {
   price: number;
   barcode?: string | null;
   emoji?: string | null;
+  image?: string | null;
   categoryId?: string | null;
   stock?: number | null;
   availableStock?: number | null;
@@ -1463,6 +1465,14 @@ export default function CajaPage() {
                   : { fontSize: "13px", ...(isSelected ? { outline: "2px solid var(--text)", transform: "scale(1.02)" } : {}) }
                 }
               >
+                <ProductThumb
+                  image={product.image}
+                  emoji={product.emoji}
+                  name={product.name}
+                  size={38}
+                  radius={12}
+                  fontSize={20}
+                />
                 <span className="product-btn-name">{product.name}</span>
                 <span className="product-btn-price">{formatARS(product.price)}</span>
                 {stockBadge && (

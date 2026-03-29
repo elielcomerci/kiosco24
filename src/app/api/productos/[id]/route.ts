@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
+import { PlatformSyncMode } from "@prisma/client";
 
 import { auth } from "@/lib/auth";
 import { getBranchContext } from "@/lib/branch";
 import { hasBlockingStockLots, summarizeTrackedLots } from "@/lib/inventory-expiry";
 import { DEFAULT_PRICING_MODE, syncSharedPricingFromBranch } from "@/lib/pricing-mode";
+import { hasPlatformSyncUpdate } from "@/lib/platform-product-sync";
 import { Prisma, prisma } from "@/lib/prisma";
 import {
   findApprovedPlatformProductByBarcode,
@@ -23,6 +25,19 @@ type ProductInventoryPayload = Prisma.InventoryRecordGetPayload<{
   include: {
     product: {
       include: {
+        platformProduct: {
+          select: {
+            id: true;
+            barcode: true;
+            name: true;
+            brand: true;
+            description: true;
+            presentation: true;
+            image: true;
+            status: true;
+            updatedAt: true;
+          };
+        };
         variants: {
           include: {
             inventory: true;
@@ -102,6 +117,18 @@ function getStockFlags(availableStock: number | null | undefined, minStock: numb
   };
 }
 
+function normalizePlatformSyncMode(value: unknown, fallback: PlatformSyncMode = PlatformSyncMode.MANUAL) {
+  if (value === PlatformSyncMode.AUTO) {
+    return PlatformSyncMode.AUTO;
+  }
+
+  if (value === PlatformSyncMode.MANUAL) {
+    return PlatformSyncMode.MANUAL;
+  }
+
+  return fallback;
+}
+
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -122,6 +149,19 @@ export async function GET(
     include: {
       product: {
         include: {
+          platformProduct: {
+            select: {
+              id: true,
+              barcode: true,
+              name: true,
+              brand: true,
+              description: true,
+              presentation: true,
+              image: true,
+              status: true,
+              updatedAt: true,
+            },
+          },
           variants: {
             include: {
               inventory: {
@@ -197,6 +237,23 @@ export async function GET(
           variants.some((variant) => !variant.isNegativeStock && variant.isOutOfStock),
       }
     : baseFlags;
+  const platformSyncMode = mappedInventory.product.platformSyncMode ?? PlatformSyncMode.MANUAL;
+  const platformUpdateAvailable = hasPlatformSyncUpdate({
+    product: {
+      id: mappedInventory.product.id,
+      barcode: mappedInventory.product.barcode,
+      name: mappedInventory.product.name,
+      brand: mappedInventory.product.brand,
+      description: mappedInventory.product.description,
+      presentation: mappedInventory.product.presentation,
+      image: mappedInventory.product.image,
+      platformProductId: mappedInventory.product.platformProductId,
+      platformSyncMode,
+      platformSourceUpdatedAt: mappedInventory.product.platformSourceUpdatedAt,
+      variants: mappedInventory.product.variants.map((variant) => ({ id: variant.id })),
+    },
+    platformProduct: mappedInventory.product.platformProduct,
+  });
 
   return NextResponse.json({
     id: mappedInventory.product.id,
@@ -211,6 +268,9 @@ export async function GET(
     supplierName: mappedInventory.product.supplierName,
     notes: mappedInventory.product.notes,
     platformProductId: mappedInventory.product.platformProductId,
+    platformSyncMode,
+    platformSourceUpdatedAt: mappedInventory.product.platformSourceUpdatedAt,
+    platformUpdateAvailable,
     price: mappedInventory.price,
     cost: mappedInventory.cost,
     stock: mappedInventory.stock,
@@ -269,7 +329,15 @@ export async function PATCH(
     minStock,
     showInGrid,
     variants,
+    platformSyncMode,
   } = body;
+
+  if (platformSyncMode !== undefined && session.user.role !== "OWNER") {
+    return NextResponse.json(
+      { error: "Solo el owner puede cambiar la sincronizacion con la base general." },
+      { status: 403 },
+    );
+  }
 
   const product = await prisma.product.findFirst({
     where: { id, kioscoId },
@@ -424,6 +492,10 @@ export async function PATCH(
   const platformProduct = lookupBarcode
     ? await findApprovedPlatformProductByBarcode(lookupBarcode)
     : null;
+  const nextPlatformSyncMode = normalizePlatformSyncMode(
+    platformSyncMode,
+    product.platformSyncMode ?? PlatformSyncMode.MANUAL,
+  );
   const kioscoSettings = await prisma.kiosco.findUnique({
     where: { id: kioscoId },
     select: { pricingMode: true },
@@ -456,6 +528,10 @@ export async function PATCH(
       }),
       ...((barcode !== undefined || variants !== undefined) && {
         platformProductId: platformProduct?.id ?? null,
+        platformSourceUpdatedAt: platformProduct?.updatedAt ?? null,
+      }),
+      ...(platformSyncMode !== undefined && {
+        platformSyncMode: nextPlatformSyncMode,
       }),
       ...(variants !== undefined && {
         variants: {

@@ -1,6 +1,7 @@
 import { PlatformProductStatus } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { isPlatformAdmin } from "@/lib/platform-admin";
+import { syncAutoProductsFromPlatformProduct } from "@/lib/platform-product-sync";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
@@ -116,7 +117,7 @@ export async function POST(req: Request) {
       select: { id: true },
     });
 
-    await prisma.platformProduct.upsert({
+    const saved = await prisma.platformProduct.upsert({
       where: { barcode: parsed.barcode },
       update: {
         name: parsed.name,
@@ -137,7 +138,10 @@ export async function POST(req: Request) {
         image: parsed.image,
         status: parsed.status,
       },
+      select: { id: true },
     });
+
+    await syncAutoProductsFromPlatformProduct(prisma, saved.id);
 
     if (existing) {
       updated += 1;

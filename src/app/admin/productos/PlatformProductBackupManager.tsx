@@ -104,7 +104,7 @@ export default function PlatformProductBackupManager() {
       <div>
         <h2 style={{ margin: 0, fontSize: "24px" }}>Backup del catalogo</h2>
         <div style={{ color: "#94a3b8", fontSize: "14px", marginTop: "4px" }}>
-          Exporta el catalogo global con variantes a JSON y vuelve a cargarlo si necesitas recuperar la base.
+          Descarga una copia completa o recupera la base si hace falta volver atras.
         </div>
       </div>
 
@@ -142,7 +142,7 @@ export default function PlatformProductBackupManager() {
       </div>
 
       <div style={{ color: error ? "#fca5a5" : message ? "#86efac" : "#94a3b8", fontSize: "14px" }}>
-        {error || message || "Guardalo fuera del sistema para tener una copia segura del catalogo global."}
+        {error || message || "Importar actualiza coincidencias por barcode o ID. Guardalo fuera del sistema para tener una copia segura."}
       </div>
 
       {summary && (

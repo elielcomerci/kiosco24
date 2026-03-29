@@ -13,6 +13,7 @@ import {
 import BarcodeScanner from "@/components/caja/BarcodeScanner";
 import CategoryModal, { type CategoryRecord } from "@/components/config/CategoryModal";
 import CatalogSpreadsheetModal from "@/components/products/CatalogSpreadsheetModal";
+import ProductThumb from "@/components/products/ProductThumb";
 import ProductsActionsMenu from "@/components/products/ProductsActionsMenu";
 import BackButton from "@/components/ui/BackButton";
 import ModalPortal from "@/components/ui/ModalPortal";
@@ -63,6 +64,9 @@ interface Product {
   readyForSale?: boolean;
   allowNegativeStock?: boolean;
   platformProductId?: string | null;
+  platformSyncMode?: PlatformSyncMode;
+  platformSourceUpdatedAt?: string | null;
+  platformUpdateAvailable?: boolean;
   isNegativeStock?: boolean;
   isOutOfStock?: boolean;
   isBelowMinStock?: boolean;
@@ -88,6 +92,7 @@ type ProductModalSavePayload = {
 };
 
 type PricingMode = "SHARED" | "BRANCH";
+type PlatformSyncMode = "MANUAL" | "AUTO";
 
 type TransferLotRecord = TransferPlanLotInput & {
   id: string;
@@ -282,6 +287,32 @@ function renderStockBadge(product: Product) {
   );
 }
 
+function renderPlatformSyncBadge(product: Product, visible: boolean) {
+  if (!visible || !product.platformProductId || !product.platformUpdateAvailable) {
+    return null;
+  }
+
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "6px",
+        marginTop: "6px",
+        padding: "4px 8px",
+        borderRadius: "999px",
+        fontSize: "11px",
+        fontWeight: 700,
+        color: "#38bdf8",
+        background: "rgba(56,189,248,0.12)",
+        border: "1px solid rgba(56,189,248,0.22)",
+      }}
+    >
+      Base general actualizada
+    </span>
+  );
+}
+
 function getProductCardBorder(product: Product) {
   const badge = getProductStockBadge(product);
   if (!badge) {
@@ -320,6 +351,7 @@ function ProductModal({
   onClose,
   onSave,
   onCategoriesChange,
+  isOwner,
 }: {
   product: Product | null;
   branchId: string;
@@ -328,6 +360,7 @@ function ProductModal({
   onClose: () => void;
   onSave: (payload?: ProductModalSavePayload) => void;
   onCategoriesChange: (categories: Category[]) => void;
+  isOwner: boolean;
 }) {
   const isNew = !product;
   const [name, setName] = useState(product?.name || "");
@@ -361,6 +394,8 @@ function ProductModal({
   const [lookupState, setLookupState] = useState<"idle" | "loading" | "ready">("idle");
   const [dismissedSuggestionCode, setDismissedSuggestionCode] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [platformSyncMode, setPlatformSyncMode] = useState<PlatformSyncMode>(product?.platformSyncMode ?? "MANUAL");
+  const [syncingPlatform, setSyncingPlatform] = useState(false);
   const barcodeRef = useRef<HTMLInputElement>(null);
   const normalizedBarcode = normalizeBarcodeCode(barcode);
   const productHasTrackedLots = Boolean(product?.hasTrackedLots);
@@ -382,6 +417,8 @@ function ProductModal({
       : null;
   const effectiveLookupState =
     !lookupCode ? "idle" : visibleSuggestion ? "ready" : lookupState === "loading" ? "loading" : "idle";
+  const hasPlatformLink = Boolean(product?.platformProductId);
+  const canManagePlatformSync = hasPlatformLink && isOwner;
 
   const toNum = (v: string) => {
     const n = parseFloat(v);
@@ -578,6 +615,7 @@ function ProductModal({
       stock: hasVariants ? null : toNum(stock),
       minStock: hasVariants ? null : toNum(minStock),
       showInGrid,
+      ...(isOwner ? { platformSyncMode } : {}),
       variants: hasVariants ? variants.map(v => ({
         id: v.id,
         name: v.name.trim(),
@@ -616,6 +654,34 @@ function ProductModal({
       return;
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSyncNow = async () => {
+    if (!product) {
+      return;
+    }
+
+    setSyncingPlatform(true);
+    setSaveError(null);
+    try {
+      const res = await fetch(`/api/productos/${product.id}/sync-platform`, {
+        method: "POST",
+        headers: { "x-branch-id": branchId },
+      });
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        setSaveError(data?.error || "No se pudo sincronizar con la base general.");
+        return;
+      }
+
+      onSave();
+    } catch (error) {
+      console.error(error);
+      setSaveError("No se pudo sincronizar con la base general.");
+    } finally {
+      setSyncingPlatform(false);
     }
   };
 
@@ -984,6 +1050,72 @@ function ProductModal({
             style={{ width: "100%", resize: "vertical" }}
           />
         </div>
+
+        {canManagePlatformSync && (
+          <div
+            style={{
+              marginBottom: "12px",
+              padding: "12px",
+              borderRadius: "14px",
+              border: "1px solid rgba(56,189,248,0.18)",
+              background: "rgba(56,189,248,0.08)",
+              display: "flex",
+              flexDirection: "column",
+              gap: "10px",
+            }}
+          >
+            <div>
+              <div style={{ fontSize: "12px", fontWeight: 700, textTransform: "uppercase", color: "#38bdf8" }}>
+                Base colaborativa
+              </div>
+              <div style={{ fontSize: "12px", color: "var(--text-2)", marginTop: "4px", lineHeight: 1.5 }}>
+                Sincroniza foto y datos descriptivos desde la base general. Precio, stock y demas datos operativos quedan locales.
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+              {(["MANUAL", "AUTO"] as PlatformSyncMode[]).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  className={platformSyncMode === mode ? "btn btn-green" : "btn btn-ghost"}
+                  style={{ flex: 1, minWidth: "120px" }}
+                  onClick={() => setPlatformSyncMode(mode)}
+                >
+                  {mode === "AUTO" ? "Auto" : "Manual"}
+                </button>
+              ))}
+            </div>
+            <div style={{ fontSize: "12px", color: "var(--text-2)", lineHeight: 1.5 }}>
+              {platformSyncMode === "AUTO"
+                ? "Los proximos cambios aprobados en la base general se aplican solos en este producto."
+                : "Si la base mejora, lo vas a ver y podes aplicarlo cuando quieras."}
+            </div>
+            {product?.platformUpdateAvailable && (
+              <div
+                style={{
+                  display: "flex",
+                  gap: "8px",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  flexWrap: "wrap",
+                }}
+              >
+                <div style={{ fontSize: "12px", fontWeight: 700, color: "#38bdf8" }}>
+                  Hay cambios disponibles en la base general.
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-ghost"
+                  style={{ border: "1px solid rgba(56,189,248,0.32)" }}
+                  onClick={() => void handleSyncNow()}
+                  disabled={syncingPlatform || loading}
+                >
+                  {syncingPlatform ? "Actualizando..." : "Actualizar ahora"}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
           <div
             style={{
@@ -3187,6 +3319,7 @@ export default function ProductosPage() {
             const isSelected = selected.has(p.id);
             const expiryBadge = renderExpiryBadge(p);
             const stockBadge = renderStockBadge(p);
+            const platformSyncBadge = renderPlatformSyncBadge(p, Boolean(isOwner));
             const cardChrome = getProductCardBorder(p);
             return selectionMode ? (
               // ─── Selection Mode Card
@@ -3227,7 +3360,7 @@ export default function ProductosPage() {
                 }}>
                   {isSelected ? "✓" : ""}
                 </div>
-                {p.emoji && <div style={{ fontSize: "22px" }}>{p.emoji}</div>}
+                <ProductThumb image={p.image} emoji={p.emoji} name={p.name} size={40} radius={12} />
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 600 }}>{p.name}</div>
                   <div style={{ fontSize: "12px", color: "var(--text-3)" }}>
@@ -3245,6 +3378,7 @@ export default function ProductosPage() {
                     );
                   })()}
                   {stockBadge}
+                  {platformSyncBadge}
                   {expiryBadge}
                 </div>
                 <div style={{ fontSize: "16px", fontWeight: 700, color: "var(--text-2)" }}>{formatARS(p.price)}</div>
@@ -3269,10 +3403,7 @@ export default function ProductosPage() {
                 }}
                 onClick={() => setModal(p)}
               >
-                {p.emoji && <div style={{ fontSize: "24px" }}>{p.emoji}</div>}
-                {!p.emoji && (
-                  <div style={{ width: "24px", height: "24px", borderRadius: "6px", background: "var(--surface-2)", flexShrink: 0 }} />
-                )}
+                <ProductThumb image={p.image} emoji={p.emoji} name={p.name} size={44} radius={12} />
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 600 }}>
                     {p.name}
@@ -3293,6 +3424,7 @@ export default function ProductosPage() {
                     );
                   })()}
                   {stockBadge}
+                  {platformSyncBadge}
                   {expiryBadge}
                 </div>
                 <div style={{ fontSize: "18px", fontWeight: 700 }}>{formatARS(p.price)}</div>
@@ -3494,6 +3626,7 @@ export default function ProductosPage() {
             onClose={() => setModal(null)}
             onSave={handleProductModalSave}
             onCategoriesChange={setCategories}
+            isOwner={Boolean(isOwner)}
           />
         </ModalPortal>
       )}

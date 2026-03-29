@@ -1,6 +1,7 @@
 import { PlatformProductStatus } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { isPlatformAdmin } from "@/lib/platform-admin";
+import { syncAutoProductsFromPlatformProduct } from "@/lib/platform-product-sync";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
@@ -156,7 +157,7 @@ export async function POST(req: Request) {
           })
       : null;
 
-    await prisma.platformProduct.upsert({
+    const saved = await prisma.platformProduct.upsert({
       where: effectiveBarcode ? { barcode: effectiveBarcode } : productId ? { id: productId } : { id: "__no-match__" },
       update: {
         name,
@@ -206,9 +207,10 @@ export async function POST(req: Request) {
             ...(variant.id ? { id: variant.id } : {}),
             name: variant.name,
             barcode: variant.barcode,
-          })),
+            })),
         },
       },
+      select: { id: true },
     }).catch(async () => {
       const createdProduct = await prisma.platformProduct.create({
         data: {
@@ -229,10 +231,13 @@ export async function POST(req: Request) {
             })),
           },
         },
+        select: { id: true },
       });
 
       return createdProduct;
     });
+
+    await syncAutoProductsFromPlatformProduct(prisma, saved.id);
 
     if (existing) {
       updated += 1;

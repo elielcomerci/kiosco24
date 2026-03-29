@@ -90,7 +90,7 @@ export default function PlatformProductBulkImporter() {
         <div>
           <h2 style={{ margin: 0, fontSize: "24px" }}>Importacion masiva</h2>
           <div style={{ color: "#94a3b8", fontSize: "14px", marginTop: "4px" }}>
-            Pega varias filas para crear o actualizar productos globales de una vez.
+            Crea o corrige varias fichas globales de una vez.
           </div>
         </div>
         <div style={{ color: "#94a3b8", fontSize: "14px" }}>{rowsCount} filas detectadas</div>
@@ -110,6 +110,7 @@ export default function PlatformProductBulkImporter() {
       >
         <div>Formato recomendado: `barcode;nombre;marca;categoria;presentacion;descripcion;imagen;estado`</div>
         <div>Tambien acepta tabulaciones o comas. `estado` puede ser `APPROVED`, `APROBADO`, `HIDDEN` u `OCULTO`.</div>
+        <div>No toca stock, precios ni configuracion de los kioscos.</div>
         <pre
           style={{
             margin: 0,
@@ -147,7 +148,7 @@ export default function PlatformProductBulkImporter() {
       >
         <div style={{ display: "grid", gap: "6px" }}>
           <div style={{ color: error ? "#fca5a5" : message ? "#86efac" : "#94a3b8", fontSize: "14px" }}>
-            {error || message || "Ideal para copiar y pegar desde una planilla o lista curada."}
+            {error || message || "Ideal para pegar una lista curada desde una planilla."}
           </div>
           {summary && (
             <div style={{ color: "#cbd5e1", fontSize: "14px", display: "grid", gap: "4px" }}>

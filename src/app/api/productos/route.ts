@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
+import { PlatformSyncMode } from "@prisma/client";
 
 import { auth } from "@/lib/auth";
 import { getBranchContext } from "@/lib/branch";
 import { summarizeTrackedLots } from "@/lib/inventory-expiry";
 import { DEFAULT_PRICING_MODE, syncSharedPricingFromBranch } from "@/lib/pricing-mode";
+import { hasPlatformSyncUpdate } from "@/lib/platform-product-sync";
 import { Prisma, prisma } from "@/lib/prisma";
 import {
   findApprovedPlatformProductByBarcode,
@@ -26,6 +28,19 @@ type ProductListInventory = Prisma.InventoryRecordGetPayload<{
         category: {
           select: {
             showInGrid: true;
+          };
+        };
+        platformProduct: {
+          select: {
+            id: true;
+            barcode: true;
+            name: true;
+            brand: true;
+            description: true;
+            presentation: true;
+            image: true;
+            status: true;
+            updatedAt: true;
           };
         };
         variants: {
@@ -118,6 +133,18 @@ function getStockFlags(availableStock: number | null | undefined, minStock: numb
   };
 }
 
+function normalizePlatformSyncMode(value: unknown, fallback: PlatformSyncMode = PlatformSyncMode.MANUAL) {
+  if (value === PlatformSyncMode.AUTO) {
+    return PlatformSyncMode.AUTO;
+  }
+
+  if (value === PlatformSyncMode.MANUAL) {
+    return PlatformSyncMode.MANUAL;
+  }
+
+  return fallback;
+}
+
 export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user?.id) {
@@ -147,6 +174,19 @@ export async function GET(req: Request) {
       product: {
         include: {
           category: { select: { showInGrid: true } },
+          platformProduct: {
+            select: {
+              id: true,
+              barcode: true,
+              name: true,
+              brand: true,
+              description: true,
+              presentation: true,
+              image: true,
+              status: true,
+              updatedAt: true,
+            },
+          },
           variants: {
             include: {
               inventory: {
@@ -230,6 +270,23 @@ export async function GET(req: Request) {
             mappedVariants.some((variant) => !variant.isNegativeStock && variant.isOutOfStock),
         }
       : baseFlags;
+    const platformSyncMode = record.product.platformSyncMode ?? PlatformSyncMode.MANUAL;
+    const platformUpdateAvailable = hasPlatformSyncUpdate({
+      product: {
+        id: record.product.id,
+        barcode: record.product.barcode,
+        name: record.product.name,
+        brand: record.product.brand,
+        description: record.product.description,
+        presentation: record.product.presentation,
+        image: record.product.image,
+        platformProductId: record.product.platformProductId,
+        platformSyncMode,
+        platformSourceUpdatedAt: record.product.platformSourceUpdatedAt,
+        variants: record.product.variants.map((variant) => ({ id: variant.id })),
+      },
+      platformProduct: record.product.platformProduct,
+    });
 
     return {
       id: record.product.id,
@@ -244,6 +301,9 @@ export async function GET(req: Request) {
       supplierName: record.product.supplierName,
       notes: record.product.notes,
       platformProductId: record.product.platformProductId,
+      platformSyncMode,
+      platformSourceUpdatedAt: record.product.platformSourceUpdatedAt,
+      platformUpdateAvailable,
       categoryId: record.product.categoryId,
       price: record.price,
       cost: record.cost,
@@ -304,7 +364,15 @@ export async function POST(req: Request) {
     minStock,
     showInGrid,
     variants,
+    platformSyncMode,
   } = body;
+
+  if (platformSyncMode !== undefined && session.user.role !== "OWNER") {
+    return NextResponse.json(
+      { error: "Solo el owner puede cambiar la sincronizacion con la base general." },
+      { status: 403 },
+    );
+  }
 
   try {
     const normalizedVariants = normalizeVariantPayload(variants);
@@ -321,6 +389,7 @@ export async function POST(req: Request) {
     const platformProduct = lookupBarcode
       ? await findApprovedPlatformProductByBarcode(lookupBarcode)
       : null;
+    const normalizedPlatformSyncMode = normalizePlatformSyncMode(platformSyncMode);
 
     const product = await prisma.product.create({
       data: {
@@ -336,6 +405,8 @@ export async function POST(req: Request) {
         notes: typeof notes === "string" ? notes.trim() || null : null,
         categoryId: resolvedCategory.categoryId,
         platformProductId: platformProduct?.id ?? null,
+        platformSyncMode: normalizedPlatformSyncMode,
+        platformSourceUpdatedAt: platformProduct?.updatedAt ?? null,
         kioscoId,
         variants: normalizedVariants.length
           ? {

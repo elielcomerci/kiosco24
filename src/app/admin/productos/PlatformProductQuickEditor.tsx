@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { type ReactNode, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import BarcodeScanner from "@/components/caja/BarcodeScanner";
 
@@ -24,6 +24,8 @@ export interface PlatformProductQuickEditorItem {
   status: PlatformProductStatusValue;
   variants: PlatformProductQuickEditorVariant[];
 }
+
+type SearchFilter = "ALL" | "APPROVED" | "HIDDEN" | "WITH_VARIANTS";
 
 interface DraftState {
   id: string;
@@ -64,6 +66,147 @@ function looksLikeBarcode(value: string) {
   return /^\d{8,14}$/.test(value.trim());
 }
 
+const FIELD_LABELS: Record<string, string> = {
+  barcode: "Codigo base",
+  name: "Nombre",
+  brand: "Marca",
+  categoryName: "Categoria",
+  presentation: "Presentacion",
+  description: "Descripcion",
+  image: "Imagen",
+  status: "Estado",
+  variants: "Variantes",
+};
+
+const LOWERCASE_WORDS = new Set(["de", "del", "la", "las", "los", "y", "en", "con", "sin", "para", "por"]);
+const LOWERCASE_UNITS = new Set(["ml", "l", "cc", "g", "gr", "kg", "u", "un"]);
+
+function normalizeTextSpacing(value: string) {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function formatCatalogWord(word: string, index: number): string {
+  const clean = word.trim();
+  if (!clean) {
+    return clean;
+  }
+
+  if (/\d/.test(clean)) {
+    return clean;
+  }
+
+  if (clean.includes("/")) {
+    return clean
+      .split("/")
+      .map((chunk, chunkIndex) => formatCatalogWord(chunk, index === 0 && chunkIndex === 0 ? 0 : 1))
+      .join("/");
+  }
+
+  if (clean.includes("-")) {
+    return clean
+      .split("-")
+      .map((chunk, chunkIndex) => formatCatalogWord(chunk, index === 0 && chunkIndex === 0 ? 0 : 1))
+      .join("-");
+  }
+
+  const lower = clean.toLocaleLowerCase("es-AR");
+  if (LOWERCASE_UNITS.has(lower)) {
+    return lower;
+  }
+
+  if (clean === clean.toUpperCase() && clean.length <= 4) {
+    return clean.toUpperCase();
+  }
+
+  if (index > 0 && LOWERCASE_WORDS.has(lower)) {
+    return lower;
+  }
+
+  return lower.charAt(0).toUpperCase() + lower.slice(1);
+}
+
+function smartTitleCase(value: string): string {
+  return normalizeTextSpacing(value)
+    .split(" ")
+    .map((word, index) => formatCatalogWord(word, index))
+    .join(" ");
+}
+
+function normalizeDraft(draft: DraftState): DraftState {
+  return {
+    ...draft,
+    barcode: draft.barcode.trim(),
+    name: smartTitleCase(draft.name),
+    brand: smartTitleCase(draft.brand),
+    categoryName: smartTitleCase(draft.categoryName),
+    presentation: normalizeTextSpacing(draft.presentation),
+    description: normalizeTextSpacing(draft.description),
+    image: draft.image.trim(),
+    variants: draft.variants.map((variant) => ({
+      ...variant,
+      name: smartTitleCase(variant.name),
+      barcode: variant.barcode?.trim() || null,
+    })),
+  };
+}
+
+function compareDrafts(current: DraftState, baseline: DraftState) {
+  const normalizedCurrent = normalizeDraft(current);
+  const normalizedBaseline = normalizeDraft(baseline);
+  const changed: string[] = [];
+
+  (["barcode", "name", "brand", "categoryName", "presentation", "description", "image", "status"] as const).forEach((field) => {
+    if (normalizedCurrent[field] !== normalizedBaseline[field]) {
+      changed.push(field);
+    }
+  });
+
+  if (JSON.stringify(normalizedCurrent.variants) !== JSON.stringify(normalizedBaseline.variants)) {
+    changed.push("variants");
+  }
+
+  return changed;
+}
+
+function FieldGroup({
+  label,
+  changed,
+  hint,
+  children,
+}: {
+  label: string;
+  changed?: boolean;
+  hint?: string;
+  children: ReactNode;
+}) {
+  return (
+    <label style={{ display: "grid", gap: "6px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "center" }}>
+        <span style={{ fontSize: "12px", color: "#94a3b8", fontWeight: 700, textTransform: "uppercase", letterSpacing: ".04em" }}>
+          {label}
+        </span>
+        {changed && (
+          <span
+            style={{
+              fontSize: "11px",
+              color: "#38bdf8",
+              fontWeight: 700,
+              padding: "2px 8px",
+              borderRadius: "999px",
+              background: "rgba(56,189,248,.12)",
+              border: "1px solid rgba(56,189,248,.18)",
+            }}
+          >
+            Cambio
+          </span>
+        )}
+      </div>
+      {children}
+      {hint && <span style={{ fontSize: "12px", color: "#94a3b8" }}>{hint}</span>}
+    </label>
+  );
+}
+
 export default function PlatformProductQuickEditor({
   products,
 }: {
@@ -71,7 +214,9 @@ export default function PlatformProductQuickEditor({
 }) {
   const router = useRouter();
   const [search, setSearch] = useState("");
+  const [searchFilter, setSearchFilter] = useState<SearchFilter>("ALL");
   const [draft, setDraft] = useState<DraftState>(() => buildDraft());
+  const [baselineDraft, setBaselineDraft] = useState<DraftState>(() => buildDraft());
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [scannerTarget, setScannerTarget] = useState<"search" | "barcode" | null>(null);
@@ -79,13 +224,25 @@ export default function PlatformProductQuickEditor({
   const usesVariants = draft.variants.length > 0;
 
   const normalizedSearch = search.trim().toLowerCase();
+  const filteredProducts = useMemo(() => {
+    switch (searchFilter) {
+      case "APPROVED":
+        return products.filter((product) => product.status === "APPROVED");
+      case "HIDDEN":
+        return products.filter((product) => product.status === "HIDDEN");
+      case "WITH_VARIANTS":
+        return products.filter((product) => product.variants.length > 0);
+      default:
+        return products;
+    }
+  }, [products, searchFilter]);
   const matches = useMemo(() => {
     if (!normalizedSearch) {
-      return products.slice(0, 8);
+      return filteredProducts.slice(0, 16);
     }
 
-    return products
-      .filter((product) => {
+    return filteredProducts
+      .map((product) => {
         const variantHaystack = product.variants
           .flatMap((variant) => [variant.name, variant.barcode ?? ""])
           .join(" ");
@@ -95,15 +252,38 @@ export default function PlatformProductQuickEditor({
           product.brand ?? "",
           product.categoryName ?? "",
           product.presentation ?? "",
+          product.description ?? "",
           variantHaystack,
         ]
           .join(" ")
           .toLowerCase();
 
-        return haystack.includes(normalizedSearch);
+        const exactBarcode =
+          product.barcode === search.trim() || product.variants.some((variant) => variant.barcode === search.trim());
+        const exactName = product.name.toLowerCase() === normalizedSearch;
+        const startsWithName = product.name.toLowerCase().startsWith(normalizedSearch);
+        const startsWithBarcode =
+          (product.barcode ?? "").startsWith(search.trim()) ||
+          product.variants.some((variant) => (variant.barcode ?? "").startsWith(search.trim()));
+
+        if (exactBarcode) return { product, score: 0 };
+        if (exactName) return { product, score: 1 };
+        if (startsWithName) return { product, score: 2 };
+        if (startsWithBarcode) return { product, score: 3 };
+        if (haystack.includes(normalizedSearch)) return { product, score: 10 };
+        return null;
       })
-      .slice(0, 8);
-  }, [normalizedSearch, products]);
+      .filter((item): item is { product: PlatformProductQuickEditorItem; score: number } => Boolean(item))
+      .sort((left, right) => {
+        if (left.score !== right.score) {
+          return left.score - right.score;
+        }
+
+        return left.product.name.localeCompare(right.product.name, "es");
+      })
+      .slice(0, 16)
+      .map((item) => item.product);
+  }, [filteredProducts, normalizedSearch, search]);
 
   const exactBarcodeMatch = useMemo(() => {
     const trimmed = search.trim();
@@ -121,14 +301,18 @@ export default function PlatformProductQuickEditor({
   }, [products, search]);
 
   const loadProduct = (product: PlatformProductQuickEditorItem) => {
-    setDraft(buildDraft(product));
+    const nextDraft = buildDraft(product);
+    setDraft(nextDraft);
+    setBaselineDraft(nextDraft);
     setSearch(product.barcode ?? product.variants[0]?.barcode ?? product.name);
     setMessage(null);
     setError(null);
   };
 
   const startNewDraft = (barcodeHint?: string) => {
-    setDraft(buildDraft(null, barcodeHint));
+    const nextDraft = buildDraft(null, barcodeHint);
+    setDraft(nextDraft);
+    setBaselineDraft(nextDraft);
     setMessage(null);
     setError(null);
   };
@@ -154,6 +338,22 @@ export default function PlatformProductQuickEditor({
     }));
   };
 
+  const normalizeField = (field: keyof Omit<DraftState, "variants" | "id" | "status">) => {
+    setDraft((current) => {
+      const next = { ...current };
+
+      if (field === "barcode" || field === "image") {
+        next[field] = current[field].trim();
+      } else if (field === "presentation" || field === "description") {
+        next[field] = normalizeTextSpacing(current[field]);
+      } else {
+        next[field] = smartTitleCase(current[field]);
+      }
+
+      return next;
+    });
+  };
+
   const addVariant = () => {
     setDraft((current) => ({
       ...current,
@@ -175,15 +375,17 @@ export default function PlatformProductQuickEditor({
 
     startTransition(async () => {
       try {
+        const normalizedDraft = normalizeDraft(draft);
+        setDraft(normalizedDraft);
         const res = await fetch("/api/admin/platform-products", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            ...draft,
-            barcode: usesVariants ? null : draft.barcode.trim() || null,
-            variants: draft.variants.map((variant) => ({
+            ...normalizedDraft,
+            barcode: usesVariants ? null : normalizedDraft.barcode.trim() || null,
+            variants: normalizedDraft.variants.map((variant) => ({
               id: variant.id,
               name: variant.name,
               barcode: variant.barcode,
@@ -198,6 +400,13 @@ export default function PlatformProductQuickEditor({
           return;
         }
 
+        const savedProduct = data?.product as PlatformProductQuickEditorItem | undefined;
+        const nextDraft = savedProduct ? buildDraft(savedProduct) : normalizedDraft;
+        setDraft(nextDraft);
+        setBaselineDraft(nextDraft);
+        if (savedProduct) {
+          setSearch(savedProduct.barcode ?? savedProduct.variants[0]?.barcode ?? savedProduct.name);
+        }
         setMessage(draft.id ? "Producto actualizado." : "Producto global creado.");
         router.refresh();
       } catch (err) {
@@ -210,10 +419,15 @@ export default function PlatformProductQuickEditor({
   const canSave =
     draft.name.trim().length > 0 &&
     (draft.barcode.trim().length > 0 || draft.variants.some((variant) => variant.barcode?.trim()));
+  const changedFields = useMemo(() => compareDrafts(draft, baselineDraft), [baselineDraft, draft]);
+  const changedFieldSet = useMemo(() => new Set(changedFields), [changedFields]);
+  const changedLabels = changedFields.map((field) => FIELD_LABELS[field] ?? field);
+  const visibleProductsCount = filteredProducts.length;
 
   return (
     <>
       <section
+        id="editor-rapido"
         style={{
           background: "rgba(15,23,42,.82)",
           border: "1px solid rgba(148,163,184,.18)",
@@ -227,11 +441,11 @@ export default function PlatformProductQuickEditor({
           <div>
             <h2 style={{ margin: 0, fontSize: "24px" }}>Editor rapido</h2>
             <div style={{ color: "#94a3b8", fontSize: "14px", marginTop: "4px" }}>
-              Busca por nombre o codigo, escanea desde la camara y edita variantes desde la misma ficha.
+              Busca, corrige y publica desde una sola ficha.
             </div>
           </div>
           <button type="button" className="btn btn-ghost" onClick={() => startNewDraft(search.trim())}>
-            Nuevo rapido
+            Nuevo
           </button>
         </div>
 
@@ -249,6 +463,12 @@ export default function PlatformProductQuickEditor({
                 placeholder="Buscar por codigo o nombre"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && matches[0]) {
+                    e.preventDefault();
+                    loadProduct(matches[0]);
+                  }
+                }}
               />
               <button
                 type="button"
@@ -259,6 +479,35 @@ export default function PlatformProductQuickEditor({
               >
                 |||
               </button>
+            </div>
+
+            <div style={{ color: "#94a3b8", fontSize: "13px" }}>
+              {normalizedSearch
+                ? `${matches.length} resultado${matches.length === 1 ? "" : "s"} rapidos`
+                : `${visibleProductsCount} ficha${visibleProductsCount === 1 ? "" : "s"} en este filtro`}
+            </div>
+
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+              {[
+                { value: "ALL", label: "Todo" },
+                { value: "APPROVED", label: "Aprobados" },
+                { value: "HIDDEN", label: "Ocultos" },
+                { value: "WITH_VARIANTS", label: "Con variantes" },
+              ].map((option) => {
+                const active = searchFilter === option.value;
+
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    className={active ? "btn btn-secondary" : "btn btn-ghost"}
+                    style={{ padding: "8px 12px" }}
+                    onClick={() => setSearchFilter(option.value as SearchFilter)}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
             </div>
 
             {!exactBarcodeMatch && looksLikeBarcode(search.trim()) && (
@@ -296,8 +545,8 @@ export default function PlatformProductQuickEditor({
                     <div style={{ fontWeight: 700 }}>{product.name}</div>
                     <div style={{ color: "#94a3b8", fontSize: "13px" }}>
                       {product.barcode || product.variants[0]?.barcode || "Sin barcode base"}
-                      {product.brand ? ` · ${product.brand}` : ""}
-                      {product.categoryName ? ` · ${product.categoryName}` : ""}
+                      {product.brand ? ` | ${product.brand}` : ""}
+                      {product.categoryName ? ` | ${product.categoryName}` : ""}
                     </div>
                     {product.variants.length > 0 && (
                       <div style={{ color: "#94a3b8", fontSize: "12px" }}>
@@ -318,74 +567,232 @@ export default function PlatformProductQuickEditor({
           </div>
 
           <div style={{ display: "grid", gap: "12px" }}>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "10px" }}>
-              <div style={{ display: "flex", gap: "8px" }}>
-                <input
-                  className="input"
-                  placeholder={usesVariants ? "Se elimina al usar variantes" : "Codigo de barras base"}
-                  value={draft.barcode}
-                  onChange={(e) => handleChange("barcode", e.target.value)}
-                  disabled={usesVariants}
+            <div
+              style={{
+                display: "flex",
+                gap: "12px",
+                alignItems: "center",
+                flexWrap: "wrap",
+                padding: "14px 16px",
+                borderRadius: "16px",
+                background: "rgba(30,41,59,.8)",
+                border: "1px solid rgba(148,163,184,.12)",
+              }}
+            >
+              {draft.image ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={draft.image}
+                  alt={draft.name || "Producto global"}
+                  style={{ width: "64px", height: "64px", borderRadius: "16px", objectFit: "cover", border: "1px solid rgba(148,163,184,.18)" }}
                 />
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  style={{ minWidth: "52px", paddingInline: "12px" }}
-                  onClick={() => setScannerTarget("barcode")}
-                  title="Escanear codigo principal"
-                  disabled={usesVariants}
-                >
-                  |||
-                </button>
+              ) : (
+                <div
+                  style={{
+                    width: "64px",
+                    height: "64px",
+                    borderRadius: "16px",
+                    border: "1px dashed rgba(148,163,184,.18)",
+                    background: "rgba(2,6,23,.5)",
+                  }}
+                />
+              )}
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontWeight: 800, fontSize: "18px" }}>
+                  {draft.name.trim() || "Producto nuevo"}
+                </div>
+                <div style={{ color: "#94a3b8", fontSize: "13px", marginTop: "4px" }}>
+                  {draft.id ? "Editando ficha global" : "Creando ficha global"}
+                </div>
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "8px" }}>
+                  <span
+                    style={{
+                      padding: "4px 10px",
+                      borderRadius: "999px",
+                      fontSize: "12px",
+                      fontWeight: 700,
+                      background: draft.status === "HIDDEN" ? "rgba(248,113,113,.12)" : "rgba(34,197,94,.12)",
+                      color: draft.status === "HIDDEN" ? "#fca5a5" : "#86efac",
+                      border: "1px solid rgba(148,163,184,.16)",
+                    }}
+                  >
+                    {draft.status === "HIDDEN" ? "Oculto" : "Aprobado"}
+                  </span>
+                  {draft.variants.length > 0 && (
+                    <span
+                      style={{
+                        padding: "4px 10px",
+                        borderRadius: "999px",
+                        fontSize: "12px",
+                        fontWeight: 700,
+                        background: "rgba(56,189,248,.12)",
+                        color: "#7dd3fc",
+                        border: "1px solid rgba(56,189,248,.18)",
+                      }}
+                    >
+                      {draft.variants.length} variante{draft.variants.length === 1 ? "" : "s"}
+                    </span>
+                  )}
+                </div>
+                <div style={{ color: "#cbd5e1", fontSize: "13px", marginTop: "6px", lineHeight: 1.5 }}>
+                  Se sincronizan foto y textos. Stock y precios quedan en cada kiosco.
+                </div>
               </div>
-              <input
-                className="input"
-                placeholder="Nombre"
-                value={draft.name}
-                onChange={(e) => handleChange("name", e.target.value)}
-              />
-              <input
-                className="input"
-                placeholder="Marca"
-                value={draft.brand}
-                onChange={(e) => handleChange("brand", e.target.value)}
-              />
-              <input
-                className="input"
-                placeholder="Categoria"
-                value={draft.categoryName}
-                onChange={(e) => handleChange("categoryName", e.target.value)}
-              />
-              <input
-                className="input"
-                placeholder="Presentacion"
-                value={draft.presentation}
-                onChange={(e) => handleChange("presentation", e.target.value)}
-              />
-              <input
-                className="input"
-                placeholder="URL de imagen"
-                value={draft.image}
-                onChange={(e) => handleChange("image", e.target.value)}
-              />
-              <select
-                className="input"
-                value={draft.status}
-                onChange={(e) => handleChange("status", e.target.value as PlatformProductStatusValue)}
-              >
-                <option value="APPROVED">Aprobado</option>
-                <option value="HIDDEN">Oculto</option>
-              </select>
             </div>
 
-            <textarea
-              className="input"
-              placeholder="Descripcion"
-              rows={4}
-              value={draft.description}
-              onChange={(e) => handleChange("description", e.target.value)}
-              style={{ resize: "vertical" }}
-            />
+            {changedFields.length > 0 && (
+              <div
+                style={{
+                  display: "grid",
+                  gap: "10px",
+                  padding: "14px 16px",
+                  borderRadius: "16px",
+                  background: "rgba(8,47,73,.55)",
+                  border: "1px solid rgba(56,189,248,.18)",
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap", alignItems: "center" }}>
+                  <div>
+                    <div style={{ fontWeight: 700, color: "#e0f2fe" }}>Cambios sin guardar</div>
+                    <div style={{ color: "#bae6fd", fontSize: "13px", marginTop: "4px" }}>
+                      Comparado contra el ultimo guardado de esta ficha.
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      onClick={() => setDraft(normalizeDraft(draft))}
+                    >
+                      Normalizar textos
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => {
+                        setDraft(baselineDraft);
+                        setMessage(null);
+                        setError(null);
+                      }}
+                    >
+                      Volver al ultimo guardado
+                    </button>
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                  {changedLabels.map((label) => (
+                    <span
+                      key={label}
+                      style={{
+                        padding: "6px 10px",
+                        borderRadius: "999px",
+                        fontSize: "12px",
+                        fontWeight: 700,
+                        background: "rgba(255,255,255,.08)",
+                        border: "1px solid rgba(186,230,253,.18)",
+                        color: "#e2e8f0",
+                      }}
+                    >
+                      {label}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "10px" }}>
+              <FieldGroup
+                label={FIELD_LABELS.barcode}
+                changed={changedFieldSet.has("barcode")}
+                hint={usesVariants ? "Con variantes, el codigo principal se limpia." : undefined}
+              >
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <input
+                    className="input"
+                    placeholder={usesVariants ? "Se limpia al usar variantes" : "Codigo de barras base"}
+                    value={draft.barcode}
+                    onChange={(e) => handleChange("barcode", e.target.value)}
+                    disabled={usesVariants}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    style={{ minWidth: "52px", paddingInline: "12px" }}
+                    onClick={() => setScannerTarget("barcode")}
+                    title="Escanear codigo principal"
+                    disabled={usesVariants}
+                  >
+                    |||
+                  </button>
+                </div>
+              </FieldGroup>
+              <FieldGroup label={FIELD_LABELS.name} changed={changedFieldSet.has("name")}>
+                <input
+                  className="input"
+                  placeholder="Nombre del producto"
+                  value={draft.name}
+                  onChange={(e) => handleChange("name", e.target.value)}
+                  onBlur={() => normalizeField("name")}
+                />
+              </FieldGroup>
+              <FieldGroup label={FIELD_LABELS.brand} changed={changedFieldSet.has("brand")}>
+                <input
+                  className="input"
+                  placeholder="Marca"
+                  value={draft.brand}
+                  onChange={(e) => handleChange("brand", e.target.value)}
+                  onBlur={() => normalizeField("brand")}
+                />
+              </FieldGroup>
+              <FieldGroup label={FIELD_LABELS.categoryName} changed={changedFieldSet.has("categoryName")}>
+                <input
+                  className="input"
+                  placeholder="Categoria"
+                  value={draft.categoryName}
+                  onChange={(e) => handleChange("categoryName", e.target.value)}
+                  onBlur={() => normalizeField("categoryName")}
+                />
+              </FieldGroup>
+              <FieldGroup label={FIELD_LABELS.presentation} changed={changedFieldSet.has("presentation")}>
+                <input
+                  className="input"
+                  placeholder="Presentacion"
+                  value={draft.presentation}
+                  onChange={(e) => handleChange("presentation", e.target.value)}
+                  onBlur={() => normalizeField("presentation")}
+                />
+              </FieldGroup>
+              <FieldGroup label={FIELD_LABELS.image} changed={changedFieldSet.has("image")}>
+                <input
+                  className="input"
+                  placeholder="URL de imagen"
+                  value={draft.image}
+                  onChange={(e) => handleChange("image", e.target.value)}
+                />
+              </FieldGroup>
+              <FieldGroup label={FIELD_LABELS.status} changed={changedFieldSet.has("status")}>
+                <select
+                  className="input"
+                  value={draft.status}
+                  onChange={(e) => handleChange("status", e.target.value as PlatformProductStatusValue)}
+                >
+                  <option value="APPROVED">Aprobado</option>
+                  <option value="HIDDEN">Oculto</option>
+                </select>
+              </FieldGroup>
+            </div>
+
+            <FieldGroup label={FIELD_LABELS.description} changed={changedFieldSet.has("description")}>
+              <textarea
+                className="input"
+                placeholder="Descripcion corta"
+                rows={4}
+                value={draft.description}
+                onChange={(e) => handleChange("description", e.target.value)}
+                onBlur={() => normalizeField("description")}
+                style={{ resize: "vertical" }}
+              />
+            </FieldGroup>
 
             <div
               style={{
@@ -401,17 +808,22 @@ export default function PlatformProductQuickEditor({
                 <div>
                   <div style={{ fontWeight: 700 }}>Variantes</div>
                   <div style={{ color: "#94a3b8", fontSize: "13px" }}>
-                    Cada variante puede tener su propio codigo de barras. Si hay variantes, el codigo principal se limpia.
+                    Cada variante puede tener su propio codigo. Si agregas variantes, el codigo principal se limpia.
                   </div>
                 </div>
                 <button type="button" className="btn btn-ghost" onClick={addVariant}>
                   + Variante
                 </button>
               </div>
+              {changedFieldSet.has("variants") && (
+                <div style={{ fontSize: "12px", color: "#38bdf8", fontWeight: 700 }}>
+                  Cambiaron las variantes desde el ultimo guardado.
+                </div>
+              )}
 
               {draft.variants.length === 0 ? (
                 <div style={{ color: "#94a3b8", fontSize: "14px" }}>
-                  Sin variantes cargadas. Si el producto cambia por sabor, tamano o tipo, agregalas aca.
+                  Sin variantes. Agregalas solo si el producto cambia por sabor, tamano o tipo.
                 </div>
               ) : (
                 <div style={{ display: "grid", gap: "10px" }}>
@@ -424,19 +836,36 @@ export default function PlatformProductQuickEditor({
                         gap: "8px",
                         alignItems: "center",
                       }}
-                    >
-                      <input
-                        className="input"
-                        placeholder="Nombre de variante"
-                        value={variant.name}
-                        onChange={(e) => updateVariant(index, "name", e.target.value)}
-                      />
-                      <input
-                        className="input"
-                        placeholder="Barcode de variante"
-                        value={variant.barcode ?? ""}
-                        onChange={(e) => updateVariant(index, "barcode", e.target.value)}
-                      />
+                      >
+                      <FieldGroup label={`Variante ${index + 1}`} changed={changedFieldSet.has("variants")}>
+                        <input
+                          className="input"
+                          placeholder="Nombre de variante"
+                          value={variant.name}
+                          onChange={(e) => updateVariant(index, "name", e.target.value)}
+                          onBlur={() =>
+                            setDraft((current) => ({
+                              ...current,
+                              variants: current.variants.map((currentVariant, currentIndex) =>
+                                currentIndex === index
+                                  ? {
+                                      ...currentVariant,
+                                      name: smartTitleCase(currentVariant.name),
+                                    }
+                                  : currentVariant,
+                              ),
+                            }))
+                          }
+                        />
+                      </FieldGroup>
+                      <FieldGroup label="Codigo variante" changed={changedFieldSet.has("variants")}>
+                        <input
+                          className="input"
+                          placeholder="Barcode de variante"
+                          value={variant.barcode ?? ""}
+                          onChange={(e) => updateVariant(index, "barcode", e.target.value)}
+                        />
+                      </FieldGroup>
                       <button type="button" className="btn btn-ghost" onClick={() => removeVariant(index)}>
                         Quitar
                       </button>
@@ -455,8 +884,17 @@ export default function PlatformProductQuickEditor({
                 flexWrap: "wrap",
               }}
             >
-              <div style={{ color: error ? "#fca5a5" : message ? "#86efac" : "#94a3b8", fontSize: "14px" }}>
-                {error || message || "Completa los campos y guarda."}
+              <div style={{ display: "grid", gap: "6px" }}>
+                <div style={{ color: error ? "#fca5a5" : message ? "#86efac" : "#94a3b8", fontSize: "14px" }}>
+                  {error || message || "Guarda cuando la ficha general este lista."}
+                </div>
+                {!error && !message && (
+                  <div style={{ color: changedFields.length > 0 ? "#38bdf8" : "#94a3b8", fontSize: "13px" }}>
+                    {changedFields.length > 0
+                      ? `${changedFields.length} cambio${changedFields.length === 1 ? "" : "s"} sin guardar: ${changedLabels.join(", ")}`
+                      : "Sin cambios pendientes."}
+                  </div>
+                )}
               </div>
               <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
                 <button type="button" className="btn btn-ghost" onClick={() => startNewDraft()}>

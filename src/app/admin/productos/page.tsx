@@ -5,6 +5,7 @@ import {
 import { auth } from "@/lib/auth";
 import { ensurePlatformCatalogSeeded } from "@/lib/platform-catalog";
 import { isPlatformAdmin } from "@/lib/platform-admin";
+import { syncAutoProductsFromPlatformProduct } from "@/lib/platform-product-sync";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import Link from "next/link";
@@ -24,77 +25,6 @@ async function ensurePlatformAdmin() {
   }
 
   return session;
-}
-
-async function savePlatformProduct(formData: FormData) {
-  "use server";
-
-  await ensurePlatformAdmin();
-
-  const id = String(formData.get("id") ?? "");
-  const barcode = String(formData.get("barcode") ?? "").trim() || null;
-  const name = String(formData.get("name") ?? "").trim();
-  const brand = String(formData.get("brand") ?? "").trim();
-  const categoryName = String(formData.get("categoryName") ?? "").trim();
-  const presentation = String(formData.get("presentation") ?? "").trim();
-  const description = String(formData.get("description") ?? "").trim();
-  const image = String(formData.get("image") ?? "").trim();
-  const status =
-    String(formData.get("status") ?? PlatformProductStatus.APPROVED) === PlatformProductStatus.HIDDEN
-      ? PlatformProductStatus.HIDDEN
-      : PlatformProductStatus.APPROVED;
-
-  const existingProduct = id
-    ? await prisma.platformProduct.findUnique({
-        where: { id },
-        include: { variants: true },
-      })
-    : null;
-  const effectiveBarcode = existingProduct?.variants.length ? null : barcode;
-
-  if (!name || (!effectiveBarcode && !(existingProduct?.variants.length ?? 0))) {
-    return;
-  }
-
-  if (id) {
-    await prisma.platformProduct.update({
-      where: { id },
-      data: {
-        barcode: effectiveBarcode,
-        name,
-        brand: brand || null,
-        categoryName: categoryName || null,
-        presentation: presentation || null,
-        description: description || null,
-        image: image || null,
-        status,
-      },
-    });
-  } else if (barcode) {
-    await prisma.platformProduct.upsert({
-      where: { barcode: effectiveBarcode! },
-      update: {
-        name,
-        brand: brand || null,
-        categoryName: categoryName || null,
-        presentation: presentation || null,
-        description: description || null,
-        image: image || null,
-        status,
-      },
-      create: {
-        barcode: effectiveBarcode,
-        name,
-        brand: brand || null,
-        presentation: presentation || null,
-        description: description || null,
-        image: image || null,
-        status,
-      },
-    });
-  }
-
-  revalidatePath("/admin/productos");
 }
 
 async function reviewSubmission(formData: FormData) {
@@ -158,6 +88,7 @@ async function reviewSubmission(formData: FormData) {
             create: variantData,
           },
         },
+        select: { id: true },
       })
     : effectiveBarcode
       ? await prisma.platformProduct.upsert({
@@ -188,6 +119,7 @@ async function reviewSubmission(formData: FormData) {
               create: variantData,
             },
           },
+          select: { id: true },
         })
       : await prisma.platformProduct.create({
         data: {
@@ -203,7 +135,10 @@ async function reviewSubmission(formData: FormData) {
             create: variantData,
           },
         },
+        select: { id: true },
       });
+
+  await syncAutoProductsFromPlatformProduct(prisma, platformProduct.id);
 
   await prisma.platformProductSubmission.update({
     where: { id: submission.id },
@@ -231,7 +166,7 @@ export default async function AdminProductsPage() {
   await ensurePlatformAdmin();
   await ensurePlatformCatalogSeeded();
 
-  const [platformProducts, pendingSubmissions] = await Promise.all([
+  const [platformProducts, pendingSubmissions, linkedProductsCount, autoSyncProductsCount] = await Promise.all([
     prisma.platformProduct.findMany({
       include: {
         variants: {
@@ -262,7 +197,24 @@ export default async function AdminProductsPage() {
       orderBy: { createdAt: "desc" },
       take: 60,
     }),
+    prisma.product.count({
+      where: {
+        platformProductId: {
+          not: null,
+        },
+      },
+    }),
+    prisma.product.count({
+      where: {
+        platformProductId: {
+          not: null,
+        },
+        platformSyncMode: "AUTO",
+      },
+    }),
   ]);
+  const approvedCount = platformProducts.filter((product) => product.status === PlatformProductStatus.APPROVED).length;
+  const hiddenCount = platformProducts.filter((product) => product.status === PlatformProductStatus.HIDDEN).length;
 
   return (
     <div style={{ minHeight: "100dvh", background: "#020617", padding: "24px", color: "white" }}>
@@ -296,10 +248,42 @@ export default async function AdminProductsPage() {
             lineHeight: 1.6,
           }}
         >
-          Este catalogo se usa para precargar datos al crear productos por codigo de barras. Si un producto tiene
-          variantes, cada variante puede guardar su propio codigo. Los productos solo aparecen en la caja del kiosco
-          cuando ese kiosco completa precio, costo unitario y stock.
+          <div style={{ fontWeight: 700, marginBottom: "8px" }}>La base global sirve para dejar bien la ficha comun.</div>
+          <div>Nombre, foto, marca, descripcion y presentacion salen de aca.</div>
+          <div>Precio, stock y configuracion de caja siguen siendo de cada kiosco.</div>
+          <div>Si un kiosco usa sincronizacion automatica, estos cambios se reflejan solos.</div>
         </div>
+
+        <section
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+            gap: "12px",
+          }}
+        >
+          {[
+            { label: "Aportes pendientes", value: pendingSubmissions.length, tone: "#f59e0b" },
+            { label: "Productos aprobados", value: approvedCount, tone: "#22c55e" },
+            { label: "Productos ocultos", value: hiddenCount, tone: "#94a3b8" },
+            { label: "Vinculados en kioscos", value: linkedProductsCount, tone: "#38bdf8" },
+            { label: "Auto-sync activos", value: autoSyncProductsCount, tone: "#a78bfa" },
+          ].map((item) => (
+            <div
+              key={item.label}
+              style={{
+                padding: "16px 18px",
+                borderRadius: "18px",
+                background: "rgba(15,23,42,.82)",
+                border: "1px solid rgba(148,163,184,.18)",
+                display: "grid",
+                gap: "6px",
+              }}
+            >
+              <div style={{ color: "#94a3b8", fontSize: "13px" }}>{item.label}</div>
+              <div style={{ fontSize: "30px", fontWeight: 900, color: item.tone }}>{item.value}</div>
+            </div>
+          ))}
+        </section>
 
         <section
           style={{
@@ -312,7 +296,12 @@ export default async function AdminProductsPage() {
           }}
         >
           <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
-            <h2 style={{ margin: 0, fontSize: "24px" }}>Aportes pendientes</h2>
+            <div>
+              <h2 style={{ margin: 0, fontSize: "24px" }}>Aportes pendientes</h2>
+              <div style={{ color: "#94a3b8", fontSize: "14px", marginTop: "4px" }}>
+                Revisalos rapido y publica solo lo que mejora la ficha general.
+              </div>
+            </div>
             <div style={{ color: "#94a3b8" }}>{pendingSubmissions.length} pendientes</div>
           </div>
 
@@ -338,7 +327,7 @@ export default async function AdminProductsPage() {
                     <div>
                       <div style={{ fontWeight: 700, fontSize: "18px" }}>{submission.name}</div>
                       <div style={{ color: "#94a3b8", fontSize: "13px" }}>
-                        {submission.barcode || "Sin barcode base"} · {submission.submittedFromKiosco?.name || "Kiosco desconocido"} ·{" "}
+                        {submission.barcode || "Sin barcode base"} | {submission.submittedFromKiosco?.name || "Kiosco desconocido"} |{" "}
                         {submission.submittedByUser?.name || submission.submittedByUser?.email || "Usuario desconocido"}
                       </div>
                     </div>
@@ -383,7 +372,7 @@ export default async function AdminProductsPage() {
                             }}
                           >
                             {variant.name}
-                            {variant.barcode ? ` · ${variant.barcode}` : ""}
+                            {variant.barcode ? ` | ${variant.barcode}` : ""}
                           </span>
                         ))}
                       </div>
@@ -393,7 +382,7 @@ export default async function AdminProductsPage() {
                   <textarea
                     name="reviewNote"
                     className="input"
-                    placeholder="Nota interna de moderacion"
+                    placeholder="Nota interna opcional"
                     rows={2}
                     style={{ resize: "vertical" }}
                   />
@@ -402,7 +391,7 @@ export default async function AdminProductsPage() {
                       Aprobar y publicar
                     </button>
                     <button type="submit" name="action" value="reject" className="btn btn-ghost">
-                      Rechazar
+                      Rechazar aporte
                     </button>
                   </div>
                 </form>
@@ -445,15 +434,24 @@ export default async function AdminProductsPage() {
           }}
         >
           <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
-            <h2 style={{ margin: 0, fontSize: "24px" }}>Base global</h2>
-            <div style={{ color: "#94a3b8" }}>{platformProducts.length} productos cargados</div>
+            <div>
+              <h2 style={{ margin: 0, fontSize: "24px" }}>Ultimos productos globales</h2>
+              <div style={{ color: "#94a3b8", fontSize: "14px", marginTop: "4px" }}>
+                Referencia rapida para revisar la base. La edicion fina va por el editor rapido de arriba.
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
+              <div style={{ color: "#94a3b8" }}>{platformProducts.length} productos cargados</div>
+              <Link href="/admin/productos#editor-rapido" className="btn btn-ghost">
+                Ir al editor
+              </Link>
+            </div>
           </div>
 
           <div style={{ display: "grid", gap: "12px" }}>
-            {platformProducts.map((product) => (
-              <form
+            {platformProducts.slice(0, 80).map((product) => (
+              <article
                 key={product.id}
-                action={savePlatformProduct}
                 style={{
                   display: "grid",
                   gap: "10px",
@@ -463,26 +461,54 @@ export default async function AdminProductsPage() {
                   border: "1px solid rgba(148,163,184,.12)",
                 }}
               >
-                <input type="hidden" name="id" value={product.id} />
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "10px" }}>
-                  <input name="barcode" className="input" defaultValue={product.barcode ?? ""} />
-                  <input name="name" className="input" defaultValue={product.name} />
-                  <input name="brand" className="input" defaultValue={product.brand ?? ""} />
-                  <input name="categoryName" className="input" defaultValue={product.categoryName ?? ""} placeholder="Categoria" />
-                  <input name="presentation" className="input" defaultValue={product.presentation ?? ""} />
-                  <input name="image" className="input" defaultValue={product.image ?? ""} />
-                  <select name="status" className="input" defaultValue={product.status}>
-                    <option value={PlatformProductStatus.APPROVED}>Aprobado</option>
-                    <option value={PlatformProductStatus.HIDDEN}>Oculto</option>
-                  </select>
+                <div style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
+                  {product.image ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={product.image}
+                      alt={product.name}
+                      style={{ width: "54px", height: "54px", borderRadius: "14px", objectFit: "cover", border: "1px solid rgba(148,163,184,.18)" }}
+                    />
+                  ) : (
+                    <div
+                      style={{
+                        width: "54px",
+                        height: "54px",
+                        borderRadius: "14px",
+                        border: "1px dashed rgba(148,163,184,.18)",
+                        background: "rgba(2,6,23,.5)",
+                      }}
+                    />
+                  )}
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontWeight: 700, fontSize: "18px" }}>{product.name}</div>
+                    <div style={{ color: "#94a3b8", fontSize: "13px" }}>
+                      {product.barcode || "Sin barcode base"}
+                      {product.brand ? ` | ${product.brand}` : ""}
+                      {product.categoryName ? ` | ${product.categoryName}` : ""}
+                    </div>
+                  </div>
                 </div>
-                <textarea
-                  name="description"
-                  className="input"
-                  defaultValue={product.description ?? ""}
-                  rows={2}
-                  style={{ resize: "vertical" }}
-                />
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "10px" }}>
+                  <div>
+                    <div style={{ fontSize: "12px", color: "#94a3b8" }}>Presentacion</div>
+                    <div>{product.presentation || "Sin dato"}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: "12px", color: "#94a3b8" }}>Estado</div>
+                    <div style={{ color: product.status === PlatformProductStatus.HIDDEN ? "#fca5a5" : "#86efac" }}>
+                      {product.status === PlatformProductStatus.HIDDEN ? "Oculto" : "Aprobado"}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: "12px", color: "#94a3b8" }}>Ultima actualizacion</div>
+                    <div>{new Date(product.updatedAt).toLocaleString("es-AR")}</div>
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: "12px", color: "#94a3b8", marginBottom: "4px" }}>Descripcion</div>
+                  <div style={{ color: "#cbd5e1" }}>{product.description || "Sin descripcion"}</div>
+                </div>
                 {product.variants.length > 0 && (
                   <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                     {product.variants.map((variant) => (
@@ -498,20 +524,20 @@ export default async function AdminProductsPage() {
                         }}
                       >
                         {variant.name}
-                        {variant.barcode ? ` · ${variant.barcode}` : ""}
+                        {variant.barcode ? ` | ${variant.barcode}` : ""}
                       </span>
                     ))}
                   </div>
                 )}
                 <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
                   <div style={{ color: "#94a3b8", fontSize: "13px" }}>
-                    Actualizado: {new Date(product.updatedAt).toLocaleString("es-AR")}
+                    Usa el editor rapido para cambiar esta ficha.
                   </div>
-                  <button type="submit" className="btn btn-secondary">
-                    Guardar cambios
-                  </button>
+                  <Link href="/admin/productos#editor-rapido" className="btn btn-secondary">
+                    Editar arriba
+                  </Link>
                 </div>
-              </form>
+              </article>
             ))}
           </div>
         </section>

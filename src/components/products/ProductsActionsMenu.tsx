@@ -7,8 +7,10 @@ export default function ProductsActionsMenu({
   exporting,
   hasMultipleBranches,
   canExport,
+  canPlatformSync,
   onExport,
   onImport,
+  onPlatformSync,
   onReplicate,
   onTransfer,
   onUpdatePrices,
@@ -18,8 +20,10 @@ export default function ProductsActionsMenu({
   exporting: boolean;
   hasMultipleBranches: boolean;
   canExport: boolean;
+  canPlatformSync: boolean;
   onExport: () => void;
   onImport: () => void;
+  onPlatformSync: () => void;
   onReplicate: () => void;
   onTransfer: () => void;
   onUpdatePrices: () => void;
@@ -95,6 +99,14 @@ export default function ProductsActionsMenu({
               </button>
               <button className="btn btn-ghost" style={menuButtonStyle} onClick={() => run(onImport)}>
                 Importar XLSX
+              </button>
+              <button
+                className="btn btn-ghost"
+                style={menuButtonStyle}
+                onClick={() => run(onPlatformSync)}
+                disabled={!canPlatformSync}
+              >
+                Sincronizar base general
               </button>
 
               {hasMultipleBranches && (

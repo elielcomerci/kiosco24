@@ -3,6 +3,7 @@ import { PlatformProductStatus, PlatformSyncMode, type Prisma } from "@prisma/cl
 import { prisma } from "@/lib/prisma";
 
 type SyncDbClient = Prisma.TransactionClient | typeof prisma;
+export type PlatformSyncApplyMode = "image" | "text" | "all";
 
 type SyncablePlatformProduct = {
   id: string;
@@ -65,18 +66,102 @@ function productUsesBaseBarcode(product: Pick<SyncableLocalProduct, "variants">)
 export function buildPlatformSyncUpdateData(
   product: Pick<SyncableLocalProduct, "variants">,
   platformProduct: SyncablePlatformProduct,
+  mode: PlatformSyncApplyMode = "all",
 ): Prisma.ProductUpdateInput {
   return {
-    name: normalizeName(platformProduct.name),
-    brand: normalizeText(platformProduct.brand),
-    description: normalizeText(platformProduct.description),
-    presentation: normalizeText(platformProduct.presentation),
-    image: normalizeText(platformProduct.image),
-    platformSourceUpdatedAt: platformProduct.updatedAt,
-    ...(productUsesBaseBarcode(product)
+    ...((mode === "text" || mode === "all")
+      ? {
+          name: normalizeName(platformProduct.name),
+          brand: normalizeText(platformProduct.brand),
+          description: normalizeText(platformProduct.description),
+          presentation: normalizeText(platformProduct.presentation),
+        }
+      : {}),
+    ...((mode === "image" || mode === "all")
+      ? {
+          image: normalizeText(platformProduct.image),
+        }
+      : {}),
+    ...(mode === "all"
+      ? {
+          platformSourceUpdatedAt: platformProduct.updatedAt,
+        }
+      : {}),
+    ...(mode === "all" && productUsesBaseBarcode(product)
       ? { barcode: normalizeText(platformProduct.barcode) }
       : {}),
   };
+}
+
+function getComparableFieldsForMode(args: {
+  barcode: string | null | undefined;
+  name: string | null | undefined;
+  brand: string | null | undefined;
+  description: string | null | undefined;
+  presentation: string | null | undefined;
+  image: string | null | undefined;
+  compareBarcode: boolean;
+  mode: PlatformSyncApplyMode;
+}) {
+  return {
+    ...((args.mode === "text" || args.mode === "all")
+      ? {
+          name: normalizeName(args.name),
+          brand: normalizeText(args.brand),
+          description: normalizeText(args.description),
+          presentation: normalizeText(args.presentation),
+        }
+      : {}),
+    ...((args.mode === "image" || args.mode === "all")
+      ? {
+          image: normalizeText(args.image),
+        }
+      : {}),
+    ...(args.mode === "all" && args.compareBarcode
+      ? {
+          barcode: normalizeText(args.barcode),
+        }
+      : {}),
+  };
+}
+
+export function hasPlatformSyncUpdateForMode(args: {
+  product: SyncableLocalProduct;
+  platformProduct: SyncablePlatformProduct | null | undefined;
+  mode: PlatformSyncApplyMode;
+}) {
+  const { product, platformProduct, mode } = args;
+  if (!platformProduct || product.platformProductId !== platformProduct.id) {
+    return false;
+  }
+
+  if (platformProduct.status !== PlatformProductStatus.APPROVED) {
+    return false;
+  }
+
+  const compareBarcode = productUsesBaseBarcode(product);
+  const localFields = getComparableFieldsForMode({
+    barcode: product.barcode,
+    name: product.name,
+    brand: product.brand,
+    description: product.description,
+    presentation: product.presentation,
+    image: product.image,
+    compareBarcode,
+    mode,
+  });
+  const remoteFields = getComparableFieldsForMode({
+    barcode: platformProduct.barcode,
+    name: platformProduct.name,
+    brand: platformProduct.brand,
+    description: platformProduct.description,
+    presentation: platformProduct.presentation,
+    image: platformProduct.image,
+    compareBarcode,
+    mode,
+  });
+
+  return JSON.stringify(localFields) !== JSON.stringify(remoteFields);
 }
 
 export function hasPlatformSyncUpdate(args: {
@@ -165,7 +250,7 @@ export async function syncProductFromPlatform(client: SyncDbClient, productId: s
 
   await client.product.update({
     where: { id: product.id },
-    data: buildPlatformSyncUpdateData(product, platformProduct),
+    data: buildPlatformSyncUpdateData(product, platformProduct, "all"),
   });
 
   return { synced: true as const, platformProduct };
@@ -199,7 +284,7 @@ export async function syncAutoProductsFromPlatformProduct(
     linkedProducts.map((product) =>
       client.product.update({
         where: { id: product.id },
-        data: buildPlatformSyncUpdateData(product, platformProduct),
+        data: buildPlatformSyncUpdateData(product, platformProduct, "all"),
       }),
     ),
   );
@@ -240,7 +325,6 @@ export async function pushPlatformImagesToLinkedProducts(client: SyncDbClient) {
       },
       data: {
         image,
-        platformSourceUpdatedAt: platformProduct.updatedAt,
       },
     });
 
@@ -250,6 +334,74 @@ export async function pushPlatformImagesToLinkedProducts(client: SyncDbClient) {
 
   return {
     processedSources,
+    updatedProducts,
+  };
+}
+
+export async function syncLinkedProductsFromPlatform(
+  client: SyncDbClient,
+  kioscoId: string,
+  mode: PlatformSyncApplyMode,
+) {
+  const linkedProducts = await client.product.findMany({
+    where: {
+      kioscoId,
+      platformProductId: {
+        not: null,
+      },
+    },
+    select: {
+      id: true,
+      barcode: true,
+      name: true,
+      brand: true,
+      description: true,
+      presentation: true,
+      image: true,
+      platformProductId: true,
+      platformSyncMode: true,
+      platformSourceUpdatedAt: true,
+      variants: { select: { id: true } },
+      platformProduct: {
+        select: {
+          id: true,
+          barcode: true,
+          name: true,
+          brand: true,
+          description: true,
+          presentation: true,
+          image: true,
+          status: true,
+          updatedAt: true,
+        },
+      },
+    },
+  });
+
+  let processedProducts = 0;
+  let updatedProducts = 0;
+
+  for (const product of linkedProducts) {
+    if (!product.platformProduct) {
+      continue;
+    }
+
+    processedProducts += 1;
+
+    if (!hasPlatformSyncUpdateForMode({ product, platformProduct: product.platformProduct, mode })) {
+      continue;
+    }
+
+    await client.product.update({
+      where: { id: product.id },
+      data: buildPlatformSyncUpdateData(product, product.platformProduct, mode),
+    });
+
+    updatedProducts += 1;
+  }
+
+  return {
+    processedProducts,
     updatedProducts,
   };
 }

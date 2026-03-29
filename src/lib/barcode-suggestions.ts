@@ -17,6 +17,7 @@ export interface BarcodeSuggestion {
 export interface BarcodeLookupResponse {
   found: boolean;
   suggestion: BarcodeSuggestion | null;
+  suggestions?: BarcodeSuggestion[];
 }
 
 export function normalizeBarcodeCode(value: string) {

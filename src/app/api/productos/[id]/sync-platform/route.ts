@@ -2,8 +2,15 @@ import { NextResponse } from "next/server";
 
 import { auth } from "@/lib/auth";
 import { getBranchContext } from "@/lib/branch";
-import { syncProductFromPlatform } from "@/lib/platform-product-sync";
+import {
+  buildPlatformSyncUpdateData,
+  type PlatformSyncApplyMode,
+} from "@/lib/platform-product-sync";
 import { prisma } from "@/lib/prisma";
+
+function normalizeMode(value: unknown): PlatformSyncApplyMode {
+  return value === "image" || value === "text" ? value : "all";
+}
 
 export async function POST(
   req: Request,
@@ -27,28 +34,73 @@ export async function POST(
   }
 
   const { id } = await params;
+  const body = await req.json().catch(() => ({}));
+  const mode = normalizeMode(body?.mode);
   const product = await prisma.product.findFirst({
     where: { id, kioscoId },
-    select: { id: true },
+    select: {
+      id: true,
+      barcode: true,
+      name: true,
+      brand: true,
+      description: true,
+      presentation: true,
+      image: true,
+      platformProductId: true,
+      platformSyncMode: true,
+      platformSourceUpdatedAt: true,
+      variants: { select: { id: true } },
+      platformProduct: {
+        select: {
+          id: true,
+          barcode: true,
+          name: true,
+          brand: true,
+          description: true,
+          presentation: true,
+          image: true,
+          status: true,
+          updatedAt: true,
+        },
+      },
+    },
   });
 
   if (!product) {
     return NextResponse.json({ error: "Producto no encontrado." }, { status: 404 });
   }
 
-  const result = await syncProductFromPlatform(prisma, id);
-  if (!result.synced) {
+  if (!product.platformProductId) {
     return NextResponse.json(
       {
-        error:
-          result.reason === "unlinked"
-            ? "Este producto no esta vinculado a la base general."
-            : "No encontramos un origen aprobado para sincronizar.",
+        error: "Este producto no esta vinculado a la base general.",
       },
       { status: 409 },
     );
   }
 
+  if (!product.platformProduct) {
+    return NextResponse.json(
+      {
+        error: "No encontramos un origen aprobado para sincronizar.",
+      },
+      { status: 409 },
+    );
+  }
+
+  if (product.platformProduct.status !== "APPROVED") {
+    return NextResponse.json(
+      {
+        error: "No encontramos un origen aprobado para sincronizar.",
+      },
+      { status: 409 },
+    );
+  }
+
+  await prisma.product.update({
+    where: { id: product.id },
+    data: buildPlatformSyncUpdateData(product, product.platformProduct, mode),
+  });
+
   return NextResponse.json({ success: true });
 }
-

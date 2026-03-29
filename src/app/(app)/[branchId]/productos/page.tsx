@@ -93,6 +93,7 @@ type ProductModalSavePayload = {
 
 type PricingMode = "SHARED" | "BRANCH";
 type PlatformSyncMode = "MANUAL" | "AUTO";
+type PlatformSyncActionMode = "image" | "text" | "all";
 
 type TransferLotRecord = TransferPlanLotInput & {
   id: string;
@@ -391,7 +392,9 @@ function ProductModal({
   const [variantQuickAdds, setVariantQuickAdds] = useState<Record<string, string>>({});
   const [hasVariants, setHasVariants] = useState((product?.variants?.length ?? 0) > 0);
   const [suggestion, setSuggestion] = useState<BarcodeSuggestion | null>(null);
+  const [nameSuggestions, setNameSuggestions] = useState<BarcodeSuggestion[]>([]);
   const [lookupState, setLookupState] = useState<"idle" | "loading" | "ready">("idle");
+  const [nameLookupState, setNameLookupState] = useState<"idle" | "loading" | "ready">("idle");
   const [dismissedSuggestionCode, setDismissedSuggestionCode] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [platformSyncMode, setPlatformSyncMode] = useState<PlatformSyncMode>(product?.platformSyncMode ?? "MANUAL");
@@ -417,6 +420,12 @@ function ProductModal({
       : null;
   const effectiveLookupState =
     !lookupCode ? "idle" : visibleSuggestion ? "ready" : lookupState === "loading" ? "loading" : "idle";
+  const normalizedNameQuery = name.trim();
+  const shouldLookupByName =
+    isNew &&
+    normalizedNameQuery.length >= 3 &&
+    !visibleSuggestion &&
+    !applyingSuggestion;
   const hasPlatformLink = Boolean(product?.platformProductId);
   const canManagePlatformSync = hasPlatformLink && isOwner;
 
@@ -518,6 +527,8 @@ function ProductModal({
     } else {
       setHasVariants(false);
     }
+    setNameSuggestions([]);
+    setNameLookupState("idle");
     setSuggestion(nextSuggestion);
     setLookupState("ready");
     setDismissedSuggestionCode(null);
@@ -565,6 +576,41 @@ function ProductModal({
       window.clearTimeout(timeoutId);
     };
   }, [lookupCode]);
+
+  useEffect(() => {
+    if (!shouldLookupByName) {
+      setNameSuggestions([]);
+      setNameLookupState("idle");
+      return;
+    }
+
+    let cancelled = false;
+    const timeoutId = window.setTimeout(async () => {
+      setNameLookupState("loading");
+
+      try {
+        const res = await fetch(`/api/platform-products/lookup?q=${encodeURIComponent(normalizedNameQuery)}`);
+        const data = (await res.json()) as BarcodeLookupResponse;
+
+        if (cancelled) return;
+
+        const suggestions = Array.isArray(data.suggestions) ? data.suggestions : [];
+        setNameSuggestions(suggestions);
+        setNameLookupState(suggestions.length > 0 ? "ready" : "idle");
+      } catch (error) {
+        console.error(error);
+        if (!cancelled) {
+          setNameSuggestions([]);
+          setNameLookupState("idle");
+        }
+      }
+    }, 320);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeoutId);
+    };
+  }, [normalizedNameQuery, shouldLookupByName]);
 
   const applyQuickSimpleStock = () => {
     if (projectedSimpleStock === null || parsedQuickStockAdd === null || parsedQuickStockAdd <= 0) {
@@ -657,7 +703,7 @@ function ProductModal({
     }
   };
 
-  const handleSyncNow = async () => {
+  const handleSyncNow = async (mode: PlatformSyncActionMode = "all") => {
     if (!product) {
       return;
     }
@@ -667,7 +713,8 @@ function ProductModal({
     try {
       const res = await fetch(`/api/productos/${product.id}/sync-platform`, {
         method: "POST",
-        headers: { "x-branch-id": branchId },
+        headers: { "Content-Type": "application/json", "x-branch-id": branchId },
+        body: JSON.stringify({ mode }),
       });
       const data = await res.json().catch(() => null);
 
@@ -878,10 +925,102 @@ function ProductModal({
               className="input"
               placeholder="Nombre del producto *"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => {
+                setName(e.target.value);
+                if (nameSuggestions.length > 0) {
+                  setNameSuggestions([]);
+                }
+              }}
               style={{ flex: 1 }}
             />
           </div>
+
+        {shouldLookupByName && (
+          <div
+            style={{
+              marginBottom: "12px",
+              padding: "12px",
+              borderRadius: "var(--radius)",
+              border: "1px solid var(--border)",
+              background: "var(--surface-2)",
+              display: "flex",
+              flexDirection: "column",
+              gap: "10px",
+            }}
+          >
+            <div style={{ fontSize: "12px", fontWeight: 700, textTransform: "uppercase", color: "var(--text-3)" }}>
+              Coincidencias en base general
+            </div>
+
+            {nameLookupState === "loading" && (
+              <div style={{ fontSize: "12px", color: "var(--text-3)" }}>
+                Buscando coincidencias por nombre...
+              </div>
+            )}
+
+            {nameLookupState !== "loading" && nameSuggestions.length === 0 && (
+              <div style={{ fontSize: "12px", color: "var(--text-3)" }}>
+                No encontramos una ficha parecida todavia.
+              </div>
+            )}
+
+            {nameSuggestions.map((item) => (
+              <div
+                key={`${item.code}-${item.name}`}
+                style={{
+                  display: "flex",
+                  gap: "12px",
+                  alignItems: "center",
+                  padding: "10px",
+                  borderRadius: "12px",
+                  background: "var(--surface)",
+                  border: "1px solid var(--border)",
+                }}
+              >
+                {item.image ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={item.image}
+                    alt={item.name}
+                    style={{ width: "48px", height: "48px", objectFit: "cover", borderRadius: "10px", flexShrink: 0 }}
+                  />
+                ) : (
+                  <div
+                    style={{
+                      width: "48px",
+                      height: "48px",
+                      borderRadius: "10px",
+                      background: "var(--surface-2)",
+                      border: "1px dashed var(--border)",
+                      flexShrink: 0,
+                    }}
+                  />
+                )}
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ fontWeight: 700 }}>{item.name}</div>
+                  {(item.brand || item.presentation || item.description) && (
+                    <div style={{ fontSize: "12px", color: "var(--text-3)", marginTop: "4px" }}>
+                      {[item.brand, item.presentation, item.description].filter(Boolean).join(" · ")}
+                    </div>
+                  )}
+                  {item.categoryName && (
+                    <div style={{ fontSize: "12px", color: "var(--text-3)", marginTop: "4px" }}>
+                      Categoria sugerida: {item.categoryName}
+                    </div>
+                  )}
+                </div>
+                <button
+                  className="btn btn-green"
+                  style={{ flexShrink: 0 }}
+                  onClick={() => void applySuggestion(item)}
+                  disabled={applyingSuggestion}
+                >
+                  {applyingSuggestion ? "Aplicando..." : "Usar"}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
 
         {showEmojiPicker && (
           <div
@@ -1093,25 +1232,42 @@ function ProductModal({
             {product?.platformUpdateAvailable && (
               <div
                 style={{
-                  display: "flex",
-                  gap: "8px",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  flexWrap: "wrap",
+                  display: "grid",
+                  gap: "10px",
                 }}
               >
                 <div style={{ fontSize: "12px", fontWeight: 700, color: "#38bdf8" }}>
                   Hay cambios disponibles en la base general.
                 </div>
-                <button
-                  type="button"
-                  className="btn btn-sm btn-ghost"
-                  style={{ border: "1px solid rgba(56,189,248,0.32)" }}
-                  onClick={() => void handleSyncNow()}
-                  disabled={syncingPlatform || loading}
-                >
-                  {syncingPlatform ? "Actualizando..." : "Actualizar ahora"}
-                </button>
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-ghost"
+                    style={{ border: "1px solid rgba(56,189,248,0.32)" }}
+                    onClick={() => void handleSyncNow("image")}
+                    disabled={syncingPlatform || loading}
+                  >
+                    {syncingPlatform ? "Actualizando..." : "Solo fotos"}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-ghost"
+                    style={{ border: "1px solid rgba(56,189,248,0.32)" }}
+                    onClick={() => void handleSyncNow("text")}
+                    disabled={syncingPlatform || loading}
+                  >
+                    {syncingPlatform ? "Actualizando..." : "Titulos y textos"}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-ghost"
+                    style={{ border: "1px solid rgba(56,189,248,0.32)" }}
+                    onClick={() => void handleSyncNow("all")}
+                    disabled={syncingPlatform || loading}
+                  >
+                    {syncingPlatform ? "Actualizando..." : "Todo"}
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -2895,6 +3051,99 @@ function TransferirStockModal({
 }
 
 // ─── Main Products Page ────────────────────────────────────────────────────────
+function PlatformBulkSyncModal({
+  linkedCount,
+  onClose,
+  onConfirm,
+  loading,
+}: {
+  linkedCount: number;
+  onClose: () => void;
+  onConfirm: (mode: PlatformSyncActionMode) => void;
+  loading: boolean;
+}) {
+  const [mode, setMode] = useState<PlatformSyncActionMode>("image");
+
+  const options: Array<{
+    value: PlatformSyncActionMode;
+    title: string;
+    description: string;
+  }> = [
+    {
+      value: "image",
+      title: "Solo fotos",
+      description: "Actualiza las imagenes desde la base colaborativa sin tocar nombres ni datos operativos.",
+    },
+    {
+      value: "text",
+      title: "Titulos y textos",
+      description: "Sincroniza nombre, marca, descripcion y presentacion. No toca foto, stock ni precios.",
+    },
+    {
+      value: "all",
+      title: "Todo",
+      description: "Aplica fotos y textos descriptivos. Si el producto es simple, tambien actualiza el barcode base.",
+    },
+  ];
+
+  return (
+    <ModalPortal>
+      <div className="modal-overlay" onClick={onClose}>
+        <div className="modal-content" style={{ maxWidth: "560px", width: "100%" }} onClick={(event) => event.stopPropagation()}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "flex-start" }}>
+            <div>
+              <h2 style={{ fontSize: "22px", fontWeight: 800, margin: 0 }}>Sincronizar base general</h2>
+              <p style={{ marginTop: "6px", color: "var(--text-2)", fontSize: "14px", lineHeight: 1.5 }}>
+                Esto se aplica sobre {linkedCount} producto{linkedCount === 1 ? "" : "s"} ya vinculados en tu cuenta.
+                Stock, precio, costo, minimos y vencimientos quedan intactos.
+              </p>
+            </div>
+            <button className="btn btn-sm btn-ghost" onClick={onClose} disabled={loading}>
+              Cerrar
+            </button>
+          </div>
+
+          <div style={{ display: "grid", gap: "10px", marginTop: "18px" }}>
+            {options.map((option) => {
+              const active = mode === option.value;
+
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={() => setMode(option.value)}
+                  style={{
+                    justifyContent: "flex-start",
+                    textAlign: "left",
+                    border: `1px solid ${active ? "rgba(34,197,94,.32)" : "var(--border)"}`,
+                    background: active ? "rgba(34,197,94,.1)" : "var(--surface-2)",
+                    padding: "14px 16px",
+                    display: "grid",
+                    gap: "4px",
+                  }}
+                >
+                  <span style={{ fontSize: "15px", fontWeight: 800 }}>{option.title}</span>
+                  <span style={{ fontSize: "13px", color: "var(--text-2)", lineHeight: 1.5 }}>{option.description}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div style={{ marginTop: "18px", display: "flex", justifyContent: "flex-end", gap: "10px", flexWrap: "wrap" }}>
+            <button className="btn btn-ghost" onClick={onClose} disabled={loading}>
+              Cancelar
+            </button>
+            <button className="btn btn-green" onClick={() => onConfirm(mode)} disabled={loading || linkedCount === 0}>
+              {loading ? "Sincronizando..." : "Aplicar sincronizacion"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </ModalPortal>
+  );
+}
+
 export default function ProductosPage() {
   const params = useParams();
   const branchId = params.branchId as string;
@@ -2929,6 +3178,8 @@ export default function ProductosPage() {
   const [showReplicarModal, setShowReplicarModal] = useState(false);
   const [showTransferirModal, setShowTransferirModal] = useState(false);
   const [showCatalogImportModal, setShowCatalogImportModal] = useState(false);
+  const [showPlatformSyncModal, setShowPlatformSyncModal] = useState(false);
+  const [syncingPlatformCatalog, setSyncingPlatformCatalog] = useState(false);
   const [catalogNotice, setCatalogNotice] = useState<string | null>(null);
   const [exportingCatalog, setExportingCatalog] = useState(false);
 
@@ -3020,6 +3271,8 @@ export default function ProductosPage() {
     return matchSearch && matchVisibility;
   });
 
+  const linkedPlatformProductsCount = products.filter((product) => Boolean(product.platformProductId)).length;
+
   const handleApplyUpdate = async () => {
     if (percent === 0) return;
     setLoading(true);
@@ -3033,6 +3286,44 @@ export default function ProductosPage() {
     });
     setShowUpdateModal(false);
     fetchProducts();
+  };
+
+  const handleBulkPlatformSync = async (mode: PlatformSyncActionMode) => {
+    setSyncingPlatformCatalog(true);
+    setCatalogNotice(null);
+
+    try {
+      const response = await fetch("/api/productos/sync-platform", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-branch-id": branchId,
+        },
+        body: JSON.stringify({ mode }),
+      });
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        setCatalogNotice(data?.error || "No pudimos sincronizar desde la base general.");
+        return;
+      }
+
+      const updated = Number(data?.updatedProducts ?? 0);
+      const modeLabel =
+        mode === "image" ? "fotos" : mode === "text" ? "titulos y textos" : "todo";
+      setCatalogNotice(
+        updated > 0
+          ? `Base general sincronizada: ${updated} producto${updated === 1 ? "" : "s"} actualizado${updated === 1 ? "" : "s"} en ${modeLabel}.`
+          : "No habia cambios pendientes para aplicar.",
+      );
+      setShowPlatformSyncModal(false);
+      await fetchProducts();
+    } catch (syncError) {
+      console.error(syncError);
+      setCatalogNotice("No pudimos sincronizar desde la base general.");
+    } finally {
+      setSyncingPlatformCatalog(false);
+    }
   };
 
   const hiddenCount = products.filter((p) => !p.showInGrid).length;
@@ -3256,8 +3547,10 @@ export default function ProductosPage() {
                 exporting={exportingCatalog}
                 hasMultipleBranches={branches.length > 1}
                 canExport={products.length > 0}
+                canPlatformSync={linkedPlatformProductsCount > 0}
                 onExport={() => void handleExportCatalog()}
                 onImport={() => setShowCatalogImportModal(true)}
+                onPlatformSync={() => setShowPlatformSyncModal(true)}
                 onReplicate={() => setShowReplicarModal(true)}
                 onTransfer={() => setShowTransferirModal(true)}
                 onUpdatePrices={() => setShowUpdateModal(true)}
@@ -3553,6 +3846,15 @@ export default function ProductosPage() {
             </div>
           </div>
         </ModalPortal>
+      )}
+
+      {showPlatformSyncModal && (
+        <PlatformBulkSyncModal
+          linkedCount={linkedPlatformProductsCount}
+          loading={syncingPlatformCatalog}
+          onClose={() => setShowPlatformSyncModal(false)}
+          onConfirm={(mode) => void handleBulkPlatformSync(mode)}
+        />
       )}
 
       {/* Update Prices Modal */}

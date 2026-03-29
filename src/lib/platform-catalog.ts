@@ -143,6 +143,71 @@ export async function findApprovedPlatformProductByBarcode(barcode: string) {
   });
 }
 
+export async function searchApprovedPlatformProductsByName(query: string, limit = 6) {
+  await ensurePlatformCatalogSeeded();
+
+  const normalizedQuery = query.trim();
+  if (normalizedQuery.length < 3) {
+    return [];
+  }
+
+  const queryLower = normalizedQuery.toLocaleLowerCase("es-AR");
+  const results = await prisma.platformProduct.findMany({
+    where: {
+      status: PlatformProductStatus.APPROVED,
+      OR: [
+        { name: { contains: normalizedQuery, mode: "insensitive" } },
+        { brand: { contains: normalizedQuery, mode: "insensitive" } },
+        { presentation: { contains: normalizedQuery, mode: "insensitive" } },
+        {
+          variants: {
+            some: {
+              name: { contains: normalizedQuery, mode: "insensitive" },
+            },
+          },
+        },
+      ],
+    },
+    include: {
+      variants: {
+        orderBy: { name: "asc" },
+      },
+    },
+    take: Math.max(limit * 3, 12),
+  });
+
+  return results
+    .map((product) => {
+      const name = product.name.toLocaleLowerCase("es-AR");
+      const brand = (product.brand ?? "").toLocaleLowerCase("es-AR");
+      const presentation = (product.presentation ?? "").toLocaleLowerCase("es-AR");
+      const variantNames = product.variants.map((variant) => variant.name.toLocaleLowerCase("es-AR"));
+
+      let score = 50;
+
+      if (name === queryLower) score = 0;
+      else if (name.startsWith(queryLower)) score = 1;
+      else if (brand === queryLower) score = 2;
+      else if (brand.startsWith(queryLower)) score = 3;
+      else if (name.includes(queryLower)) score = 4;
+      else if (presentation.includes(queryLower)) score = 5;
+      else if (variantNames.some((variantName) => variantName.startsWith(queryLower))) score = 6;
+      else if (variantNames.some((variantName) => variantName.includes(queryLower))) score = 7;
+      else if (brand.includes(queryLower)) score = 8;
+
+      return { product, score };
+    })
+    .sort((left, right) => {
+      if (left.score !== right.score) {
+        return left.score - right.score;
+      }
+
+      return left.product.name.localeCompare(right.product.name, "es");
+    })
+    .slice(0, limit)
+    .map((entry) => entry.product);
+}
+
 export function platformProductToSuggestion(product: PlatformProductDraft): BarcodeSuggestion {
   const normalizedVariants = normalizeVariants(product.variants);
 

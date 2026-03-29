@@ -536,8 +536,8 @@ export default async function AdminProductsPage() {
                   <div style={{ color: "#94a3b8", fontSize: "13px" }}>
                     Usa el editor rapido para cambiar esta ficha.
                   </div>
-                  <Link href="/admin/productos#editor-rapido" className="btn btn-secondary">
-                    Editar arriba
+                  <Link href={`/admin/productos?edit=${product.id}#editor-rapido`} className="btn btn-secondary">
+                    Editar ficha
                   </Link>
                 </div>
               </article>

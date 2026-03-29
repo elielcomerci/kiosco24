@@ -8,6 +8,12 @@ import { DEFAULT_PRICING_MODE, syncSharedPricingFromBranch } from "@/lib/pricing
 import { hasPlatformSyncUpdate } from "@/lib/platform-product-sync";
 import { Prisma, prisma } from "@/lib/prisma";
 import {
+  normalizeCatalogBarcode,
+  normalizeCatalogDescription,
+  normalizeCatalogOptionalTitle,
+  normalizeCatalogTitle,
+} from "@/lib/catalog-text";
+import {
   findApprovedPlatformProductByBarcode,
   platformDraftDiffers,
   queuePlatformProductSubmission,
@@ -61,9 +67,9 @@ function normalizeVariantPayload(variants: unknown): VariantPayload[] {
   return variants
     .map((variant) => ({
       id: typeof variant?.id === "string" ? variant.id : undefined,
-      name: typeof variant?.name === "string" ? variant.name.trim() : "",
+      name: normalizeCatalogTitle(variant?.name),
       barcode:
-        typeof variant?.barcode === "string" && variant.barcode.trim() ? variant.barcode.trim() : null,
+        normalizeCatalogBarcode(variant?.barcode),
       stock:
         typeof variant?.stock === "number"
           ? variant.stock
@@ -376,6 +382,16 @@ export async function POST(req: Request) {
 
   try {
     const normalizedVariants = normalizeVariantPayload(variants);
+    const normalizedName = normalizeCatalogTitle(name);
+    const normalizedInternalCode =
+      typeof internalCode === "string" ? internalCode.trim() || null : null;
+    const normalizedBrand = normalizeCatalogOptionalTitle(brand);
+    const normalizedDescription = normalizeCatalogDescription(description);
+    const normalizedPresentation = normalizeCatalogOptionalTitle(presentation);
+    const normalizedSupplierName =
+      typeof supplierName === "string" ? supplierName.trim() || null : null;
+    const normalizedNotes = typeof notes === "string" ? notes.trim() || null : null;
+    const normalizedImage = typeof image === "string" ? image.trim() || null : null;
     const kioscoSettings = await prisma.kiosco.findUnique({
       where: { id: kioscoId },
       select: { pricingMode: true },
@@ -383,7 +399,7 @@ export async function POST(req: Request) {
     const pricingMode = kioscoSettings?.pricingMode ?? DEFAULT_PRICING_MODE;
     const resolvedCategory = await resolveCategorySelection(kioscoId, categoryId);
     const normalizedBarcode =
-      normalizedVariants.length > 0 || typeof barcode !== "string" ? null : barcode.trim() || null;
+      normalizedVariants.length > 0 ? null : normalizeCatalogBarcode(barcode);
     const lookupBarcode =
       normalizedBarcode ?? normalizedVariants.find((variant) => variant.barcode)?.barcode ?? null;
     const platformProduct = lookupBarcode
@@ -393,16 +409,16 @@ export async function POST(req: Request) {
 
     const product = await prisma.product.create({
       data: {
-        name: typeof name === "string" ? name.trim() : "",
+        name: normalizedName,
         barcode: normalizedBarcode,
-        internalCode: typeof internalCode === "string" ? internalCode.trim() || null : null,
+        internalCode: normalizedInternalCode,
         emoji: typeof emoji === "string" ? emoji : null,
-        image: typeof image === "string" ? image : null,
-        brand: typeof brand === "string" ? brand.trim() || null : null,
-        description: typeof description === "string" ? description.trim() || null : null,
-        presentation: typeof presentation === "string" ? presentation.trim() || null : null,
-        supplierName: typeof supplierName === "string" ? supplierName.trim() || null : null,
-        notes: typeof notes === "string" ? notes.trim() || null : null,
+        image: normalizedImage,
+        brand: normalizedBrand,
+        description: normalizedDescription,
+        presentation: normalizedPresentation,
+        supplierName: normalizedSupplierName,
+        notes: normalizedNotes,
         categoryId: resolvedCategory.categoryId,
         platformProductId: platformProduct?.id ?? null,
         platformSyncMode: normalizedPlatformSyncMode,
@@ -475,12 +491,12 @@ export async function POST(req: Request) {
       (normalizedBarcode || normalizedVariants.some((variant) => variant.barcode)) &&
       platformDraftDiffers(platformProduct, {
         barcode: normalizedBarcode,
-        name: typeof name === "string" ? name.trim() : "",
-        brand,
+        name: normalizedName,
+        brand: normalizedBrand,
         categoryName: resolvedCategory.categoryName,
-        description,
-        presentation,
-        image,
+        description: normalizedDescription,
+        presentation: normalizedPresentation,
+        image: normalizedImage,
         variants: normalizedVariants.map((variant) => ({
           name: variant.name,
           barcode: variant.barcode,
@@ -492,12 +508,12 @@ export async function POST(req: Request) {
         submittedByUserId: session.user.id,
         submittedFromKioscoId: kioscoId,
         barcode: normalizedBarcode,
-        name: typeof name === "string" ? name.trim() : "",
-        brand,
+        name: normalizedName,
+        brand: normalizedBrand,
         categoryName: resolvedCategory.categoryName,
-        description,
-        presentation,
-        image,
+        description: normalizedDescription,
+        presentation: normalizedPresentation,
+        image: normalizedImage,
         variants: normalizedVariants.map((variant) => ({
           name: variant.name,
           barcode: variant.barcode,

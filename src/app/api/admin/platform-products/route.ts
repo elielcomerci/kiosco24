@@ -5,6 +5,12 @@ import { syncAutoProductsFromPlatformProduct } from "@/lib/platform-product-sync
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
+import {
+  normalizeCatalogBarcode,
+  normalizeCatalogDescription,
+  normalizeCatalogOptionalTitle,
+  normalizeCatalogTitle,
+} from "@/lib/catalog-text";
 
 function cleanText(value: unknown) {
   const trimmed = typeof value === "string" ? value.trim() : "";
@@ -19,8 +25,8 @@ function cleanVariants(value: unknown) {
   return value
     .map((item) => ({
       id: typeof item?.id === "string" ? item.id : "",
-      name: cleanText(item?.name) ?? "",
-      barcode: cleanText(item?.barcode),
+      name: normalizeCatalogTitle(item?.name),
+      barcode: normalizeCatalogBarcode(item?.barcode),
     }))
     .filter((variant) => variant.name);
 }
@@ -37,12 +43,12 @@ export async function POST(req: Request) {
 
   const body = await req.json().catch(() => ({}));
   const id = typeof body.id === "string" ? body.id : "";
-  const barcode = cleanText(body.barcode);
-  const name = cleanText(body.name);
-  const brand = cleanText(body.brand);
-  const categoryName = cleanText(body.categoryName);
-  const presentation = cleanText(body.presentation);
-  const description = cleanText(body.description);
+  const barcode = normalizeCatalogBarcode(body.barcode);
+  const name = normalizeCatalogTitle(body.name);
+  const brand = normalizeCatalogOptionalTitle(body.brand);
+  const categoryName = normalizeCatalogOptionalTitle(body.categoryName);
+  const presentation = normalizeCatalogOptionalTitle(body.presentation);
+  const description = normalizeCatalogDescription(body.description);
   const image = cleanText(body.image);
   const variants = cleanVariants(body.variants);
   const effectiveBarcode = variants.length > 0 ? null : barcode;

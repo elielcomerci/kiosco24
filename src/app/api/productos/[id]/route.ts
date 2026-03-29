@@ -8,6 +8,12 @@ import { DEFAULT_PRICING_MODE, syncSharedPricingFromBranch } from "@/lib/pricing
 import { hasPlatformSyncUpdate } from "@/lib/platform-product-sync";
 import { Prisma, prisma } from "@/lib/prisma";
 import {
+  normalizeCatalogBarcode,
+  normalizeCatalogDescription,
+  normalizeCatalogOptionalTitle,
+  normalizeCatalogTitle,
+} from "@/lib/catalog-text";
+import {
   findApprovedPlatformProductByBarcode,
   platformDraftDiffers,
   queuePlatformProductSubmission,
@@ -56,9 +62,9 @@ function normalizeVariantPayload(variants: unknown): VariantPayload[] {
   return variants
     .map((variant) => ({
       id: typeof variant?.id === "string" ? variant.id : undefined,
-      name: typeof variant?.name === "string" ? variant.name.trim() : "",
+      name: normalizeCatalogTitle(variant?.name),
       barcode:
-        typeof variant?.barcode === "string" && variant.barcode.trim() ? variant.barcode.trim() : null,
+        normalizeCatalogBarcode(variant?.barcode),
       stock:
         typeof variant?.stock === "number"
           ? variant.stock
@@ -480,7 +486,29 @@ export async function PATCH(
           categoryId: product.categoryId,
           categoryName: product.category?.name ?? null,
         };
-  const normalizedBarcode = typeof barcode === "string" ? barcode.trim() || null : null;
+  const normalizedName = name !== undefined ? normalizeCatalogTitle(name) : product.name;
+  const normalizedBrand = brand !== undefined ? normalizeCatalogOptionalTitle(brand) : product.brand;
+  const normalizedDescription =
+    description !== undefined ? normalizeCatalogDescription(description) : product.description;
+  const normalizedPresentation =
+    presentation !== undefined ? normalizeCatalogOptionalTitle(presentation) : product.presentation;
+  const normalizedSupplierName =
+    supplierName !== undefined
+      ? typeof supplierName === "string"
+        ? supplierName.trim() || null
+        : null
+      : product.supplierName;
+  const normalizedNotes =
+    notes !== undefined ? (typeof notes === "string" ? notes.trim() || null : null) : product.notes;
+  const normalizedImage =
+    image !== undefined ? (typeof image === "string" ? image.trim() || null : null) : product.image;
+  const normalizedInternalCode =
+    internalCode !== undefined
+      ? typeof internalCode === "string"
+        ? internalCode.trim() || null
+        : null
+      : product.internalCode;
+  const normalizedBarcode = normalizeCatalogBarcode(barcode);
   const effectiveBarcode =
     variants !== undefined && normalizedVariants.length > 0
       ? null
@@ -505,24 +533,16 @@ export async function PATCH(
   await prisma.product.update({
     where: { id },
     data: {
-      ...(name !== undefined && { name: typeof name === "string" ? name.trim() : product.name }),
+      ...(name !== undefined && { name: normalizedName }),
       ...(emoji !== undefined && { emoji: typeof emoji === "string" ? emoji : null }),
       ...((barcode !== undefined || variants !== undefined) && { barcode: effectiveBarcode }),
-      ...(internalCode !== undefined && {
-        internalCode: typeof internalCode === "string" ? internalCode.trim() || null : null,
-      }),
-      ...(image !== undefined && { image: typeof image === "string" ? image : null }),
-      ...(brand !== undefined && { brand: typeof brand === "string" ? brand.trim() || null : null }),
-      ...(description !== undefined && {
-        description: typeof description === "string" ? description.trim() || null : null,
-      }),
-      ...(presentation !== undefined && {
-        presentation: typeof presentation === "string" ? presentation.trim() || null : null,
-      }),
-      ...(supplierName !== undefined && {
-        supplierName: typeof supplierName === "string" ? supplierName.trim() || null : null,
-      }),
-      ...(notes !== undefined && { notes: typeof notes === "string" ? notes.trim() || null : null }),
+      ...(internalCode !== undefined && { internalCode: normalizedInternalCode }),
+      ...(image !== undefined && { image: normalizedImage }),
+      ...(brand !== undefined && { brand: normalizedBrand }),
+      ...(description !== undefined && { description: normalizedDescription }),
+      ...(presentation !== undefined && { presentation: normalizedPresentation }),
+      ...(supplierName !== undefined && { supplierName: normalizedSupplierName }),
+      ...(notes !== undefined && { notes: normalizedNotes }),
       ...(categoryId !== undefined && {
         categoryId: resolvedCategory.categoryId,
       }),
@@ -628,12 +648,12 @@ export async function PATCH(
     (effectiveBarcode || normalizedVariants.some((variant) => variant.barcode)) &&
     platformDraftDiffers(platformProduct, {
       barcode: effectiveBarcode,
-      name: typeof name === "string" ? name.trim() : product.name,
-      brand: brand ?? product.brand,
+      name: normalizedName,
+      brand: normalizedBrand,
       categoryName: resolvedCategory.categoryName,
-      description: description ?? product.description,
-      presentation: presentation ?? product.presentation,
-      image: image ?? product.image,
+      description: normalizedDescription,
+      presentation: normalizedPresentation,
+      image: normalizedImage,
       variants:
         variants !== undefined
           ? normalizedVariants.map((variant) => ({
@@ -648,12 +668,12 @@ export async function PATCH(
       submittedByUserId: session.user.id,
       submittedFromKioscoId: kioscoId,
       barcode: effectiveBarcode,
-      name: typeof name === "string" ? name.trim() : product.name,
-      brand: brand ?? product.brand,
+      name: normalizedName,
+      brand: normalizedBrand,
       categoryName: resolvedCategory.categoryName,
-      description: description ?? product.description,
-      presentation: presentation ?? product.presentation,
-      image: image ?? product.image,
+      description: normalizedDescription,
+      presentation: normalizedPresentation,
+      image: normalizedImage,
       variants:
         variants !== undefined
           ? normalizedVariants.map((variant) => ({

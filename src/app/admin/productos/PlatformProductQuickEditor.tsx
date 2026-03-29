@@ -1,7 +1,7 @@
 "use client";
 
-import { type ReactNode, useMemo, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { type ReactNode, useEffect, useMemo, useState, useTransition } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import BarcodeScanner from "@/components/caja/BarcodeScanner";
 import ModalPortal from "@/components/ui/ModalPortal";
 import { optimizeProductImage } from "@/lib/image-upload";
@@ -27,7 +27,14 @@ export interface PlatformProductQuickEditorItem {
   variants: PlatformProductQuickEditorVariant[];
 }
 
-type SearchFilter = "ALL" | "APPROVED" | "HIDDEN" | "WITH_VARIANTS";
+type SearchFilter =
+  | "ALL"
+  | "APPROVED"
+  | "HIDDEN"
+  | "WITH_VARIANTS"
+  | "MISSING_IMAGE"
+  | "MISSING_DESCRIPTION"
+  | "MISSING_BRAND";
 
 interface DraftState {
   id: string;
@@ -85,6 +92,10 @@ const LOWERCASE_UNITS = new Set(["ml", "l", "cc", "g", "gr", "kg", "u", "un"]);
 
 function normalizeTextSpacing(value: string) {
   return value.replace(/\s+/g, " ").trim();
+}
+
+function hasText(value?: string | null) {
+  return Boolean(value && value.trim().length > 0);
 }
 
 function formatCatalogWord(word: string, index: number): string {
@@ -215,6 +226,8 @@ export default function PlatformProductQuickEditor({
   products: PlatformProductQuickEditorItem[];
 }) {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [search, setSearch] = useState("");
   const [searchFilter, setSearchFilter] = useState<SearchFilter>("ALL");
   const [draft, setDraft] = useState<DraftState>(() => buildDraft());
@@ -226,6 +239,7 @@ export default function PlatformProductQuickEditor({
   const [scannerTarget, setScannerTarget] = useState<"search" | "barcode" | null>(null);
   const [isPending, startTransition] = useTransition();
   const usesVariants = draft.variants.length > 0;
+  const editParam = searchParams.get("edit");
 
   const normalizedSearch = search.trim().toLowerCase();
   const filteredProducts = useMemo(() => {
@@ -236,13 +250,19 @@ export default function PlatformProductQuickEditor({
         return products.filter((product) => product.status === "HIDDEN");
       case "WITH_VARIANTS":
         return products.filter((product) => product.variants.length > 0);
+      case "MISSING_IMAGE":
+        return products.filter((product) => !hasText(product.image));
+      case "MISSING_DESCRIPTION":
+        return products.filter((product) => !hasText(product.description));
+      case "MISSING_BRAND":
+        return products.filter((product) => !hasText(product.brand));
       default:
         return products;
     }
   }, [products, searchFilter]);
   const matches = useMemo(() => {
     if (!normalizedSearch) {
-      return filteredProducts.slice(0, 16);
+      return filteredProducts;
     }
 
     return filteredProducts
@@ -285,7 +305,6 @@ export default function PlatformProductQuickEditor({
 
         return left.product.name.localeCompare(right.product.name, "es");
       })
-      .slice(0, 16)
       .map((item) => item.product);
   }, [filteredProducts, normalizedSearch, search]);
 
@@ -321,12 +340,43 @@ export default function PlatformProductQuickEditor({
     setMessage(null);
     setError(null);
     setEditorOpen(true);
+    if (editParam) {
+      const nextParams = new URLSearchParams(searchParams.toString());
+      nextParams.delete("edit");
+      const nextQuery = nextParams.toString();
+      router.replace(nextQuery ? `${pathname}?${nextQuery}#editor-rapido` : `${pathname}#editor-rapido`, { scroll: false });
+    }
   };
 
   const closeEditor = () => {
     setEditorOpen(false);
     setScannerTarget(null);
+    if (editParam) {
+      const nextParams = new URLSearchParams(searchParams.toString());
+      nextParams.delete("edit");
+      const nextQuery = nextParams.toString();
+      router.replace(nextQuery ? `${pathname}?${nextQuery}#editor-rapido` : `${pathname}#editor-rapido`, { scroll: false });
+    }
   };
+
+  useEffect(() => {
+    if (!editParam) {
+      return;
+    }
+
+    const product = products.find((item) => item.id === editParam);
+    if (!product) {
+      return;
+    }
+
+    const nextDraft = buildDraft(product);
+    setDraft(nextDraft);
+    setBaselineDraft(nextDraft);
+    setSearch(product.barcode ?? product.variants[0]?.barcode ?? product.name);
+    setMessage(null);
+    setError(null);
+    setEditorOpen(true);
+  }, [editParam, products]);
 
   const handleChange = (field: keyof Omit<DraftState, "variants">, value: string) => {
     setDraft((current) => ({
@@ -459,7 +509,7 @@ export default function PlatformProductQuickEditor({
           setSearch(savedProduct.barcode ?? savedProduct.variants[0]?.barcode ?? savedProduct.name);
         }
         setMessage(draft.id ? "Producto actualizado." : "Producto global creado.");
-        setEditorOpen(false);
+        closeEditor();
         router.refresh();
       } catch (err) {
         console.error(err);
@@ -475,6 +525,12 @@ export default function PlatformProductQuickEditor({
   const changedFieldSet = useMemo(() => new Set(changedFields), [changedFields]);
   const changedLabels = changedFields.map((field) => FIELD_LABELS[field] ?? field);
   const visibleProductsCount = filteredProducts.length;
+  const hasDraftContext =
+    Boolean(draft.id) ||
+    draft.name.trim().length > 0 ||
+    draft.barcode.trim().length > 0 ||
+    draft.image.trim().length > 0 ||
+    draft.variants.length > 0;
 
   return (
     <>
@@ -550,6 +606,9 @@ export default function PlatformProductQuickEditor({
                 { value: "APPROVED", label: "Aprobados" },
                 { value: "HIDDEN", label: "Ocultos" },
                 { value: "WITH_VARIANTS", label: "Con variantes" },
+                { value: "MISSING_IMAGE", label: "Sin foto" },
+                { value: "MISSING_DESCRIPTION", label: "Sin descripcion" },
+                { value: "MISSING_BRAND", label: "Sin marca" },
               ].map((option) => {
                 const active = searchFilter === option.value;
 
@@ -641,14 +700,17 @@ export default function PlatformProductQuickEditor({
             <div style={{ color: "#94a3b8", fontSize: "14px", lineHeight: 1.6 }}>
               Elegi un producto de la lista o crea uno nuevo. La ficha se abre en un modal para editar rapido y se cierra sola al guardar.
             </div>
-            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-              <button type="button" className="btn btn-secondary" onClick={() => setEditorOpen(true)}>
-                {draft.id ? "Seguir editando" : "Abrir ficha vacia"}
-              </button>
-              <button type="button" className="btn btn-ghost" onClick={() => startNewDraft(search.trim())}>
-                Nuevo
-              </button>
-            </div>
+            {hasDraftContext ? (
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                <button type="button" className="btn btn-secondary" onClick={() => setEditorOpen(true)}>
+                  {draft.id ? "Seguir editando" : "Abrir borrador"}
+                </button>
+              </div>
+            ) : (
+              <div style={{ color: "#94a3b8", fontSize: "13px" }}>
+                Usa <strong style={{ color: "#e2e8f0" }}>Nuevo</strong> o toca una ficha del lateral para abrir el editor.
+              </div>
+            )}
           </div>
         </div>
       </section>

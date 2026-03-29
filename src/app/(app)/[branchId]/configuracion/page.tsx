@@ -48,6 +48,7 @@ interface Branch {
 }
 
 type PricingMode = "SHARED" | "BRANCH";
+type FiscalEnvironment = "TEST" | "PROD";
 
 // ─── Employee Form Modal ───────────────────────────────────────────────────────
 function EmployeeModal({
@@ -671,6 +672,7 @@ export default function ConfiguracionPage() {
   const [loadingSubscription, setLoadingSubscription] = useState(true);
   const [loadingExpirySettings, setLoadingExpirySettings] = useState(true);
   const [loadingTicketSettings, setLoadingTicketSettings] = useState(true);
+  const [loadingFiscalSettings, setLoadingFiscalSettings] = useState(true);
 
   const [subscription, setSubscription] = useState<{status: string, managementUrl: string | null} | null>(null);
   const [expiryAlertDays, setExpiryAlertDays] = useState("30");
@@ -711,6 +713,24 @@ export default function ConfiguracionPage() {
   const [ticketSettingsMessage, setTicketSettingsMessage] = useState<string | null>(null);
   const [ticketSettingsError, setTicketSettingsError] = useState<string | null>(null);
   const [showTicketDemo, setShowTicketDemo] = useState(false);
+  const [fiscalActive, setFiscalActive] = useState(false);
+  const [fiscalCuit, setFiscalCuit] = useState("");
+  const [fiscalRazonSocial, setFiscalRazonSocial] = useState("");
+  const [fiscalDomicilioFiscal, setFiscalDomicilioFiscal] = useState("");
+  const [fiscalInicioActividad, setFiscalInicioActividad] = useState("");
+  const [fiscalIngresosBrutos, setFiscalIngresosBrutos] = useState("");
+  const [fiscalEnvironment, setFiscalEnvironment] = useState<FiscalEnvironment>("TEST");
+  const [fiscalPuntoVenta, setFiscalPuntoVenta] = useState("1");
+  const [fiscalMinimumAmount, setFiscalMinimumAmount] = useState("0");
+  const [savingFiscalSettings, setSavingFiscalSettings] = useState(false);
+  const [fiscalSettingsMessage, setFiscalSettingsMessage] = useState<string | null>(null);
+  const [fiscalSettingsError, setFiscalSettingsError] = useState<string | null>(null);
+  const [fiscalProductionEnabled, setFiscalProductionEnabled] = useState(false);
+  const [fiscalAfipAccessToken, setFiscalAfipAccessToken] = useState("");
+  const [fiscalTokenConfigured, setFiscalTokenConfigured] = useState(false);
+  const [fiscalTokenLast4, setFiscalTokenLast4] = useState<string | null>(null);
+  const [fiscalUsingSharedTestToken, setFiscalUsingSharedTestToken] = useState(false);
+  const [fiscalClearOwnToken, setFiscalClearOwnToken] = useState(false);
 
   // MercadoPago
   const [mpSetupLoading, setMpSetupLoading] = useState(false);
@@ -872,6 +892,46 @@ export default function ConfiguracionPage() {
     }
   }, [branchId]);
 
+  const fetchFiscalSettings = useCallback(async () => {
+    setLoadingFiscalSettings(true);
+    try {
+      const res = await fetch("/api/fiscal/settings", {
+        headers: {
+          "x-branch-id": branchId,
+        },
+      });
+
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setFiscalSettingsError(data?.error || "No se pudo cargar la facturacion electronica.");
+        return;
+      }
+
+      setFiscalActive(Boolean(data?.branchSettings?.activo));
+      setFiscalCuit(typeof data?.profile?.cuit === "string" ? data.profile.cuit : "");
+      setFiscalRazonSocial(typeof data?.profile?.razonSocial === "string" ? data.profile.razonSocial : "");
+      setFiscalDomicilioFiscal(typeof data?.profile?.domicilioFiscal === "string" ? data.profile.domicilioFiscal : "");
+      setFiscalInicioActividad(typeof data?.profile?.inicioActividad === "string" ? data.profile.inicioActividad : "");
+      setFiscalIngresosBrutos(typeof data?.profile?.ingresosBrutos === "string" ? data.profile.ingresosBrutos : "");
+      setFiscalEnvironment(data?.profile?.environment === "PROD" ? "PROD" : "TEST");
+      setFiscalPuntoVenta(
+        data?.branchSettings?.puntoDeVenta !== null && data?.branchSettings?.puntoDeVenta !== undefined
+          ? String(data.branchSettings.puntoDeVenta)
+          : "1",
+      );
+      setFiscalMinimumAmount(String(data?.branchSettings?.minimumInvoiceAmount ?? 0));
+      setFiscalProductionEnabled(Boolean(data?.productionEnabled));
+      setFiscalTokenConfigured(Boolean(data?.profile?.tokenConfigured));
+      setFiscalTokenLast4(typeof data?.profile?.tokenLast4 === "string" ? data.profile.tokenLast4 : null);
+      setFiscalUsingSharedTestToken(Boolean(data?.profile?.usingSharedTestToken));
+      setFiscalAfipAccessToken("");
+      setFiscalClearOwnToken(false);
+      setFiscalSettingsError(null);
+    } finally {
+      setLoadingFiscalSettings(false);
+    }
+  }, [branchId]);
+
   useEffect(() => {
     fetchEmployees();
     fetchBranches();
@@ -880,7 +940,8 @@ export default function ConfiguracionPage() {
     fetchSubscription();
     fetchExpirySettings();
     fetchTicketSettings();
-  }, [fetchEmployees, fetchBranches, fetchCategories, fetchCurrentBranch, fetchSubscription, fetchExpirySettings, fetchTicketSettings]);
+    fetchFiscalSettings();
+  }, [fetchEmployees, fetchBranches, fetchCategories, fetchCurrentBranch, fetchSubscription, fetchExpirySettings, fetchTicketSettings, fetchFiscalSettings]);
 
   const handleSaveBranchSettings = async () => {
     if (!editBranchName.trim()) {
@@ -970,6 +1031,71 @@ export default function ConfiguracionPage() {
       setTicketSettingsError("No se pudo guardar el ticket.");
     } finally {
       setSavingTicketSettings(false);
+    }
+  };
+
+  const handleSaveFiscalSettings = async () => {
+    setFiscalSettingsError(null);
+    setFiscalSettingsMessage(null);
+    setSavingFiscalSettings(true);
+
+    try {
+      const res = await fetch("/api/fiscal/settings", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "x-branch-id": branchId,
+        },
+        body: JSON.stringify({
+          activo: fiscalActive,
+          cuit: fiscalCuit,
+          razonSocial: fiscalRazonSocial,
+          domicilioFiscal: fiscalDomicilioFiscal,
+          condicionIva: "MONOTRIBUTO",
+          inicioActividad: fiscalInicioActividad,
+          ingresosBrutos: fiscalIngresosBrutos.trim() || null,
+          environment: fiscalEnvironment,
+          puntoDeVenta: fiscalPuntoVenta,
+          minimumInvoiceAmount: fiscalMinimumAmount,
+          ...(fiscalAfipAccessToken.trim() ? { afipAccessToken: fiscalAfipAccessToken.trim() } : {}),
+          ...(fiscalClearOwnToken ? { clearAfipAccessToken: true } : {}),
+        }),
+      });
+
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setFiscalSettingsError(data?.error || "No se pudo guardar la facturacion electronica.");
+        return;
+      }
+
+      setFiscalActive(Boolean(data?.branchSettings?.activo));
+      setFiscalCuit(typeof data?.profile?.cuit === "string" ? data.profile.cuit : fiscalCuit);
+      setFiscalRazonSocial(typeof data?.profile?.razonSocial === "string" ? data.profile.razonSocial : fiscalRazonSocial);
+      setFiscalDomicilioFiscal(
+        typeof data?.profile?.domicilioFiscal === "string" ? data.profile.domicilioFiscal : fiscalDomicilioFiscal,
+      );
+      setFiscalInicioActividad(
+        typeof data?.profile?.inicioActividad === "string" ? data.profile.inicioActividad : fiscalInicioActividad,
+      );
+      setFiscalIngresosBrutos(typeof data?.profile?.ingresosBrutos === "string" ? data.profile.ingresosBrutos : "");
+      setFiscalEnvironment(data?.profile?.environment === "PROD" ? "PROD" : "TEST");
+      setFiscalPuntoVenta(
+        data?.branchSettings?.puntoDeVenta !== null && data?.branchSettings?.puntoDeVenta !== undefined
+          ? String(data.branchSettings.puntoDeVenta)
+          : fiscalPuntoVenta,
+      );
+      setFiscalMinimumAmount(String(data?.branchSettings?.minimumInvoiceAmount ?? fiscalMinimumAmount));
+      setFiscalProductionEnabled(Boolean(data?.productionEnabled));
+      setFiscalTokenConfigured(Boolean(data?.profile?.tokenConfigured));
+      setFiscalTokenLast4(typeof data?.profile?.tokenLast4 === "string" ? data.profile.tokenLast4 : null);
+      setFiscalUsingSharedTestToken(Boolean(data?.profile?.usingSharedTestToken));
+      setFiscalAfipAccessToken("");
+      setFiscalClearOwnToken(false);
+      setFiscalSettingsMessage("Facturacion electronica actualizada.");
+    } catch {
+      setFiscalSettingsError("No se pudo guardar la facturacion electronica.");
+    } finally {
+      setSavingFiscalSettings(false);
     }
   };
 
@@ -1546,6 +1672,175 @@ export default function ConfiguracionPage() {
                   {savingTicketSettings ? "Guardando..." : "Guardar ticket"}
                 </button>
               </div>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {isOwner && (
+        <section style={{ marginBottom: 0, gridColumn: "1 / -1" }}>
+          <div style={{ marginBottom: "12px" }}>
+            <h2 style={{ fontSize: "16px", fontWeight: 700, color: "var(--text-2)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              Facturacion electronica
+            </h2>
+          </div>
+
+          <div
+            style={{
+              background: "var(--surface)",
+              border: "1px solid var(--border)",
+              borderRadius: "var(--radius)",
+              padding: "20px",
+              display: "flex",
+              flexDirection: "column",
+              gap: "14px",
+            }}
+          >
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "10px" }}>
+              <button
+                type="button"
+                className={`btn ${fiscalActive ? "btn-green" : "btn-ghost"}`}
+                style={{ border: "1px solid var(--border)", justifyContent: "space-between" }}
+                onClick={() => setFiscalActive((prev) => !prev)}
+                disabled={loadingFiscalSettings || savingFiscalSettings}
+              >
+                <span>Activa</span>
+                <span style={{ fontSize: "12px", opacity: 0.9 }}>{fiscalActive ? "ON" : "OFF"}</span>
+              </button>
+
+              <button
+                type="button"
+                className={`btn ${fiscalEnvironment === "TEST" ? "btn-green" : "btn-ghost"}`}
+                style={{ border: "1px solid var(--border)", justifyContent: "space-between" }}
+                onClick={() => setFiscalEnvironment("TEST")}
+                disabled={loadingFiscalSettings || savingFiscalSettings}
+              >
+                <span>Sandbox</span>
+                <span style={{ fontSize: "12px", opacity: 0.9 }}>TEST</span>
+              </button>
+
+              <button
+                type="button"
+                className={`btn ${fiscalEnvironment === "PROD" ? "btn-green" : "btn-ghost"}`}
+                style={{ border: "1px solid var(--border)", justifyContent: "space-between" }}
+                onClick={() => setFiscalEnvironment("PROD")}
+                disabled={loadingFiscalSettings || savingFiscalSettings}
+              >
+                <span>Produccion</span>
+                <span style={{ fontSize: "12px", opacity: 0.9 }}>{fiscalProductionEnabled ? "OK" : "BLOQ."}</span>
+              </button>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "12px" }}>
+              <div>
+                <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, display: "block", marginBottom: "4px" }}>
+                  CUIT
+                </label>
+                <input className="input" value={fiscalCuit} onChange={(e) => setFiscalCuit(e.target.value)} placeholder="Sin guiones" disabled={loadingFiscalSettings || savingFiscalSettings} />
+              </div>
+              <div>
+                <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, display: "block", marginBottom: "4px" }}>
+                  PUNTO DE VENTA
+                </label>
+                <input className="input" value={fiscalPuntoVenta} onChange={(e) => setFiscalPuntoVenta(e.target.value)} placeholder="1" disabled={loadingFiscalSettings || savingFiscalSettings} />
+              </div>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, display: "block", marginBottom: "4px" }}>
+                  RAZON SOCIAL
+                </label>
+                <input className="input" value={fiscalRazonSocial} onChange={(e) => setFiscalRazonSocial(e.target.value)} placeholder="Como figura en ARCA" disabled={loadingFiscalSettings || savingFiscalSettings} />
+              </div>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, display: "block", marginBottom: "4px" }}>
+                  DOMICILIO FISCAL
+                </label>
+                <input className="input" value={fiscalDomicilioFiscal} onChange={(e) => setFiscalDomicilioFiscal(e.target.value)} placeholder="Calle y numero" disabled={loadingFiscalSettings || savingFiscalSettings} />
+              </div>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, display: "block", marginBottom: "4px" }}>
+                  ACCESS TOKEN AFIPSDK
+                </label>
+                <input
+                  className="input"
+                  type="password"
+                  value={fiscalAfipAccessToken}
+                  onChange={(e) => {
+                    setFiscalAfipAccessToken(e.target.value);
+                    if (e.target.value.trim()) {
+                      setFiscalClearOwnToken(false);
+                    }
+                  }}
+                  placeholder={fiscalTokenConfigured ? "Pegar uno nuevo para reemplazar el actual" : "Pega el token de tu cuenta AfipSDK"}
+                  disabled={loadingFiscalSettings || savingFiscalSettings}
+                />
+                <div style={{ marginTop: "6px", fontSize: "12px", color: "var(--text-3)", lineHeight: 1.5 }}>
+                  {fiscalTokenConfigured
+                    ? fiscalUsingSharedTestToken
+                      ? "Sandbox usando token compartido del sistema."
+                      : `Token propio configurado${fiscalTokenLast4 ? ` terminado en ${fiscalTokenLast4}` : ""}.`
+                    : "Cada kiosco usa su propia cuenta de AfipSDK. Solo en sandbox interno puede usarse un token compartido de prueba."}
+                </div>
+                {!fiscalUsingSharedTestToken && fiscalTokenConfigured ? (
+                  <button
+                    type="button"
+                    className={`btn btn-ghost btn-sm ${fiscalClearOwnToken ? "btn-red" : ""}`}
+                    style={{ marginTop: "8px", border: "1px solid var(--border)" }}
+                    onClick={() => {
+                      setFiscalClearOwnToken((prev) => !prev);
+                      setFiscalAfipAccessToken("");
+                    }}
+                    disabled={loadingFiscalSettings || savingFiscalSettings}
+                  >
+                    {fiscalClearOwnToken ? "Token propio se quitara al guardar" : "Quitar token propio"}
+                  </button>
+                ) : null}
+              </div>
+              <div>
+                <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, display: "block", marginBottom: "4px" }}>
+                  INICIO DE ACTIVIDAD
+                </label>
+                <input className="input" value={fiscalInicioActividad} onChange={(e) => setFiscalInicioActividad(e.target.value)} placeholder="DD/MM/AAAA" disabled={loadingFiscalSettings || savingFiscalSettings} />
+              </div>
+              <div>
+                <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, display: "block", marginBottom: "4px" }}>
+                  INGRESOS BRUTOS
+                </label>
+                <input className="input" value={fiscalIngresosBrutos} onChange={(e) => setFiscalIngresosBrutos(e.target.value)} placeholder="Opcional" disabled={loadingFiscalSettings || savingFiscalSettings} />
+              </div>
+              <div>
+                <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, display: "block", marginBottom: "4px" }}>
+                  MONTO MINIMO
+                </label>
+                <input className="input" value={fiscalMinimumAmount} onChange={(e) => setFiscalMinimumAmount(e.target.value)} placeholder="0" disabled={loadingFiscalSettings || savingFiscalSettings} />
+              </div>
+              <div>
+                <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, display: "block", marginBottom: "4px" }}>
+                  CONDICION IVA
+                </label>
+                <input className="input" value="Monotributo (V1)" disabled />
+              </div>
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
+              <div style={{ fontSize: "12px", color: fiscalSettingsError ? "var(--red)" : fiscalSettingsMessage ? "var(--green)" : "var(--text-3)" }}>
+                {loadingFiscalSettings
+                  ? "Cargando facturacion..."
+                  : fiscalSettingsError ||
+                    fiscalSettingsMessage ||
+                    (fiscalEnvironment === "PROD" && !fiscalProductionEnabled
+                      ? "Produccion bloqueada en este entorno. Puedes dejarla preparada y habilitarla luego."
+                      : fiscalEnvironment === "PROD" && !fiscalTokenConfigured
+                        ? "Para produccion, cada kiosco necesita cargar su propio access token de AfipSDK."
+                      : "Factura C por ahora. La venta nunca se bloquea si AFIP falla.")}
+              </div>
+              <button
+                className="btn btn-ghost btn-sm"
+                style={{ border: "1px solid var(--border)" }}
+                onClick={handleSaveFiscalSettings}
+                disabled={loadingFiscalSettings || savingFiscalSettings}
+              >
+                {savingFiscalSettings ? "Guardando..." : "Guardar facturacion"}
+              </button>
             </div>
           </div>
         </section>

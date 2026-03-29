@@ -2,11 +2,21 @@ import { Pool } from "pg";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from ".prisma/client";
 
-export { PaymentMethod, ExpenseReason, MpIncomingPaymentChannel, Prisma } from ".prisma/client";
+export {
+  PaymentMethod,
+  ExpenseReason,
+  MpIncomingPaymentChannel,
+  FiscalEnvironment,
+  FiscalVatCondition,
+  InvoiceStatus,
+  Prisma,
+} from ".prisma/client";
 export type {
   User,
   Kiosco,
   Branch,
+  FiscalProfile,
+  BranchFiscalSettings,
   Product,
   InventoryRecord,
   StockLot,
@@ -21,6 +31,7 @@ export type {
   CreditCustomer,
   CreditPayment,
   MpIncomingPaymentNotice,
+  Invoice,
 } from ".prisma/client";
 
 const globalWithEdgeRuntime = globalThis as typeof globalThis & {

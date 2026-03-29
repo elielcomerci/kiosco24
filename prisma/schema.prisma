@@ -36,6 +36,22 @@ enum PricingMode {
   BRANCH
 }
 
+enum FiscalEnvironment {
+  TEST
+  PROD
+}
+
+enum FiscalVatCondition {
+  MONOTRIBUTO
+  RESP_INSCRIPTO
+}
+
+enum InvoiceStatus {
+  PENDING
+  ISSUED
+  FAILED
+}
+
 model Account {
   id                String  @id @default(cuid())
   userId            String
@@ -80,6 +96,7 @@ model Kiosco {
   accessOverrideAt           DateTime?
   accessOverrideById         String?
   accessOverrideBy           User?                       @relation("KioscoAccessOverrideBy", fields: [accessOverrideById], references: [id], onDelete: SetNull)
+  fiscalProfile              FiscalProfile?
   platformProductSubmissions PlatformProductSubmission[]
   createdAt                  DateTime                    @default(now())
   updatedAt                  DateTime                    @updatedAt
@@ -123,8 +140,37 @@ model Branch {
   restockEvents            RestockEvent[]
   stockLots                StockLot[]
   ticketSettings           TicketSettings?
+  fiscalSettings           BranchFiscalSettings?
+  invoices                 Invoice[]
 
   @@index([kioscoId])
+}
+
+model FiscalProfile {
+  id               String              @id @default(cuid())
+  kioscoId         String              @unique
+  kiosco           Kiosco              @relation(fields: [kioscoId], references: [id], onDelete: Cascade)
+  cuit             String
+  afipAccessToken  String?             @db.Text
+  razonSocial      String
+  domicilioFiscal  String
+  condicionIva     FiscalVatCondition  @default(MONOTRIBUTO)
+  inicioActividad  String
+  ingresosBrutos   String?
+  environment      FiscalEnvironment   @default(TEST)
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+}
+
+model BranchFiscalSettings {
+  id                   String    @id @default(cuid())
+  branchId             String    @unique
+  branch               Branch    @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  activo               Boolean   @default(false)
+  puntoDeVenta         Int?
+  minimumInvoiceAmount Float     @default(0)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 }
 
 model TicketSettings {
@@ -401,6 +447,7 @@ model Sale {
   createdByEmployeeId String?
   createdByEmployee   Employee?       @relation("CreatedBy", fields: [createdByEmployeeId], references: [id], onDelete: SetNull)
   items               SaleItem[]
+  invoice             Invoice?
   creditCustomerId    String?
   creditCustomer      CreditCustomer? @relation(fields: [creditCustomerId], references: [id], onDelete: SetNull)
   voided              Boolean         @default(false)
@@ -411,6 +458,41 @@ model Sale {
   @@index([branchId, createdAt])
   @@index([branchId, ticketNumber])
   @@index([shiftId])
+}
+
+model Invoice {
+  id              String         @id @default(cuid())
+  saleId          String         @unique
+  sale            Sale           @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  branchId        String
+  branch          Branch         @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  status          InvoiceStatus  @default(PENDING)
+  cae             String?
+  caeFchVto       DateTime?
+  comprobanteTipo Int?
+  comprobanteNro  Int?
+  puntoDeVenta    Int?
+  fechaEmision    DateTime?
+  docTipo         Int
+  docNro          String
+  receiverName    String?
+  receiverIvaConditionId Int?
+  receiverIvaConditionLabel String?
+  impTotal        Float
+  impNeto         Float
+  impIva          Float          @default(0)
+  pdfBlobUrl      String?
+  pdfAfipUrl      String?
+  enviadoPorWa    Boolean        @default(false)
+  lastError       String?        @db.Text
+  afipRawResponse Json?
+  emitterSnapshot Json
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@index([branchId, status, createdAt])
+  @@index([branchId, fechaEmision])
+  @@unique([branchId, comprobanteTipo, comprobanteNro])
 }
 
 model SaleItem {

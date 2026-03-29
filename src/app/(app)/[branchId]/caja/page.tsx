@@ -17,6 +17,8 @@ import TransferShiftModal from "@/components/turnos/TransferShiftModal";
 import BarcodeScanner from "@/components/caja/BarcodeScanner";
 import ModalPortal from "@/components/ui/ModalPortal";
 import TicketModal from "@/components/ticket/TicketModal";
+import InvoiceModal from "@/components/fiscal/InvoiceModal";
+import type { InvoicePreviewData } from "@/lib/invoice-format";
 
 import { savePendingSale } from "@/lib/offline/db";
 import { useOnlineStatus } from "@/lib/offline/sync";
@@ -80,6 +82,13 @@ interface Sale {
   items: TicketItem[];
   creditCustomerName?: string;
   receivedAmount?: number;
+}
+
+interface InvoiceDraft {
+  docType: number;
+  docNro: string;
+  receiverName: string;
+  receiverIvaConditionId: number | null;
 }
 
 interface ActiveShift {
@@ -271,6 +280,10 @@ export default function CajaPage() {
   const [lastSale, setLastSale] = useState<Sale | null>(null);
   const [confirmedSale, setConfirmedSale] = useState<Sale | null>(null);
   const [ticketSaleId, setTicketSaleId] = useState<string | null>(null);
+  const [invoiceSaleId, setInvoiceSaleId] = useState<string | null>(null);
+  const [invoiceDraft, setInvoiceDraft] = useState<InvoiceDraft | null>(null);
+  const [showInvoiceDraftModal, setShowInvoiceDraftModal] = useState(false);
+  const [confirmedInvoice, setConfirmedInvoice] = useState<InvoicePreviewData | null>(null);
   const [showGasto, setShowGasto] = useState(false);
   const [showOtro, setShowOtro] = useState(false);
   const [showRetiro, setShowRetiro] = useState(false);
@@ -371,10 +384,11 @@ export default function CajaPage() {
         showOpenShift ||
         showCloseShift ||
         showScanner ||
-
         variantSelector ||
         showCashNumpad ||
-        confirmedSale;
+        confirmedSale ||
+        showInvoiceDraftModal ||
+        invoiceSaleId;
 
       if (overlayOpen) {
         clearPendingManualSearch();
@@ -464,7 +478,7 @@ export default function CajaPage() {
     };
   }, [
     showGasto, showOtro, showRetiro, showCredit, showOpenShift, showCloseShift, 
-    showScanner, variantSelector, showCashNumpad, confirmedSale
+    showScanner, variantSelector, showCashNumpad, confirmedSale, showInvoiceDraftModal, invoiceSaleId
   ]);
 
   // ─── Startup Logic: Onboarding & Shift ──────────────────────────────────
@@ -901,6 +915,15 @@ export default function CajaPage() {
 
         setLastSale(newSale);
         setConfirmedSale({ ...newSale, ...(received ? { receivedAmount: received } : {}) });
+        setConfirmedInvoice(null);
+        if (invoiceDraft && newSale.id) {
+          setInvoiceSaleId(newSale.id);
+        } else {
+          setInvoiceSaleId(null);
+          if (invoiceDraft) {
+            alert("La venta quedo registrada, pero la factura solo se puede emitir con conexion.");
+          }
+        }
         setTicket([]);
       setReceivedAmount("");
       setShowCashNumpad(false);
@@ -938,9 +961,15 @@ export default function CajaPage() {
       return;
     }
     if (!confirmedSale) return;
+    if (confirmedInvoice?.status === "ISSUED") {
+      alert("Esta venta ya tiene una factura emitida. En esta version no se puede corregir sin nota de credito.");
+      return;
+    }
     setTicketSaleId(null);
+    setInvoiceSaleId(null);
     setTicket(confirmedSale.items.map((i) => ({ ...i })));
     setConfirmedSale(null);
+    setConfirmedInvoice(null);
     if (confirmedSale.id && isOnline) {
       fetch(`/api/ventas/${confirmedSale.id}/anular`, { method: "POST" });
       fetchStats();
@@ -1101,17 +1130,35 @@ export default function CajaPage() {
           onCorregir={handleCorregir}
           onListo={() => {
             setTicketSaleId(null);
+            setInvoiceSaleId(null);
             setConfirmedSale(null);
+            setConfirmedInvoice(null);
+            setInvoiceDraft(null);
           }}
           onEmitTicket={() => {
             if (confirmedSale.id) {
               setTicketSaleId(confirmedSale.id);
             }
           }}
-          pauseAutoClose={Boolean(ticketSaleId)}
+          onEmitInvoice={() => {
+            if (confirmedSale.id) {
+              setInvoiceSaleId(confirmedSale.id);
+            }
+          }}
+          pauseAutoClose={Boolean(ticketSaleId || invoiceSaleId)}
         />
         {ticketSaleId ? (
           <TicketModal branchId={branchId} saleId={ticketSaleId} onClose={() => setTicketSaleId(null)} />
+        ) : null}
+        {invoiceSaleId ? (
+          <InvoiceModal
+            branchId={branchId}
+            saleId={invoiceSaleId}
+            mode="emit"
+            initialDraft={invoiceDraft}
+            onResolved={(nextInvoice) => setConfirmedInvoice(nextInvoice)}
+            onClose={() => setInvoiceSaleId(null)}
+          />
         ) : null}
       </>
     );
@@ -1595,11 +1642,27 @@ export default function CajaPage() {
         {/* Secondary Actions: OTRO, GASTO, RETIRO */}
         <div style={{ 
           display: "grid", 
-          gridTemplateColumns: isCashier ? "1fr" : "repeat(3, 1fr)", 
+          gridTemplateColumns: isCashier ? "repeat(2, 1fr)" : "repeat(4, 1fr)", 
           gap: "8px", 
           padding: "8px 12px",
           background: "var(--surface)"
         }}>
+          <button
+            className="btn btn-sm btn-ghost"
+            style={{
+              fontSize: "12px",
+              color: invoiceDraft ? "var(--primary)" : "var(--text-2)",
+              border: "1px solid var(--border)",
+            }}
+            onClick={() => {
+              if (!ensureCanOperateCurrentShift()) return;
+              setShowInvoiceDraftModal(true);
+            }}
+            disabled={total === 0 || operationsDisabled || !isOnline}
+            title={!isOnline ? "Necesitas conexion para emitir factura." : "Preparar factura electronica"}
+          >
+            {invoiceDraft ? "FACTURA LISTA" : "CON FACTURA"}
+          </button>
           <button
             className="btn btn-sm btn-ghost"
             style={{ fontSize: "12px", color: "var(--text-2)", border: "1px solid var(--border)" }}
@@ -1771,6 +1834,15 @@ export default function CajaPage() {
         <CajaTotalsBreakdownModal
           stats={cajaStats}
           onClose={() => setShowTotalsBreakdown(false)}
+        />
+      )}
+      {showInvoiceDraftModal && (
+        <InvoiceModal
+          branchId={branchId}
+          mode="emit"
+          initialDraft={invoiceDraft}
+          onSaveDraft={(draft) => setInvoiceDraft(draft)}
+          onClose={() => setShowInvoiceDraftModal(false)}
         />
       )}
 

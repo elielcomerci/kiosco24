@@ -23,6 +23,7 @@ interface ConfirmationScreenProps {
   onCorregir: () => void;
   onListo: () => void;
   onEmitTicket: () => void;
+  onEmitInvoice: () => void;
   pauseAutoClose?: boolean;
 }
 
@@ -32,6 +33,7 @@ export default function ConfirmationScreen({
   onCorregir,
   onListo,
   onEmitTicket,
+  onEmitInvoice,
   pauseAutoClose = false,
 }: ConfirmationScreenProps) {
   const [seconds, setSeconds] = useState(30);
@@ -158,10 +160,10 @@ export default function ConfirmationScreen({
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "1fr 1fr 1.2fr",
+          gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
           gap: "10px",
           width: "100%",
-          maxWidth: "480px",
+          maxWidth: "520px",
         }}
       >
         <button className="btn btn-ghost" style={{ width: "100%" }} onClick={onCorregir}>
@@ -170,7 +172,10 @@ export default function ConfirmationScreen({
         <button className="btn btn-ghost" style={{ width: "100%" }} onClick={onEmitTicket} disabled={!sale.id}>
           EMITIR TICKET
         </button>
-        <button className="btn btn-green" style={{ width: "100%" }} onClick={onListo}>
+        <button className="btn btn-ghost" style={{ width: "100%" }} onClick={onEmitInvoice} disabled={!sale.id}>
+          FACTURA
+        </button>
+        <button className="btn btn-green" style={{ width: "100%", gridColumn: "1 / -1" }} onClick={onListo}>
           NUEVA VENTA
         </button>
       </div>

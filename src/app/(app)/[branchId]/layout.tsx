@@ -113,6 +113,15 @@ export default async function BranchLayout({
           >
             {"\uD83E\uDDFE"}
           </a>
+          {(session.user.role === "OWNER" || session.user.employeeRole === "MANAGER") ? (
+            <a
+              href={`/${effectiveBranchId}/facturas`}
+              style={{ fontSize: "20px", textDecoration: "none", color: "var(--text)" }}
+              title="Facturas"
+            >
+              {"\uD83D\uDCC4"}
+            </a>
+          ) : null}
           {!isEmployee && (
             <a
               href={`/${effectiveBranchId}/configuracion`}

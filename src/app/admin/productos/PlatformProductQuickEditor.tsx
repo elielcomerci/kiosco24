@@ -505,9 +505,7 @@ export default function PlatformProductQuickEditor({
         const nextDraft = savedProduct ? buildDraft(savedProduct) : normalizedDraft;
         setDraft(nextDraft);
         setBaselineDraft(nextDraft);
-        if (savedProduct) {
-          setSearch(savedProduct.barcode ?? savedProduct.variants[0]?.barcode ?? savedProduct.name);
-        }
+        setSearch("");
         setMessage(draft.id ? "Producto actualizado." : "Producto global creado.");
         closeEditor();
         router.refresh();

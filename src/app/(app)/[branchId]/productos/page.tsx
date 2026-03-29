@@ -94,6 +94,7 @@ type ProductModalSavePayload = {
 type PricingMode = "SHARED" | "BRANCH";
 type PlatformSyncMode = "MANUAL" | "AUTO";
 type PlatformSyncActionMode = "image" | "text" | "all";
+type ProductModalScannerTarget = "barcode" | "catalog";
 
 type TransferLotRecord = TransferPlanLotInput & {
   id: string;
@@ -385,7 +386,7 @@ function ProductModal({
   const [uploadingImage, setUploadingImage] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const [showScanner, setShowScanner] = useState(false);
+  const [scannerTarget, setScannerTarget] = useState<ProductModalScannerTarget | null>(null);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [applyingSuggestion, setApplyingSuggestion] = useState(false);
   const [variants, setVariants] = useState<Variant[]>(product?.variants || []);
@@ -393,8 +394,11 @@ function ProductModal({
   const [hasVariants, setHasVariants] = useState((product?.variants?.length ?? 0) > 0);
   const [suggestion, setSuggestion] = useState<BarcodeSuggestion | null>(null);
   const [nameSuggestions, setNameSuggestions] = useState<BarcodeSuggestion[]>([]);
+  const [catalogSuggestions, setCatalogSuggestions] = useState<BarcodeSuggestion[]>([]);
+  const [catalogSearch, setCatalogSearch] = useState("");
   const [lookupState, setLookupState] = useState<"idle" | "loading" | "ready">("idle");
   const [nameLookupState, setNameLookupState] = useState<"idle" | "loading" | "ready">("idle");
+  const [catalogLookupState, setCatalogLookupState] = useState<"idle" | "loading" | "ready">("idle");
   const [dismissedSuggestionCode, setDismissedSuggestionCode] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [platformSyncMode, setPlatformSyncMode] = useState<PlatformSyncMode>(product?.platformSyncMode ?? "MANUAL");
@@ -421,11 +425,18 @@ function ProductModal({
   const effectiveLookupState =
     !lookupCode ? "idle" : visibleSuggestion ? "ready" : lookupState === "loading" ? "loading" : "idle";
   const normalizedNameQuery = name.trim();
+  const normalizedCatalogQuery = catalogSearch.trim();
   const shouldLookupByName =
     isNew &&
     normalizedNameQuery.length >= 3 &&
     !visibleSuggestion &&
     !applyingSuggestion;
+  const normalizedCatalogCode = normalizeBarcodeCode(catalogSearch);
+  const canFilterCatalog =
+    isNew &&
+    (normalizedCatalogQuery.length === 0 ||
+      normalizedCatalogQuery.length >= 2 ||
+      canLookupBarcode(normalizedCatalogCode));
   const hasPlatformLink = Boolean(product?.platformProductId);
   const canManagePlatformSync = hasPlatformLink && isOwner;
 
@@ -529,6 +540,8 @@ function ProductModal({
     }
     setNameSuggestions([]);
     setNameLookupState("idle");
+    setCatalogSearch("");
+    setCatalogLookupState("idle");
     setSuggestion(nextSuggestion);
     setLookupState("ready");
     setDismissedSuggestionCode(null);
@@ -611,6 +624,56 @@ function ProductModal({
       window.clearTimeout(timeoutId);
     };
   }, [normalizedNameQuery, shouldLookupByName]);
+
+  useEffect(() => {
+    if (!isNew || applyingSuggestion) {
+      setCatalogSuggestions([]);
+      setCatalogLookupState("idle");
+      return;
+    }
+
+    if (!canFilterCatalog) {
+      setCatalogSuggestions([]);
+      setCatalogLookupState("idle");
+      return;
+    }
+
+    let cancelled = false;
+    const timeoutId = window.setTimeout(async () => {
+      setCatalogLookupState("loading");
+
+      try {
+        const params = new URLSearchParams({
+          browse: "1",
+          limit: "12",
+        });
+
+        if (normalizedCatalogQuery) {
+          params.set("q", normalizedCatalogQuery);
+        }
+
+        const res = await fetch(`/api/platform-products/lookup?${params.toString()}`);
+        const data = (await res.json()) as BarcodeLookupResponse;
+
+        if (cancelled) return;
+
+        const suggestions = Array.isArray(data.suggestions) ? data.suggestions : [];
+        setCatalogSuggestions(suggestions);
+        setCatalogLookupState(suggestions.length > 0 ? "ready" : "idle");
+      } catch (error) {
+        console.error(error);
+        if (!cancelled) {
+          setCatalogSuggestions([]);
+          setCatalogLookupState("idle");
+        }
+      }
+    }, normalizedCatalogQuery ? 220 : 0);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeoutId);
+    };
+  }, [applyingSuggestion, canFilterCatalog, isNew, normalizedCatalogQuery]);
 
   const applyQuickSimpleStock = () => {
     if (projectedSimpleStock === null || parsedQuickStockAdd === null || parsedQuickStockAdd <= 0) {
@@ -802,7 +865,7 @@ function ProductModal({
             <button
               className="btn btn-ghost"
               style={{ padding: "0 16px", flexShrink: 0, fontSize: "20px" }}
-              onClick={() => setShowScanner(true)}
+              onClick={() => setScannerTarget("barcode")}
               title="Escanear con camara"
               disabled={hasVariants}
             >
@@ -1019,6 +1082,154 @@ function ProductModal({
                 </button>
               </div>
             ))}
+          </div>
+        )}
+
+        {isNew && (
+          <div
+            style={{
+              marginBottom: "12px",
+              padding: "12px",
+              borderRadius: "var(--radius)",
+              border: "1px solid rgba(56,189,248,0.18)",
+              background: "rgba(56,189,248,0.06)",
+              display: "flex",
+              flexDirection: "column",
+              gap: "10px",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
+              <div>
+                <div style={{ fontSize: "12px", fontWeight: 700, textTransform: "uppercase", color: "#38bdf8" }}>
+                  Base general
+                </div>
+                <div style={{ fontSize: "12px", color: "var(--text-2)", marginTop: "4px", lineHeight: 1.45 }}>
+                  Busca por nombre o codigo y carga la ficha en un toque. Si todavia no filtras, vas a ver productos recientes.
+                </div>
+              </div>
+              <span
+                style={{
+                  fontSize: "11px",
+                  fontWeight: 700,
+                  color: "var(--text-3)",
+                  padding: "4px 8px",
+                  borderRadius: "999px",
+                  background: "rgba(15,23,42,0.08)",
+                  border: "1px solid rgba(148,163,184,0.18)",
+                }}
+              >
+                {catalogSuggestions.length} visibles
+              </span>
+            </div>
+
+            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+              <input
+                className="input"
+                placeholder="Buscar por nombre o escanear codigo"
+                value={catalogSearch}
+                onChange={(e) => setCatalogSearch(e.target.value)}
+                style={{ flex: 1 }}
+              />
+              <button
+                type="button"
+                className="btn btn-ghost"
+                style={{ padding: "0 14px", flexShrink: 0, fontSize: "20px" }}
+                onClick={() => setScannerTarget("catalog")}
+                title="Escanear para buscar en la base general"
+              >
+                📷
+              </button>
+            </div>
+
+            {!canFilterCatalog && (
+              <div style={{ fontSize: "12px", color: "var(--text-3)" }}>
+                Escribe al menos 2 letras o escanea un codigo para filtrar mejor.
+              </div>
+            )}
+
+            {canFilterCatalog && catalogLookupState === "loading" && (
+              <div style={{ fontSize: "12px", color: "var(--text-3)" }}>
+                Cargando productos de la base general...
+              </div>
+            )}
+
+            {canFilterCatalog && catalogLookupState !== "loading" && catalogSuggestions.length === 0 && (
+              <div style={{ fontSize: "12px", color: "var(--text-3)" }}>
+                No encontramos coincidencias en la base general.
+              </div>
+            )}
+
+            {catalogSuggestions.length > 0 && (
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "8px",
+                  maxHeight: "280px",
+                  overflowY: "auto",
+                  paddingRight: "2px",
+                }}
+              >
+                {catalogSuggestions.map((item) => (
+                  <div
+                    key={`catalog-${item.code}-${item.name}`}
+                    style={{
+                      display: "flex",
+                      gap: "12px",
+                      alignItems: "center",
+                      padding: "10px",
+                      borderRadius: "12px",
+                      background: "var(--surface)",
+                      border: "1px solid var(--border)",
+                    }}
+                  >
+                    {item.image ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={item.image}
+                        alt={item.name}
+                        style={{ width: "48px", height: "48px", objectFit: "cover", borderRadius: "10px", flexShrink: 0 }}
+                      />
+                    ) : (
+                      <div
+                        style={{
+                          width: "48px",
+                          height: "48px",
+                          borderRadius: "10px",
+                          background: "var(--surface-2)",
+                          border: "1px dashed var(--border)",
+                          flexShrink: 0,
+                        }}
+                      />
+                    )}
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ fontWeight: 700 }}>{item.name}</div>
+                      {(item.brand || item.presentation || item.description) && (
+                        <div style={{ fontSize: "12px", color: "var(--text-3)", marginTop: "4px" }}>
+                          {[item.brand, item.presentation, item.description].filter(Boolean).join(" · ")}
+                        </div>
+                      )}
+                      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "4px", fontSize: "12px", color: "var(--text-3)" }}>
+                        {item.code && <span>Cod. {item.code}</span>}
+                        {item.categoryName && <span>{item.categoryName}</span>}
+                        {item.variants && item.variants.length > 0 && (
+                          <span>{item.variants.length} variante{item.variants.length === 1 ? "" : "s"}</span>
+                        )}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn btn-green"
+                      style={{ flexShrink: 0 }}
+                      onClick={() => void applySuggestion(item)}
+                      disabled={applyingSuggestion}
+                    >
+                      {applyingSuggestion ? "Aplicando..." : "Usar"}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -1573,7 +1784,7 @@ function ProductModal({
                 <button
                   className="btn btn-ghost"
                   style={{ padding: "0 16px", flexShrink: 0, fontSize: "20px" }}
-                  onClick={() => setShowScanner(true)}
+                  onClick={() => setScannerTarget("barcode")}
                   title="Escanear con cámara"
                 >
                   📷
@@ -1756,13 +1967,17 @@ function ProductModal({
         </div>
       </div>
       
-      {showScanner && (
+      {scannerTarget && (
         <BarcodeScanner
           onScan={(result) => {
-            setBarcode(result);
-            setShowScanner(false);
+            if (scannerTarget === "catalog") {
+              setCatalogSearch(result);
+            } else {
+              setBarcode(result);
+            }
+            setScannerTarget(null);
           }}
-          onClose={() => setShowScanner(false)}
+          onClose={() => setScannerTarget(null)}
         />
       )}
       {showCategoryModal && (

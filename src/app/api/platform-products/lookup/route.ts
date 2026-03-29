@@ -6,6 +6,7 @@ import {
   normalizeBarcodeCode,
 } from "@/lib/barcode-suggestions";
 import {
+  browseApprovedPlatformProducts,
   findApprovedPlatformProductByBarcode,
   platformProductToSuggestion,
   searchApprovedPlatformProductsByName,
@@ -26,9 +27,22 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const code = normalizeBarcodeCode(searchParams.get("code") ?? "");
   const query = (searchParams.get("q") ?? "").trim();
+  const browse = searchParams.get("browse") === "1";
+  const requestedLimit = Number(searchParams.get("limit") ?? "");
+  const limit = Number.isFinite(requestedLimit) && requestedLimit > 0 ? requestedLimit : undefined;
+
+  if (browse) {
+    const matches = await browseApprovedPlatformProducts(query, limit ?? 12);
+    const response: BarcodeLookupResponse = {
+      found: matches.length > 0,
+      suggestion: null,
+      suggestions: matches.map((product) => platformProductToSuggestion(product)),
+    };
+    return NextResponse.json(response);
+  }
 
   if (query.length >= 3) {
-    const matches = await searchApprovedPlatformProductsByName(query, 6);
+    const matches = await searchApprovedPlatformProductsByName(query, limit ?? 6);
     const response: BarcodeLookupResponse = {
       found: matches.length > 0,
       suggestion: null,

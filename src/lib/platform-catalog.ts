@@ -3,7 +3,11 @@ import {
   PlatformProductSubmissionStatus,
 } from "@prisma/client";
 
-import type { BarcodeSuggestion } from "@/lib/barcode-suggestions";
+import {
+  canLookupBarcode,
+  normalizeBarcodeCode,
+  type BarcodeSuggestion,
+} from "@/lib/barcode-suggestions";
 import {
   DEFAULT_KIOSCO_CATEGORIES,
   DEFAULT_KIOSCO_PRODUCTS,
@@ -205,6 +209,117 @@ export async function searchApprovedPlatformProductsByName(query: string, limit 
       return left.product.name.localeCompare(right.product.name, "es");
     })
     .slice(0, limit)
+    .map((entry) => entry.product);
+}
+
+export async function browseApprovedPlatformProducts(query: string, limit = 12) {
+  await ensurePlatformCatalogSeeded();
+
+  const normalizedQuery = query.trim();
+  const safeLimit = Math.min(Math.max(limit, 6), 24);
+
+  if (!normalizedQuery) {
+    return prisma.platformProduct.findMany({
+      where: {
+        status: PlatformProductStatus.APPROVED,
+      },
+      include: {
+        variants: {
+          orderBy: { name: "asc" },
+        },
+      },
+      orderBy: [{ updatedAt: "desc" }, { name: "asc" }],
+      take: safeLimit,
+    });
+  }
+
+  const normalizedCode = normalizeBarcodeCode(normalizedQuery);
+  const queryLower = normalizedQuery.toLocaleLowerCase("es-AR");
+  const shouldSearchBarcode =
+    normalizedCode.length >= 3 || canLookupBarcode(normalizedCode);
+
+  if (normalizedQuery.length < 2 && !shouldSearchBarcode) {
+    return [];
+  }
+
+  const results = await prisma.platformProduct.findMany({
+    where: {
+      status: PlatformProductStatus.APPROVED,
+      OR: [
+        { name: { contains: normalizedQuery, mode: "insensitive" } },
+        { brand: { contains: normalizedQuery, mode: "insensitive" } },
+        { presentation: { contains: normalizedQuery, mode: "insensitive" } },
+        { description: { contains: normalizedQuery, mode: "insensitive" } },
+        ...(shouldSearchBarcode
+          ? [
+              { barcode: { contains: normalizedCode, mode: "insensitive" as const } },
+              {
+                variants: {
+                  some: {
+                    barcode: { contains: normalizedCode, mode: "insensitive" as const },
+                  },
+                },
+              },
+            ]
+          : []),
+        {
+          variants: {
+            some: {
+              name: { contains: normalizedQuery, mode: "insensitive" },
+            },
+          },
+        },
+      ],
+    },
+    include: {
+      variants: {
+        orderBy: { name: "asc" },
+      },
+    },
+    take: Math.max(safeLimit * 3, 18),
+  });
+
+  return results
+    .map((product) => {
+      const name = product.name.toLocaleLowerCase("es-AR");
+      const brand = (product.brand ?? "").toLocaleLowerCase("es-AR");
+      const presentation = (product.presentation ?? "").toLocaleLowerCase("es-AR");
+      const description = (product.description ?? "").toLocaleLowerCase("es-AR");
+      const barcode = normalizeBarcodeCode(product.barcode ?? "");
+      const variantNames = product.variants.map((variant) => variant.name.toLocaleLowerCase("es-AR"));
+      const variantBarcodes = product.variants.map((variant) => normalizeBarcodeCode(variant.barcode ?? ""));
+
+      let score = 60;
+
+      if (shouldSearchBarcode && barcode && barcode === normalizedCode) score = 0;
+      else if (shouldSearchBarcode && variantBarcodes.some((value) => value === normalizedCode)) score = 1;
+      else if (name === queryLower) score = 2;
+      else if (name.startsWith(queryLower)) score = 3;
+      else if (brand === queryLower) score = 4;
+      else if (brand.startsWith(queryLower)) score = 5;
+      else if (presentation === queryLower) score = 6;
+      else if (presentation.startsWith(queryLower)) score = 7;
+      else if (shouldSearchBarcode && barcode.startsWith(normalizedCode)) score = 8;
+      else if (shouldSearchBarcode && variantBarcodes.some((value) => value.startsWith(normalizedCode))) score = 9;
+      else if (name.includes(queryLower)) score = 10;
+      else if (variantNames.some((value) => value.startsWith(queryLower))) score = 11;
+      else if (variantNames.some((value) => value.includes(queryLower))) score = 12;
+      else if (brand.includes(queryLower)) score = 13;
+      else if (presentation.includes(queryLower)) score = 14;
+      else if (description.includes(queryLower)) score = 15;
+      else if (shouldSearchBarcode && barcode.includes(normalizedCode)) score = 16;
+      else if (shouldSearchBarcode && variantBarcodes.some((value) => value.includes(normalizedCode))) score = 17;
+
+      return { product, score };
+    })
+    .sort((left, right) => {
+      if (left.score !== right.score) {
+        return left.score - right.score;
+      }
+
+      return left.product.name.localeCompare(right.product.name, "es");
+    })
+    .slice(0, safeLimit)
     .map((entry) => entry.product);
 }
 

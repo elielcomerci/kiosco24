@@ -1,9 +1,6 @@
 import { InventoryCostLayerSourceType, Prisma, PrismaClient } from "@prisma/client";
 
-import {
-  resolveNegativeReservationsWithLayer,
-  syncRestockLayerWithAllocations,
-} from "@/lib/inventory-cost-consumption";
+import { syncRestockLayerWithAllocations } from "@/lib/inventory-cost-consumption";
 
 type InventoryCostLayerTx = Prisma.TransactionClient;
 type InventoryCostLayerClient = Prisma.TransactionClient | PrismaClient;
@@ -184,7 +181,6 @@ export async function replaceManualInventoryCostLayers(
         receivedAt,
       },
     });
-    await resolveNegativeReservationsWithLayer(tx, created.id);
     createdLayers.push(created);
   }
 

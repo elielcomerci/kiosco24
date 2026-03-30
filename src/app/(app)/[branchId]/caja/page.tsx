@@ -15,7 +15,6 @@ import OpenShiftModal, { type ShiftAssignee } from "@/components/turnos/OpenShif
 import CloseShiftModal from "@/components/turnos/CloseShiftModal";
 import TransferShiftModal from "@/components/turnos/TransferShiftModal";
 import BarcodeScanner from "@/components/caja/BarcodeScanner";
-import ProductThumb from "@/components/products/ProductThumb";
 import ModalPortal from "@/components/ui/ModalPortal";
 import TicketModal from "@/components/ticket/TicketModal";
 import InvoiceModal from "@/components/fiscal/InvoiceModal";
@@ -670,7 +669,7 @@ export default function CajaPage() {
     }
   };
 
-  const fetchProducts = async () => {
+  const fetchProducts = useCallback(async () => {
     try {
       const res = await fetch(`/api/productos`, {
         headers: { "x-branch-id": branchId }
@@ -690,7 +689,7 @@ export default function CajaPage() {
       }
     } finally {
     }
-  };
+  }, [branchId]);
 
   const fetchStats = async () => {
     try {
@@ -754,6 +753,31 @@ export default function CajaPage() {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [fetchActiveShift, status]);
+
+  useEffect(() => {
+    if (status !== "authenticated") return;
+
+    const refreshProducts = () => {
+      if (document.visibilityState === "hidden") {
+        return;
+      }
+      void fetchProducts();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        refreshProducts();
+      }
+    };
+
+    window.addEventListener("focus", refreshProducts);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("focus", refreshProducts);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [fetchProducts, status]);
 
   const resetReminderComposer = useCallback(() => {
     setReminderMessage("");
@@ -1211,33 +1235,48 @@ export default function CajaPage() {
   };
 
   // ─── Barcode handling ─────────────────────────────────────────────────────
-  const sellableProducts = useMemo(
-    () => products.filter((product) => product.showInGrid !== false && product.readyForSale !== false),
+  const visibleProducts = useMemo(
+    () =>
+      products.filter((product) => {
+        if (product.showInGrid === false || product.categoryShowInGrid === false) {
+          return false;
+        }
+
+        if (product.readyForSale !== false) {
+          return true;
+        }
+
+        if (product.isOutOfStock || product.isNegativeStock) {
+          return true;
+        }
+
+        return product.variants?.some((variant) => variant.isOutOfStock || variant.isNegativeStock) ?? false;
+      }),
     [products],
   );
 
   const filteredProducts = useMemo(() => {
-    let res = sellableProducts;
+    let res = visibleProducts;
     if (activeCategory) res = res.filter(p => p.categoryId === activeCategory);
     if (cajaSearch) {
       const q = cajaSearch.toLowerCase();
       res = res.filter(p => p.name.toLowerCase().includes(q) || p.barcode === q);
     }
     return res;
-  }, [sellableProducts, activeCategory, cajaSearch]);
+  }, [visibleProducts, activeCategory, cajaSearch]);
 
   const handleBarcodeScan = useCallback((result: string) => {
     setShowScanner(false);
 
     // 1. Buscar en productos base
-    const product = sellableProducts.find(p => p.barcode === result);
+    const product = visibleProducts.find(p => p.barcode === result);
     if (product) {
       handleProductTap(product);
       return;
     }
 
     // 2. Buscar en variantes de todos los productos
-    for (const p of sellableProducts) {
+    for (const p of visibleProducts) {
       if (p.variants) {
         const variant = p.variants.find(v => v.barcode === result);
         if (variant) {
@@ -1253,7 +1292,7 @@ export default function CajaPage() {
     }, 0);
     return;
     alert(`Código ${result} no encontrado.`);
-  }, [handleProductTap, sellableProducts]);
+  }, [handleProductTap, visibleProducts]);
   handleBarcodeScanRef.current = handleBarcodeScan;
 
   // ─── Ticket item controls ─────────────────────────────────────────────────
@@ -1685,7 +1724,8 @@ export default function CajaPage() {
             const inTicket = ticket.find((t) => t.productId === product.id && !t.variantId);
             const isSelected = i === selectedIndex && cajaSearch.length > 0;
             const stockBadge = getProductStockBadge(product);
-            
+            const isUnavailable = product.readyForSale === false;
+             
             return (
               <button
                 key={product.id}
@@ -1697,39 +1737,68 @@ export default function CajaPage() {
                 onTouchStart={() => handleLongPressStart(product)}
                 onTouchEnd={handleLongPressEnd}
                 disabled={operationsDisabled}
-                style={
-                  inTicket 
-                  ? { borderColor: "var(--primary)", background: "rgba(var(--primary-rgb, 34, 197, 94), 0.08)", fontSize: "13px", ...(isSelected ? { outline: "2px solid var(--primary)", transform: "scale(1.02)" } : {}) } 
-                  : { fontSize: "13px", ...(isSelected ? { outline: "2px solid var(--text)", transform: "scale(1.02)" } : {}) }
-                }
+                style={{
+                  fontSize: "13px",
+                  ...(inTicket
+                    ? {
+                        borderColor: "var(--primary)",
+                        background: "rgba(var(--primary-rgb, 34, 197, 94), 0.08)",
+                      }
+                    : {}),
+                  ...(isUnavailable
+                    ? {
+                        opacity: 0.68,
+                        borderColor: "rgba(148,163,184,.28)",
+                        background: "rgba(148,163,184,.06)",
+                      }
+                    : {}),
+                  ...(isSelected
+                    ? {
+                        outline: `2px solid ${inTicket ? "var(--primary)" : "var(--text)"}`,
+                        transform: "scale(1.02)",
+                      }
+                    : {}),
+                }}
               >
-                <ProductThumb
-                  image={product.image}
-                  emoji={product.emoji}
-                  name={product.name}
-                  size={44}
-                  radius={14}
-                  fontSize={22}
-                />
-                <span className="product-btn-name">{product.name}</span>
-                <span className="product-btn-price">{formatARS(product.price)}</span>
-                {stockBadge && (
-                  <span
-                    style={{
-                      marginTop: "6px",
-                      alignSelf: "flex-start",
-                      padding: "3px 7px",
-                      borderRadius: "999px",
-                      fontSize: "10px",
-                      fontWeight: 700,
-                      color: stockBadge.color,
-                      background: stockBadge.background,
-                      border: `1px solid ${stockBadge.border}`,
-                    }}
-                  >
-                    {stockBadge.label}
-                  </span>
-                )}
+                <div
+                  className="product-btn-media"
+                  aria-hidden="true"
+                  style={isUnavailable ? { filter: "grayscale(0.18) saturate(0.82)", opacity: 0.9 } : undefined}
+                >
+                  {product.image ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={product.image} alt={product.name} />
+                  ) : product.emoji ? (
+                    <div className="product-btn-media-fallback" data-kind="emoji">
+                      {product.emoji}
+                    </div>
+                  ) : (
+                    <div className="product-btn-media-fallback" data-kind="letter">
+                      {product.name.slice(0, 1)}
+                    </div>
+                  )}
+                </div>
+
+                <div className="product-btn-body">
+                  <span className="product-btn-name">{product.name}</span>
+                  <span className="product-btn-price">{formatARS(product.price)}</span>
+                  {stockBadge && (
+                    <span
+                      style={{
+                        justifySelf: "start",
+                        padding: "3px 7px",
+                        borderRadius: "999px",
+                        fontSize: "10px",
+                        fontWeight: 700,
+                        color: stockBadge.color,
+                        background: stockBadge.background,
+                        border: `1px solid ${stockBadge.border}`,
+                      }}
+                    >
+                      {stockBadge.label}
+                    </span>
+                  )}
+                </div>
                 {inTicket && (
                   <span
                     style={{

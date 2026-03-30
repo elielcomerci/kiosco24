@@ -6,7 +6,6 @@ import { notFound, redirect } from "next/navigation";
 import BottomNav from "@/components/ui/BottomNav";
 import BranchSelector from "@/components/ui/BranchSelector";
 import { BranchWorkspaceProvider } from "@/components/ui/BranchWorkspace";
-import InstallAppButton from "@/components/pwa/InstallAppButton";
 import { hexToRgb } from "@/lib/utils";
 
 export default async function BranchLayout({
@@ -90,36 +89,25 @@ export default async function BranchLayout({
         "--bg": bgColor,
       } as React.CSSProperties}
     >
-      <header
-        className="no-print"
-        style={{
-          flexShrink: 0,
-          padding: "10px 16px",
-          background: "var(--surface)",
-          borderBottom: "1px solid var(--border)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          minHeight: "62px",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", minWidth: 0 }}>
+      <header className="app-header no-print">
+        <div className="app-header-branch">
           <BranchSelector branches={branches} currentBranchId={effectiveBranchId} />
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          <InstallAppButton compact />
+        <div className="app-header-actions">
           <a
             href={`/${effectiveBranchId}/tickets`}
-            style={{ fontSize: "20px", textDecoration: "none", color: "var(--text)" }}
+            className="app-header-icon-link"
             title="Tickets"
+            aria-label="Tickets"
           >
             {"\uD83E\uDDFE"}
           </a>
           {(session.user.role === "OWNER" || session.user.employeeRole === "MANAGER") ? (
             <a
               href={`/${effectiveBranchId}/facturas`}
-              style={{ fontSize: "20px", textDecoration: "none", color: "var(--text)" }}
+              className="app-header-icon-link"
               title="Facturas"
+              aria-label="Facturas"
             >
               {"\uD83D\uDCC4"}
             </a>
@@ -127,8 +115,9 @@ export default async function BranchLayout({
           {!isEmployee && (
             <a
               href={`/${effectiveBranchId}/configuracion`}
-              style={{ fontSize: "20px", textDecoration: "none", color: "var(--text)" }}
+              className="app-header-icon-link"
               title="Configuracion"
+              aria-label="Configuracion"
             >
               {"\u2699\uFE0F"}
             </a>
@@ -141,11 +130,10 @@ export default async function BranchLayout({
           >
             <button
               type="submit"
-              className="btn btn-sm btn-ghost"
-              style={{ border: "1px solid var(--border)", padding: "6px 10px" }}
+              className="btn btn-sm btn-ghost app-header-logout"
               title="Salir"
             >
-              Salir
+              <span className="app-header-logout-label">Salir</span>
             </button>
           </form>
         </div>

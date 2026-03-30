@@ -15,6 +15,7 @@ import {
   normalizeCatalogTitle,
 } from "@/lib/catalog-text";
 import {
+  buildPlatformSubmissionDraft,
   findApprovedPlatformProductByBarcode,
   platformDraftDiffers,
   queuePlatformProductSubmission,
@@ -436,6 +437,19 @@ export async function POST(req: Request) {
       ? await findApprovedPlatformProductByBarcode(lookupBarcode)
       : null;
     const normalizedPlatformSyncMode = normalizePlatformSyncMode(platformSyncMode);
+    const platformSubmissionDraft = buildPlatformSubmissionDraft(platformProduct, {
+      barcode: normalizedBarcode,
+      name: normalizedName,
+      brand: normalizedBrand,
+      categoryName: resolvedCategory.categoryName,
+      description: normalizedDescription,
+      presentation: normalizedPresentation,
+      image: normalizedImage,
+      variants: normalizedVariants.map((variant) => ({
+        name: variant.name,
+        barcode: variant.barcode,
+      })),
+    });
 
     const product = await prisma.product.create({
       data: {
@@ -519,35 +533,20 @@ export async function POST(req: Request) {
 
     if (
       (normalizedBarcode || normalizedVariants.some((variant) => variant.barcode)) &&
-      platformDraftDiffers(platformProduct, {
-        barcode: normalizedBarcode,
-        name: normalizedName,
-        brand: normalizedBrand,
-        categoryName: resolvedCategory.categoryName,
-        description: normalizedDescription,
-        presentation: normalizedPresentation,
-        image: normalizedImage,
-        variants: normalizedVariants.map((variant) => ({
-          name: variant.name,
-          barcode: variant.barcode,
-        })),
-      })
+      platformDraftDiffers(platformProduct, platformSubmissionDraft)
     ) {
       await queuePlatformProductSubmission({
         platformProductId: platformProduct?.id ?? null,
         submittedByUserId: session.user.id,
         submittedFromKioscoId: kioscoId,
-        barcode: normalizedBarcode,
-        name: normalizedName,
-        brand: normalizedBrand,
-        categoryName: resolvedCategory.categoryName,
-        description: normalizedDescription,
-        presentation: normalizedPresentation,
-        image: normalizedImage,
-        variants: normalizedVariants.map((variant) => ({
-          name: variant.name,
-          barcode: variant.barcode,
-        })),
+        barcode: platformSubmissionDraft.barcode,
+        name: platformSubmissionDraft.name,
+        brand: platformSubmissionDraft.brand,
+        categoryName: platformSubmissionDraft.categoryName,
+        description: platformSubmissionDraft.description,
+        presentation: platformSubmissionDraft.presentation,
+        image: platformSubmissionDraft.image,
+        variants: platformSubmissionDraft.variants,
       });
     }
 

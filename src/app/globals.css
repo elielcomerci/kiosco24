@@ -569,10 +569,10 @@ body {
   position: relative;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  padding: 16px 8px 12px;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 0;
+  padding: 0;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -580,12 +580,13 @@ body {
   transition: background 0.12s ease, transform 0.12s ease, border-color 0.12s ease;
   -webkit-tap-highlight-color: transparent;
   user-select: none;
-  min-height: 90px;
+  min-height: 152px;
+  overflow: hidden;
 }
 
 .product-btn:active {
   background: var(--surface-2);
-  transform: scale(0.95);
+  transform: scale(0.97);
 }
 
 .product-btn:hover {
@@ -595,19 +596,72 @@ body {
 
 .product-btn-name {
   font-size: 12px;
-  font-weight: 600;
-  text-align: center;
+  font-weight: 700;
+  text-align: left;
   color: var(--text);
-  line-height: 1.35;
+  line-height: 1.3;
   word-break: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .product-btn-price {
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 800;
   color: var(--primary);
   letter-spacing: -0.01em;
   font-variant-numeric: tabular-nums;
+}
+
+.product-btn-media {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0)),
+    color-mix(in srgb, var(--surface-2) 84%, #000 16%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.product-btn-media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  display: block;
+}
+
+.product-btn-media-fallback {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text);
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.product-btn-media-fallback[data-kind="emoji"] {
+  font-size: 40px;
+  line-height: 1;
+}
+
+.product-btn-media-fallback[data-kind="letter"] {
+  font-size: 30px;
+  letter-spacing: -0.03em;
+}
+
+.product-btn-body {
+  display: grid;
+  gap: 7px;
+  padding: 10px 10px 12px;
+  align-content: start;
+  flex: 1;
 }
 
 .product-btn-emoji {
@@ -663,12 +717,91 @@ body {
   transition: max-width 0.3s ease;
 }
 
+.app-header {
+  flex-shrink: 0;
+  min-height: 62px;
+  padding: 10px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.app-header-branch {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+}
+
+.app-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.app-header-icon-link {
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  text-decoration: none;
+  color: var(--text);
+  font-size: 18px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.app-header-logout {
+  min-height: 36px;
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+}
+
+.app-header-logout-label {
+  font-size: 13px;
+}
+
 @media (min-width: 1024px) {
   .app-layout {
     max-width: 100vw;
     box-shadow: none;
     display: flex; /* Ready for split view in Caja */
     flex-direction: column;
+  }
+}
+
+@media (max-width: 480px) {
+  .app-header {
+    padding: 10px 12px;
+    gap: 8px;
+  }
+
+  .app-header-actions {
+    gap: 6px;
+  }
+
+  .app-header-icon-link {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    font-size: 16px;
+  }
+
+  .app-header-logout {
+    padding: 6px 8px;
+  }
+
+  .app-header-logout-label {
+    font-size: 12px;
   }
 }
 
@@ -835,7 +968,7 @@ body {
 @media (max-width: 390px) {
   .amount { font-size: 2rem; }
   .product-grid { grid-template-columns: repeat(3, 1fr); gap: 6px; }
-  .product-btn { min-height: 80px; }
+  .product-btn { min-height: 138px; }
 }
 
 /* ─── PRINT MODE ─────────────────────────────────────────────────────────── */

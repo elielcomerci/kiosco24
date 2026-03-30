@@ -28,6 +28,16 @@ type PlatformProductDraft = {
   }>;
 };
 
+export type PlatformDraftChangeField =
+  | "barcode"
+  | "name"
+  | "brand"
+  | "categoryName"
+  | "description"
+  | "presentation"
+  | "image"
+  | "variants";
+
 function cleanText(value?: string | null) {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
@@ -349,6 +359,87 @@ export function normalizePlatformProductDraft(draft: PlatformProductDraft) {
     image: cleanText(draft.image),
     variants: normalizeVariants(draft.variants),
   };
+}
+
+function preferNonEmptyText(currentValue?: string | null, nextValue?: string | null) {
+  const normalizedCurrent = cleanText(currentValue);
+  const normalizedNext = cleanText(nextValue);
+
+  if (!normalizedNext) {
+    return normalizedCurrent;
+  }
+
+  if (!normalizedCurrent) {
+    return normalizedNext;
+  }
+
+  if (normalizedCurrent === normalizedNext) {
+    return normalizedCurrent;
+  }
+
+  return normalizedNext;
+}
+
+export function buildPlatformSubmissionDraft(
+  product: PlatformProductDraft | null | undefined,
+  draft: PlatformProductDraft,
+) {
+  if (!product) {
+    return normalizePlatformProductDraft(draft);
+  }
+
+  const normalizedProduct = normalizePlatformProductDraft(product);
+  const normalizedDraft = normalizePlatformProductDraft(draft);
+
+  return {
+    barcode: normalizedDraft.barcode ?? normalizedProduct.barcode,
+    name: preferNonEmptyText(normalizedProduct.name, normalizedDraft.name) ?? normalizedProduct.name,
+    brand: preferNonEmptyText(normalizedProduct.brand, normalizedDraft.brand),
+    categoryName: preferNonEmptyText(normalizedProduct.categoryName, normalizedDraft.categoryName),
+    description: preferNonEmptyText(normalizedProduct.description, normalizedDraft.description),
+    presentation: preferNonEmptyText(normalizedProduct.presentation, normalizedDraft.presentation),
+    image: preferNonEmptyText(normalizedProduct.image, normalizedDraft.image),
+    variants:
+      normalizedDraft.variants.length > 0
+        ? normalizedDraft.variants
+        : normalizedProduct.variants,
+  };
+}
+
+export function getPlatformDraftChanges(
+  product: PlatformProductDraft | null | undefined,
+  draft: PlatformProductDraft,
+): PlatformDraftChangeField[] {
+  const normalizedDraft = normalizePlatformProductDraft(draft);
+
+  if (!product) {
+    const changes: PlatformDraftChangeField[] = [];
+
+    if (normalizedDraft.barcode) changes.push("barcode");
+    if (normalizedDraft.name) changes.push("name");
+    if (normalizedDraft.brand) changes.push("brand");
+    if (normalizedDraft.categoryName) changes.push("categoryName");
+    if (normalizedDraft.description) changes.push("description");
+    if (normalizedDraft.presentation) changes.push("presentation");
+    if (normalizedDraft.image) changes.push("image");
+    if (normalizedDraft.variants.length > 0) changes.push("variants");
+
+    return changes;
+  }
+
+  const normalizedProduct = normalizePlatformProductDraft(product);
+  const changes: PlatformDraftChangeField[] = [];
+
+  if (normalizedProduct.barcode !== normalizedDraft.barcode) changes.push("barcode");
+  if (normalizedProduct.name !== normalizedDraft.name) changes.push("name");
+  if (normalizedProduct.brand !== normalizedDraft.brand) changes.push("brand");
+  if (normalizedProduct.categoryName !== normalizedDraft.categoryName) changes.push("categoryName");
+  if (normalizedProduct.description !== normalizedDraft.description) changes.push("description");
+  if (normalizedProduct.presentation !== normalizedDraft.presentation) changes.push("presentation");
+  if (normalizedProduct.image !== normalizedDraft.image) changes.push("image");
+  if (JSON.stringify(normalizedProduct.variants) !== JSON.stringify(normalizedDraft.variants)) changes.push("variants");
+
+  return changes;
 }
 
 export function platformDraftDiffers(

@@ -15,6 +15,7 @@ import {
   normalizeCatalogTitle,
 } from "@/lib/catalog-text";
 import {
+  buildPlatformSubmissionDraft,
   findApprovedPlatformProductByBarcode,
   platformDraftDiffers,
   queuePlatformProductSubmission,
@@ -681,43 +682,39 @@ export async function PATCH(
     });
   }
 
+  const platformSubmissionDraft = buildPlatformSubmissionDraft(platformProduct, {
+    barcode: effectiveBarcode,
+    name: normalizedName,
+    brand: normalizedBrand,
+    categoryName: resolvedCategory.categoryName,
+    description: normalizedDescription,
+    presentation: normalizedPresentation,
+    image: normalizedImage,
+    variants:
+      variants !== undefined
+        ? normalizedVariants.map((variant) => ({
+            name: variant.name,
+            barcode: variant.barcode,
+          }))
+        : undefined,
+  });
+
   if (
     (effectiveBarcode || normalizedVariants.some((variant) => variant.barcode)) &&
-    platformDraftDiffers(platformProduct, {
-      barcode: effectiveBarcode,
-      name: normalizedName,
-      brand: normalizedBrand,
-      categoryName: resolvedCategory.categoryName,
-      description: normalizedDescription,
-      presentation: normalizedPresentation,
-      image: normalizedImage,
-      variants:
-        variants !== undefined
-          ? normalizedVariants.map((variant) => ({
-              name: variant.name,
-              barcode: variant.barcode,
-            }))
-          : undefined,
-    })
+    platformDraftDiffers(platformProduct, platformSubmissionDraft)
   ) {
     await queuePlatformProductSubmission({
       platformProductId: platformProduct?.id ?? null,
       submittedByUserId: session.user.id,
       submittedFromKioscoId: kioscoId,
-      barcode: effectiveBarcode,
-      name: normalizedName,
-      brand: normalizedBrand,
-      categoryName: resolvedCategory.categoryName,
-      description: normalizedDescription,
-      presentation: normalizedPresentation,
-      image: normalizedImage,
-      variants:
-        variants !== undefined
-          ? normalizedVariants.map((variant) => ({
-              name: variant.name,
-              barcode: variant.barcode,
-            }))
-          : undefined,
+      barcode: platformSubmissionDraft.barcode,
+      name: platformSubmissionDraft.name,
+      brand: platformSubmissionDraft.brand,
+      categoryName: platformSubmissionDraft.categoryName,
+      description: platformSubmissionDraft.description,
+      presentation: platformSubmissionDraft.presentation,
+      image: platformSubmissionDraft.image,
+      variants: platformSubmissionDraft.variants,
     });
   }
 

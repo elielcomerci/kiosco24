@@ -1,7 +1,6 @@
 import Link from "next/link";
 
 import { auth, signOut } from "@/lib/auth";
-import InstallAppButton from "@/components/pwa/InstallAppButton";
 import { isPlatformAdmin } from "@/lib/platform-admin";
 import { prisma } from "@/lib/prisma";
 import {
@@ -133,7 +132,6 @@ export default async function LandingPage() {
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
-          <InstallAppButton />
           {session ? (
             <>
               <Link href={appHref} className="btn btn-primary" style={{ borderRadius: "999px", padding: "10px 18px" }}>

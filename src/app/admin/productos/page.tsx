@@ -3,7 +3,11 @@ import {
   PlatformProductSubmissionStatus,
 } from "@prisma/client";
 import { auth } from "@/lib/auth";
-import { ensurePlatformCatalogSeeded } from "@/lib/platform-catalog";
+import {
+  ensurePlatformCatalogSeeded,
+  getPlatformDraftChanges,
+  type PlatformDraftChangeField,
+} from "@/lib/platform-catalog";
 import { isPlatformAdmin } from "@/lib/platform-admin";
 import { syncAutoProductsFromPlatformProduct } from "@/lib/platform-product-sync";
 import { prisma } from "@/lib/prisma";
@@ -14,6 +18,148 @@ import PlatformProductBackupManager from "@/app/admin/productos/PlatformProductB
 import PlatformProductBulkImporter from "@/app/admin/productos/PlatformProductBulkImporter";
 import PlatformImagePushManager from "@/app/admin/productos/PlatformImagePushManager";
 import PlatformProductQuickEditor from "@/app/admin/productos/PlatformProductQuickEditor";
+
+const platformChangeLabels: Record<PlatformDraftChangeField, string> = {
+  barcode: "Codigo de barras",
+  name: "Nombre",
+  brand: "Marca",
+  categoryName: "Categoria",
+  description: "Descripcion",
+  presentation: "Presentacion",
+  image: "Imagen",
+  variants: "Variantes",
+};
+
+type SubmissionDiffSource = {
+  barcode: string | null;
+  name: string;
+  brand: string | null;
+  categoryName: string | null;
+  description: string | null;
+  presentation: string | null;
+  image: string | null;
+  variants: Array<{
+    name: string;
+    barcode: string | null;
+  }>;
+  platformProduct?: {
+    barcode: string | null;
+    name: string;
+    brand: string | null;
+    categoryName: string | null;
+    description: string | null;
+    presentation: string | null;
+    image: string | null;
+    variants: Array<{
+      name: string;
+      barcode: string | null;
+    }>;
+  } | null;
+};
+
+function formatDiffValue(value?: string | null, emptyLabel = "Sin dato") {
+  const normalized = value?.trim();
+  return normalized ? normalized : emptyLabel;
+}
+
+function formatVariantDiffValue(
+  variants?: Array<{
+    name: string;
+    barcode: string | null;
+  }> | null,
+) {
+  if (!variants || variants.length === 0) {
+    return "Sin variantes";
+  }
+
+  return variants
+    .map((variant) => `${variant.name}${variant.barcode ? ` | ${variant.barcode}` : ""}`)
+    .join(" · ");
+}
+
+function buildSubmissionDiffRows(submission: SubmissionDiffSource) {
+  const draft = {
+    barcode: submission.barcode,
+    name: submission.name,
+    brand: submission.brand,
+    categoryName: submission.categoryName,
+    description: submission.description,
+    presentation: submission.presentation,
+    image: submission.image,
+    variants: submission.variants.map((variant) => ({
+      name: variant.name,
+      barcode: variant.barcode,
+    })),
+  };
+
+  return getPlatformDraftChanges(submission.platformProduct ?? null, draft).map((field) => {
+    switch (field) {
+      case "barcode":
+        return {
+          field,
+          label: platformChangeLabels[field],
+          current: formatDiffValue(submission.platformProduct?.barcode, "Sin barcode base"),
+          next: formatDiffValue(submission.barcode, "Sin barcode base"),
+        };
+      case "name":
+        return {
+          field,
+          label: platformChangeLabels[field],
+          current: formatDiffValue(submission.platformProduct?.name, "Sin nombre"),
+          next: formatDiffValue(submission.name, "Sin nombre"),
+        };
+      case "brand":
+        return {
+          field,
+          label: platformChangeLabels[field],
+          current: formatDiffValue(submission.platformProduct?.brand),
+          next: formatDiffValue(submission.brand),
+        };
+      case "categoryName":
+        return {
+          field,
+          label: platformChangeLabels[field],
+          current: formatDiffValue(submission.platformProduct?.categoryName, "Sin categoria"),
+          next: formatDiffValue(submission.categoryName, "Sin categoria"),
+        };
+      case "description":
+        return {
+          field,
+          label: platformChangeLabels[field],
+          current: formatDiffValue(submission.platformProduct?.description, "Sin descripcion"),
+          next: formatDiffValue(submission.description, "Sin descripcion"),
+        };
+      case "presentation":
+        return {
+          field,
+          label: platformChangeLabels[field],
+          current: formatDiffValue(submission.platformProduct?.presentation),
+          next: formatDiffValue(submission.presentation),
+        };
+      case "image":
+        return {
+          field,
+          label: platformChangeLabels[field],
+          current: submission.platformProduct?.image ? "Imagen cargada" : "Sin imagen",
+          next: submission.image ? "Imagen cargada" : "Sin imagen",
+        };
+      case "variants":
+        return {
+          field,
+          label: platformChangeLabels[field],
+          current: formatVariantDiffValue(submission.platformProduct?.variants),
+          next: formatVariantDiffValue(submission.variants),
+        };
+      default:
+        return {
+          field,
+          label: platformChangeLabels[field],
+          current: "Sin dato",
+          next: "Sin dato",
+        };
+    }
+  });
+}
 
 async function ensurePlatformAdmin() {
   const session = await auth();
@@ -180,6 +326,26 @@ export default async function AdminProductsPage() {
     prisma.platformProductSubmission.findMany({
       where: { status: PlatformProductSubmissionStatus.PENDING },
       include: {
+        platformProduct: {
+          select: {
+            id: true,
+            barcode: true,
+            name: true,
+            brand: true,
+            categoryName: true,
+            description: true,
+            presentation: true,
+            image: true,
+            variants: {
+              select: {
+                id: true,
+                name: true,
+                barcode: true,
+              },
+              orderBy: { name: "asc" },
+            },
+          },
+        },
         submittedByUser: {
           select: {
             email: true,
@@ -310,93 +476,213 @@ export default async function AdminProductsPage() {
             <div style={{ color: "#94a3b8" }}>No hay aportes pendientes por moderar.</div>
           ) : (
             <div style={{ display: "grid", gap: "12px" }}>
-              {pendingSubmissions.map((submission) => (
-                <form
-                  key={submission.id}
-                  action={reviewSubmission}
-                  style={{
-                    display: "grid",
-                    gap: "10px",
-                    padding: "16px",
-                    borderRadius: "16px",
-                    background: "rgba(30,41,59,.8)",
-                    border: "1px solid rgba(148,163,184,.12)",
-                  }}
-                >
-                  <input type="hidden" name="submissionId" value={submission.id} />
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
-                    <div>
-                      <div style={{ fontWeight: 700, fontSize: "18px" }}>{submission.name}</div>
+              {pendingSubmissions.map((submission) => {
+                const diffRows = buildSubmissionDiffRows({
+                  barcode: submission.barcode,
+                  name: submission.name,
+                  brand: submission.brand,
+                  categoryName: submission.categoryName,
+                  description: submission.description,
+                  presentation: submission.presentation,
+                  image: submission.image,
+                  variants: submission.variants.map((variant) => ({
+                    name: variant.name,
+                    barcode: variant.barcode,
+                  })),
+                  platformProduct: submission.platformProduct
+                    ? {
+                        barcode: submission.platformProduct.barcode,
+                        name: submission.platformProduct.name,
+                        brand: submission.platformProduct.brand,
+                        categoryName: submission.platformProduct.categoryName,
+                        description: submission.platformProduct.description,
+                        presentation: submission.platformProduct.presentation,
+                        image: submission.platformProduct.image,
+                        variants: submission.platformProduct.variants.map((variant) => ({
+                          name: variant.name,
+                          barcode: variant.barcode,
+                        })),
+                      }
+                    : null,
+                });
+
+                return (
+                  <form
+                    key={submission.id}
+                    action={reviewSubmission}
+                    style={{
+                      display: "grid",
+                      gap: "10px",
+                      padding: "16px",
+                      borderRadius: "16px",
+                      background: "rgba(30,41,59,.8)",
+                      border: "1px solid rgba(148,163,184,.12)",
+                    }}
+                  >
+                    <input type="hidden" name="submissionId" value={submission.id} />
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
+                      <div style={{ display: "grid", gap: "6px" }}>
+                        <div style={{ fontWeight: 700, fontSize: "18px" }}>{submission.name}</div>
+                        <div style={{ color: "#94a3b8", fontSize: "13px" }}>
+                          {submission.barcode || "Sin barcode base"} | {submission.submittedFromKiosco?.name || "Kiosco desconocido"} |{" "}
+                          {submission.submittedByUser?.name || submission.submittedByUser?.email || "Usuario desconocido"}
+                        </div>
+                        <div
+                          style={{
+                            display: "inline-flex",
+                            width: "fit-content",
+                            alignItems: "center",
+                            gap: "6px",
+                            padding: "4px 10px",
+                            borderRadius: "999px",
+                            fontSize: "12px",
+                            fontWeight: 700,
+                            color: submission.platformProduct ? "#38bdf8" : "#f59e0b",
+                            background: submission.platformProduct
+                              ? "rgba(56,189,248,0.12)"
+                              : "rgba(245,158,11,0.12)",
+                            border: submission.platformProduct
+                              ? "1px solid rgba(56,189,248,0.22)"
+                              : "1px solid rgba(245,158,11,0.22)",
+                          }}
+                        >
+                          {submission.platformProduct ? "Mejora sobre ficha existente" : "Producto nuevo para revisar"}
+                        </div>
+                      </div>
                       <div style={{ color: "#94a3b8", fontSize: "13px" }}>
-                        {submission.barcode || "Sin barcode base"} | {submission.submittedFromKiosco?.name || "Kiosco desconocido"} |{" "}
-                        {submission.submittedByUser?.name || submission.submittedByUser?.email || "Usuario desconocido"}
+                        {new Date(submission.createdAt).toLocaleString("es-AR")}
                       </div>
                     </div>
-                    <div style={{ color: "#94a3b8", fontSize: "13px" }}>
-                      {new Date(submission.createdAt).toLocaleString("es-AR")}
-                    </div>
-                  </div>
 
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "10px" }}>
-                    <div>
-                      <div style={{ fontSize: "12px", color: "#94a3b8" }}>Marca</div>
-                      <div>{submission.brand || "Sin marca"}</div>
-                    </div>
-                    <div>
-                      <div style={{ fontSize: "12px", color: "#94a3b8" }}>Presentacion</div>
-                      <div>{submission.presentation || "Sin dato"}</div>
-                    </div>
-                    <div>
-                      <div style={{ fontSize: "12px", color: "#94a3b8" }}>Categoria</div>
-                      <div>{submission.categoryName || "Sin categoria"}</div>
-                    </div>
-                    <div>
-                      <div style={{ fontSize: "12px", color: "#94a3b8" }}>Descripcion</div>
-                      <div>{submission.description || "Sin descripcion"}</div>
-                    </div>
-                  </div>
+                    {diffRows.length === 0 ? (
+                      <div
+                        style={{
+                          borderRadius: "14px",
+                          border: "1px solid rgba(148,163,184,.18)",
+                          background: "rgba(2,6,23,.35)",
+                          padding: "12px 14px",
+                          color: "#cbd5e1",
+                        }}
+                      >
+                        Este aporte no cambia la ficha global. Probablemente el kiosco solo consumio la base precargada.
+                      </div>
+                    ) : (
+                      <div style={{ display: "grid", gap: "10px" }}>
+                        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                          {diffRows.map((row) => (
+                            <span
+                              key={`${submission.id}-${row.field}`}
+                              style={{
+                                borderRadius: "999px",
+                                border: "1px solid rgba(56,189,248,.18)",
+                                padding: "6px 10px",
+                                fontSize: "12px",
+                                color: "#bae6fd",
+                                background: "rgba(14,165,233,.12)",
+                              }}
+                            >
+                              {row.label}
+                            </span>
+                          ))}
+                        </div>
 
-                  {submission.variants.length > 0 && (
-                    <div style={{ display: "grid", gap: "6px" }}>
-                      <div style={{ fontSize: "12px", color: "#94a3b8" }}>Variantes</div>
-                      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                        {submission.variants.map((variant) => (
-                          <span
-                            key={variant.id}
-                            style={{
-                              borderRadius: "999px",
-                              border: "1px solid rgba(148,163,184,.16)",
-                              padding: "6px 10px",
-                              fontSize: "12px",
-                              color: "#cbd5e1",
-                              background: "rgba(2,6,23,.5)",
-                            }}
-                          >
-                            {variant.name}
-                            {variant.barcode ? ` | ${variant.barcode}` : ""}
-                          </span>
-                        ))}
+                        {submission.platformProduct && (
+                          <div style={{ display: "grid", gap: "8px" }}>
+                            {diffRows.map((row) => (
+                              <div
+                                key={`${submission.id}-${row.field}-diff`}
+                                style={{
+                                  display: "grid",
+                                  gridTemplateColumns: "minmax(120px, 160px) minmax(0, 1fr) minmax(0, 1fr)",
+                                  gap: "10px",
+                                  alignItems: "start",
+                                  padding: "10px 12px",
+                                  borderRadius: "14px",
+                                  background: "rgba(2,6,23,.42)",
+                                  border: "1px solid rgba(148,163,184,.12)",
+                                }}
+                              >
+                                <div style={{ fontSize: "12px", color: "#94a3b8", fontWeight: 700 }}>{row.label}</div>
+                                <div>
+                                  <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: ".06em" }}>
+                                    Actual
+                                  </div>
+                                  <div style={{ color: "#cbd5e1", wordBreak: "break-word" }}>{row.current}</div>
+                                </div>
+                                <div>
+                                  <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: ".06em" }}>
+                                    Propuesto
+                                  </div>
+                                  <div style={{ color: "#f8fafc", wordBreak: "break-word" }}>{row.next}</div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "10px" }}>
+                      <div>
+                        <div style={{ fontSize: "12px", color: "#94a3b8" }}>Marca</div>
+                        <div>{submission.brand || "Sin marca"}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: "12px", color: "#94a3b8" }}>Presentacion</div>
+                        <div>{submission.presentation || "Sin dato"}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: "12px", color: "#94a3b8" }}>Categoria</div>
+                        <div>{submission.categoryName || "Sin categoria"}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: "12px", color: "#94a3b8" }}>Descripcion</div>
+                        <div>{submission.description || "Sin descripcion"}</div>
                       </div>
                     </div>
-                  )}
 
-                  <textarea
-                    name="reviewNote"
-                    className="input"
-                    placeholder="Nota interna opcional"
-                    rows={2}
-                    style={{ resize: "vertical" }}
-                  />
-                  <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                    <button type="submit" name="action" value="approve" className="btn btn-primary">
-                      Aprobar y publicar
-                    </button>
-                    <button type="submit" name="action" value="reject" className="btn btn-ghost">
-                      Rechazar aporte
-                    </button>
-                  </div>
-                </form>
-              ))}
+                    {submission.variants.length > 0 && (
+                      <div style={{ display: "grid", gap: "6px" }}>
+                        <div style={{ fontSize: "12px", color: "#94a3b8" }}>Variantes</div>
+                        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                          {submission.variants.map((variant) => (
+                            <span
+                              key={variant.id}
+                              style={{
+                                borderRadius: "999px",
+                                border: "1px solid rgba(148,163,184,.16)",
+                                padding: "6px 10px",
+                                fontSize: "12px",
+                                color: "#cbd5e1",
+                                background: "rgba(2,6,23,.5)",
+                              }}
+                            >
+                              {variant.name}
+                              {variant.barcode ? ` | ${variant.barcode}` : ""}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <textarea
+                      name="reviewNote"
+                      className="input"
+                      placeholder="Nota interna opcional"
+                      rows={2}
+                      style={{ resize: "vertical" }}
+                    />
+                    <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                      <button type="submit" name="action" value="approve" className="btn btn-primary">
+                        Aprobar y publicar
+                      </button>
+                      <button type="submit" name="action" value="reject" className="btn btn-ghost">
+                        Rechazar aporte
+                      </button>
+                    </div>
+                  </form>
+                );
+              })}
             </div>
           )}
         </section>

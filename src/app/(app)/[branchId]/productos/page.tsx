@@ -3905,7 +3905,7 @@ export default function ProductosPage() {
                 }}>
                   {isSelected ? "✓" : ""}
                 </div>
-                <ProductThumb image={p.image} emoji={p.emoji} name={p.name} size={48} radius={14} previewable />
+                <ProductThumb image={p.image} emoji={p.emoji} name={p.name} size={56} radius={16} previewable />
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 600 }}>{p.name}</div>
                   <div style={{ fontSize: "12px", color: "var(--text-3)" }}>
@@ -3948,7 +3948,7 @@ export default function ProductosPage() {
                 }}
                 onClick={() => setModal(p)}
               >
-                <ProductThumb image={p.image} emoji={p.emoji} name={p.name} size={52} radius={14} previewable />
+                <ProductThumb image={p.image} emoji={p.emoji} name={p.name} size={60} radius={16} previewable />
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 600 }}>
                     {p.name}

@@ -14,6 +14,7 @@ import {
   replaceTrackedLots,
   type NormalizedLotInput,
 } from "@/lib/inventory-expiry";
+import { applyInventoryCorrectionToCostLayers } from "@/lib/inventory-cost-consumption";
 import { DEFAULT_PRICING_MODE, syncSharedPricingFromBranch } from "@/lib/pricing-mode";
 import { Prisma, prisma } from "@/lib/prisma";
 
@@ -962,6 +963,7 @@ async function applyPreparedPlan(input: {
           });
           inventoryCreates += 1;
         } else if (inventory) {
+          const previousStock = inventory.stock ?? 0;
           await tx.inventoryRecord.update({
             where: { id: inventory.id },
             data: {
@@ -971,6 +973,14 @@ async function applyPreparedPlan(input: {
               ...(shouldApplyDisplay(input.scope) ? { showInGrid: showInGridValue } : {}),
             },
           });
+          if (shouldApplyStock(input.scope) && !plan.hasVariants && baseStockValue < previousStock) {
+            await applyInventoryCorrectionToCostLayers(tx, {
+              branchId: input.branchId,
+              productId: product.id,
+              variantId: null,
+              delta: baseStockValue - previousStock,
+            });
+          }
           inventoryUpdates += 1;
         }
 
@@ -1002,6 +1012,7 @@ async function applyPreparedPlan(input: {
           }
         } else if (variantInventory) {
           if (shouldApplyStock(input.scope) || shouldApplyDisplay(input.scope)) {
+            const previousStock = variantInventory.stock ?? 0;
             await tx.variantInventory.update({
               where: { id: variantInventory.id },
               data: {
@@ -1009,6 +1020,14 @@ async function applyPreparedPlan(input: {
                 ...(shouldApplyDisplay(input.scope) ? { minStock: nextMinStock } : {}),
               },
             });
+            if (shouldApplyStock(input.scope) && nextStock < previousStock) {
+              await applyInventoryCorrectionToCostLayers(tx, {
+                branchId: input.branchId,
+                productId: product.id,
+                variantId: owner.variant.id,
+                delta: nextStock - previousStock,
+              });
+            }
             variantInventoryUpdates += 1;
           }
         }

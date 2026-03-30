@@ -10,6 +10,7 @@ import {
   replaceTrackedLots,
   type NormalizedLotInput,
 } from "@/lib/inventory-expiry";
+import { applyInventoryCorrectionToCostLayers } from "@/lib/inventory-cost-consumption";
 import { syncRestockItemCostLayer } from "@/lib/inventory-cost-layers";
 import { syncSharedPricingFromBranch } from "@/lib/pricing-mode";
 import { prisma } from "@/lib/prisma";
@@ -380,6 +381,19 @@ export async function POST(req: Request) {
             quantity: item.quantity,
             unitCost: item.unitCost,
             receivedAt: restockEvent.createdAt,
+          });
+        }
+      } else {
+        for (const adjustment of adjustments) {
+          if (adjustment.delta >= 0) {
+            continue;
+          }
+
+          await applyInventoryCorrectionToCostLayers(tx, {
+            branchId,
+            productId: adjustment.productId,
+            variantId: adjustment.variantId,
+            delta: adjustment.delta,
           });
         }
       }

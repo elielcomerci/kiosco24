@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { guardOperationalAccess } from "@/lib/access-control";
 import { auth } from "@/lib/auth";
 import { getBranchContext } from "@/lib/branch";
+import { moveInventoryCostLayersBetweenBranches } from "@/lib/inventory-cost-consumption";
 import { addTrackedLots } from "@/lib/inventory-expiry";
 import { prisma } from "@/lib/prisma";
 import { isStockTransferStrategy, planStockTransfer, type StockTransferStrategy } from "@/lib/stock-transfer-plan";
@@ -172,6 +173,14 @@ export async function POST(req: Request) {
               });
             }
 
+            await moveInventoryCostLayersBetweenBranches(tx, {
+              sourceBranchId: branchId,
+              targetBranchId: targetBranchId,
+              productId: variant.productId,
+              variantId: item.variantId,
+              quantity: item.quantity,
+            });
+
             const movedLotIds: string[] = [];
             for (const lot of plan.lotsToTransfer) {
               if (!lot.id) {
@@ -294,6 +303,14 @@ export async function POST(req: Request) {
                 },
               });
             }
+
+            await moveInventoryCostLayersBetweenBranches(tx, {
+              sourceBranchId: branchId,
+              targetBranchId: targetBranchId,
+              productId: item.productId,
+              variantId: null,
+              quantity: item.quantity,
+            });
 
             const movedLotIds: string[] = [];
             for (const lot of plan.lotsToTransfer) {

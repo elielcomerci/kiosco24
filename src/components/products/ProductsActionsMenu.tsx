@@ -14,6 +14,7 @@ export default function ProductsActionsMenu({
   onReplicate,
   onTransfer,
   onCorrectInventory,
+  onManualValuation,
   onRestockHistory,
   onUpdatePrices,
   onSelectionMode,
@@ -29,6 +30,7 @@ export default function ProductsActionsMenu({
   onReplicate: () => void;
   onTransfer: () => void;
   onCorrectInventory: () => void;
+  onManualValuation: () => void;
   onRestockHistory: () => void;
   onUpdatePrices: () => void;
   onSelectionMode: () => void;
@@ -88,6 +90,9 @@ export default function ProductsActionsMenu({
           </button>
           <button className="btn btn-ghost" style={menuButtonStyle} onClick={() => run(onRestockHistory)}>
             Historial ingresos
+          </button>
+          <button className="btn btn-ghost" style={menuButtonStyle} onClick={() => run(onManualValuation)}>
+            Valorar stock
           </button>
           <button className="btn btn-ghost" style={menuButtonStyle} onClick={() => run(onCorrectInventory)}>
             Corregir inventario

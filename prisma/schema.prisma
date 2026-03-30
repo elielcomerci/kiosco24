@@ -155,6 +155,8 @@ model Branch {
   mpIncomingPaymentNotices MpIncomingPaymentNotice[]
   restockEvents            RestockEvent[]
   inventoryCostLayers      InventoryCostLayer[]
+  saleCostAllocations      SaleCostAllocation[]
+  negativeStockReservations NegativeStockReservation[]
   stockLots                StockLot[]
   ticketSettings           TicketSettings?
   fiscalSettings           BranchFiscalSettings?
@@ -242,6 +244,8 @@ model Product {
   kiosco            Kiosco            @relation(fields: [kioscoId], references: [id], onDelete: Cascade)
   inventory         InventoryRecord[]
   inventoryCostLayers InventoryCostLayer[]
+  saleCostAllocations SaleCostAllocation[]
+  negativeStockReservations NegativeStockReservation[]
   variants          Variant[]
   restocks          RestockItem[]
   stockLots         StockLot[]
@@ -355,6 +359,8 @@ model Variant {
 
   inventory VariantInventory[]
   inventoryCostLayers InventoryCostLayer[]
+  saleCostAllocations SaleCostAllocation[]
+  negativeStockReservations NegativeStockReservation[]
   restocks  RestockItem[]
   stockLots StockLot[]
 
@@ -548,6 +554,8 @@ model SaleItem {
   quantity  Int
   cost      Float?
   lotConsumptions SaleLotConsumption[]
+  costAllocations SaleCostAllocation[]
+  negativeStockReservations NegativeStockReservation[]
 }
 
 model CreditCustomer {
@@ -644,6 +652,7 @@ model InventoryCostLayer {
   unitCost       Float
   initialQuantity Int
   remainingQuantity Int
+  saleCostAllocations SaleCostAllocation[]
   receivedAt     DateTime
   createdAt      DateTime                     @default(now())
   updatedAt      DateTime                     @updatedAt
@@ -651,6 +660,52 @@ model InventoryCostLayer {
   @@index([branchId, productId, receivedAt])
   @@index([branchId, variantId, receivedAt])
   @@index([branchId, sourceType, createdAt])
+}
+
+model SaleCostAllocation {
+  id                   String             @id @default(cuid())
+  saleItemId           String
+  saleItem             SaleItem           @relation(fields: [saleItemId], references: [id], onDelete: Cascade)
+  inventoryCostLayerId String
+  inventoryCostLayer   InventoryCostLayer @relation(fields: [inventoryCostLayerId], references: [id], onDelete: Cascade)
+  branchId             String
+  branch               Branch             @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  productId            String
+  product              Product            @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variantId            String?
+  variant              Variant?           @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  quantity             Int
+  unitCost             Float
+  totalCost            Float
+  createdAt            DateTime           @default(now())
+
+  @@index([saleItemId])
+  @@index([inventoryCostLayerId])
+  @@index([branchId, createdAt])
+  @@index([productId, createdAt])
+  @@index([variantId, createdAt])
+}
+
+model NegativeStockReservation {
+  id             String    @id @default(cuid())
+  saleItemId     String
+  saleItem       SaleItem  @relation(fields: [saleItemId], references: [id], onDelete: Cascade)
+  branchId       String
+  branch         Branch    @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  productId      String
+  product        Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variantId      String?
+  variant        Variant?  @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  originalQuantity Int
+  quantityPending Int
+  resolvedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([saleItemId])
+  @@index([branchId, createdAt])
+  @@index([branchId, productId, resolvedAt])
+  @@index([branchId, variantId, resolvedAt])
 }
 
 model RestockAttachment {

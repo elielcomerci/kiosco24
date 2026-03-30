@@ -33,6 +33,54 @@ interface PeriodoData {
   };
 }
 
+interface InventoryValueData {
+  summary: {
+    actualStock: number;
+    valuedCapital: number;
+    valuedUnits: number;
+    pendingUnits: number;
+    pendingLines: number;
+    uncoveredUnits: number;
+    overtrackedUnits: number;
+    negativePendingUnits: number;
+    negativeReservations: number;
+    pendingProducts: number;
+    uncoveredProducts: number;
+    layersCount: number;
+  };
+  products: Array<{
+    key: string;
+    productId: string;
+    productName: string;
+    productImage: string | null;
+    productBarcode: string | null;
+    variantId: string | null;
+    variantName: string | null;
+    variantBarcode: string | null;
+    displayName: string;
+    actualStock: number;
+    valuedUnits: number;
+    valuedCapital: number;
+    weightedAverageCost: number | null;
+    pendingUnits: number;
+    pendingLines: number;
+    uncoveredUnits: number;
+    overtrackedUnits: number;
+    negativePendingUnits: number;
+    negativeReservations: number;
+    layersCount: number;
+    latestReceivedAt: string | null;
+    layers: Array<{
+      id: string;
+      sourceType: string;
+      unitCost: number;
+      remainingQuantity: number;
+      totalValue: number;
+      receivedAt: string;
+    }>;
+  }>;
+}
+
 type Periodo = "dia" | "semana" | "mes";
 
 const PERIODO_LABEL: Record<Periodo, string> = {
@@ -288,7 +336,10 @@ export default function EstadisticasPage() {
   const [periodo, setPeriodo] = useState<Periodo>("semana");
   const [currentDate, setCurrentDate] = useState<string>(today);
   const [data, setData] = useState<PeriodoData | null>(null);
+  const [inventoryValue, setInventoryValue] = useState<InventoryValueData | null>(null);
   const [loading, setLoading] = useState(false);
+  const [inventoryLoading, setInventoryLoading] = useState(false);
+  const [expandedInventoryKeys, setExpandedInventoryKeys] = useState<string[]>([]);
 
   const load = useCallback(async (p: Periodo, iso: string) => {
     setLoading(true);
@@ -305,9 +356,32 @@ export default function EstadisticasPage() {
     }
   }, [branchId]);
 
+  const loadInventoryValue = useCallback(async () => {
+    setInventoryLoading(true);
+    try {
+      const res = await fetch("/api/stats/inventory-value", {
+        headers: { "x-branch-id": branchId },
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(json?.error || "No pudimos cargar la valorizacion de inventario.");
+      }
+      setInventoryValue(json as InventoryValueData);
+    } catch (error) {
+      console.error(error);
+      setInventoryValue(null);
+    } finally {
+      setInventoryLoading(false);
+    }
+  }, [branchId]);
+
   useEffect(() => {
     load(periodo, currentDate);
   }, [periodo, currentDate, load]);
+
+  useEffect(() => {
+    loadInventoryValue();
+  }, [loadInventoryValue]);
 
   const handlePeriodoChange = (p: Periodo) => {
     setPeriodo(p);
@@ -316,6 +390,12 @@ export default function EstadisticasPage() {
 
   const handleNav = (dir: 1 | -1) => {
     setCurrentDate((prev) => offsetDate(prev, periodo, dir));
+  };
+
+  const toggleInventoryProduct = (key: string) => {
+    setExpandedInventoryKeys((current) =>
+      current.includes(key) ? current.filter((item) => item !== key) : [...current, key],
+    );
   };
 
   // Build period date range for TurnosHistorial
@@ -459,6 +539,251 @@ export default function EstadisticasPage() {
 
       {!loading && data && (
         <>
+          <div
+            className="card"
+            style={{
+              padding: "16px",
+              display: "grid",
+              gap: "14px",
+              background: "linear-gradient(180deg, rgba(56,189,248,0.08), rgba(15,23,42,0.9))",
+              border: "1px solid rgba(56,189,248,0.18)",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "flex-start", flexWrap: "wrap" }}>
+              <div>
+                <h3
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.08em",
+                    color: "var(--text-3)",
+                    marginBottom: 8,
+                  }}
+                >
+                  Inventario valorizado
+                </h3>
+                <div style={{ fontSize: 13, color: "var(--text-2)", lineHeight: 1.5 }}>
+                  Capital cargado desde ingresos con costo. Ya descontamos ventas nuevas, anulaciones y
+                  transferencias en paralelo; esta vista sirve para auditar compras, faltantes de costo y
+                  diferencias entre el stock fisico y sus capas contables.
+                </div>
+              </div>
+              {inventoryLoading && <div style={{ color: "var(--text-3)", fontSize: 13 }}>Actualizando...</div>}
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              <KpiCard
+                label="Capital valorizado"
+                value={inventoryValue ? formatARS(inventoryValue.summary.valuedCapital) : "—"}
+                sub={inventoryValue ? `${inventoryValue.summary.layersCount} capas abiertas` : "Cargando"}
+                highlight
+              />
+              <KpiCard
+                label="Unidades con costo"
+                value={inventoryValue ? String(inventoryValue.summary.valuedUnits) : "—"}
+                sub={
+                  inventoryValue
+                    ? `${inventoryValue.summary.actualStock} u. fisicas detectadas`
+                    : "Cargando"
+                }
+              />
+              <KpiCard
+                label="Unidades pendientes"
+                value={inventoryValue ? String(inventoryValue.summary.pendingUnits) : "—"}
+                sub={inventoryValue ? `${inventoryValue.summary.pendingLines} lineas sin costo` : "Cargando"}
+                warning={Boolean(inventoryValue && inventoryValue.summary.pendingUnits > 0)}
+              />
+              <KpiCard
+                label="Pendiente por negativo"
+                value={inventoryValue ? String(inventoryValue.summary.negativePendingUnits) : "—"}
+                sub={
+                  inventoryValue
+                    ? `${inventoryValue.summary.negativeReservations} reservas pendientes`
+                    : "Cargando"
+                }
+                warning={Boolean(inventoryValue && inventoryValue.summary.negativePendingUnits > 0)}
+              />
+              <KpiCard
+                label="Stock sin capa contable"
+                value={inventoryValue ? String(inventoryValue.summary.uncoveredUnits) : "â€”"}
+                sub={
+                  inventoryValue
+                    ? `${inventoryValue.summary.uncoveredProducts} productos para regularizar`
+                    : "Cargando"
+                }
+                warning={Boolean(inventoryValue && inventoryValue.summary.uncoveredUnits > 0)}
+              />
+              <KpiCard
+                label="Capas por encima del stock"
+                value={inventoryValue ? String(inventoryValue.summary.overtrackedUnits) : "â€”"}
+                sub="Sirve para detectar correcciones o capas viejas sin depurar"
+                warning={Boolean(inventoryValue && inventoryValue.summary.overtrackedUnits > 0)}
+              />
+            </div>
+
+            {inventoryValue && inventoryValue.products.length > 0 ? (
+              <div style={{ display: "grid", gap: "10px" }}>
+                {inventoryValue.products.slice(0, 8).map((product) => (
+                  <div
+                    key={product.key}
+                    style={{
+                      display: "grid",
+                      gap: "10px",
+                      padding: "12px 0",
+                      borderTop: "1px solid rgba(148,163,184,0.12)",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "auto 1fr auto",
+                        gap: "12px",
+                        alignItems: "center",
+                      }}
+                    >
+                      {product.productImage ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={product.productImage}
+                          alt={product.displayName}
+                          style={{
+                            width: "44px",
+                            height: "44px",
+                            borderRadius: "12px",
+                            objectFit: "cover",
+                            border: "1px solid rgba(148,163,184,0.18)",
+                          }}
+                        />
+                      ) : (
+                        <div
+                          style={{
+                            width: "44px",
+                            height: "44px",
+                            borderRadius: "12px",
+                            background: "rgba(15,23,42,0.75)",
+                            border: "1px dashed rgba(148,163,184,0.18)",
+                          }}
+                        />
+                      )}
+
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontWeight: 700, fontSize: 14 }}>{product.displayName}</div>
+                        <div style={{ color: "var(--text-3)", fontSize: 12, marginTop: 2 }}>
+                          {product.actualStock} u. fisicas
+                          {product.valuedUnits > 0 ? ` Â· ${product.valuedUnits} u. valorizadas` : ""}
+                          {product.uncoveredUnits > 0 ? ` Â· ${product.uncoveredUnits} u. sin capa` : ""}
+                          {product.weightedAverageCost !== null ? ` · costo prom. ${formatARS(product.weightedAverageCost)}` : ""}
+                          {product.pendingUnits > 0 ? ` · ${product.pendingUnits} u. pendientes` : ""}
+                          {product.negativePendingUnits > 0 ? ` · ${product.negativePendingUnits} u. vendidas en negativo` : ""}
+                        </div>
+                      </div>
+
+                      <div style={{ textAlign: "right" }}>
+                        <div style={{ fontWeight: 800, fontSize: 15 }}>{formatARS(product.valuedCapital)}</div>
+                        <div
+                          style={{
+                            color:
+                              product.overtrackedUnits > 0 || product.negativePendingUnits > 0
+                                ? "var(--red)"
+                                : product.pendingUnits > 0 || product.uncoveredUnits > 0
+                                  ? "var(--amber)"
+                                  : "var(--text-3)",
+                            fontSize: 12,
+                          }}
+                        >
+                          {product.overtrackedUnits > 0
+                            ? `${product.overtrackedUnits} u. de capas por encima del stock`
+                            : product.negativePendingUnits > 0
+                            ? `${product.negativeReservations} reservas en negativo`
+                            : product.pendingUnits > 0 || product.uncoveredUnits > 0
+                              ? `${product.pendingLines} lineas sin costo${product.uncoveredUnits > 0 ? ` Â· ${product.uncoveredUnits} u. sin capa` : ""}`
+                              : `${product.layersCount} capas`}
+                        </div>
+                        {product.layers.length > 0 && (
+                          <button
+                            className="btn btn-ghost"
+                            style={{ marginTop: 6, fontSize: 12, padding: "4px 8px", borderRadius: 8, border: "1px solid rgba(148,163,184,0.16)" }}
+                            onClick={() => toggleInventoryProduct(product.key)}
+                          >
+                            {expandedInventoryKeys.includes(product.key) ? "Ocultar capas" : "Ver capas"}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {expandedInventoryKeys.includes(product.key) && product.layers.length > 0 && (
+                      <div
+                        style={{
+                          display: "grid",
+                          gap: "8px",
+                          marginLeft: "56px",
+                          padding: "10px 12px",
+                          borderRadius: "14px",
+                          background: "rgba(15,23,42,0.45)",
+                          border: "1px solid rgba(148,163,184,0.12)",
+                        }}
+                      >
+                        {product.layers.map((layer) => (
+                          <div
+                            key={layer.id}
+                            style={{
+                              display: "grid",
+                              gridTemplateColumns: "1fr auto",
+                              gap: "8px",
+                              alignItems: "center",
+                            }}
+                          >
+                            <div>
+                              <div style={{ fontWeight: 700, fontSize: 13 }}>
+                                {layer.remainingQuantity} u. a {formatARS(layer.unitCost)}
+                              </div>
+                              <div style={{ color: "var(--text-3)", fontSize: 12, marginTop: 2 }}>
+                                {layer.sourceType === "MANUAL_VALUATION" ? "Valoracion manual" : "Ingreso"}
+                                {` · ${new Date(layer.receivedAt).toLocaleDateString("es-AR")}`}
+                              </div>
+                            </div>
+                            <div style={{ fontWeight: 700, fontSize: 13 }}>
+                              {formatARS(layer.totalValue)}
+                            </div>
+                          </div>
+                        ))}
+                        {product.pendingUnits > 0 && (
+                          <div style={{ color: "var(--amber)", fontSize: 12, paddingTop: 4 }}>
+                            Quedan {product.pendingUnits} u. pendientes de valorizar en este producto.
+                          </div>
+                        )}
+                        {product.uncoveredUnits > 0 && (
+                          <div style={{ color: "var(--amber)", fontSize: 12, paddingTop: 4 }}>
+                            Hay {product.uncoveredUnits} u. fisicas sin capa contable asociada. Conviene regularizarlas con
+                            valorizacion manual.
+                          </div>
+                        )}
+                        {product.overtrackedUnits > 0 && (
+                          <div style={{ color: "var(--red)", fontSize: 12, paddingTop: 4 }}>
+                            Hay {product.overtrackedUnits} u. valorizadas por encima del stock actual. Revisalo desde una
+                            correccion o ajuste reciente.
+                          </div>
+                        )}
+                        {product.negativePendingUnits > 0 && (
+                          <div style={{ color: "var(--red)", fontSize: 12, paddingTop: 4 }}>
+                            Hay {product.negativePendingUnits} u. vendidas en negativo esperando costo real.
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              !inventoryLoading && (
+                <div style={{ color: "var(--text-3)", fontSize: 13 }}>
+                  Todavia no hay ingresos valorizados para esta sucursal.
+                </div>
+              )
+            )}
+          </div>
+
           {/* KPIs grid */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
             <KpiCard

@@ -13,6 +13,7 @@ import {
 import BarcodeScanner from "@/components/caja/BarcodeScanner";
 import CategoryModal, { type CategoryRecord } from "@/components/config/CategoryModal";
 import CatalogSpreadsheetModal from "@/components/products/CatalogSpreadsheetModal";
+import InventoryValuationModal from "@/components/products/InventoryValuationModal";
 import ProductThumb from "@/components/products/ProductThumb";
 import ProductsActionsMenu from "@/components/products/ProductsActionsMenu";
 import RestockHistoryModal from "@/components/products/RestockHistoryModal";
@@ -3966,6 +3967,7 @@ export default function ProductosPage() {
   const [showCatalogImportModal, setShowCatalogImportModal] = useState(false);
   const [showPlatformSyncModal, setShowPlatformSyncModal] = useState(false);
   const [showRestockHistoryModal, setShowRestockHistoryModal] = useState(false);
+  const [showInventoryValuationModal, setShowInventoryValuationModal] = useState(false);
   const [syncingPlatformCatalog, setSyncingPlatformCatalog] = useState(false);
   const [catalogNotice, setCatalogNotice] = useState<string | null>(null);
   const [exportingCatalog, setExportingCatalog] = useState(false);
@@ -4340,6 +4342,7 @@ export default function ProductosPage() {
                 onPlatformSync={() => setShowPlatformSyncModal(true)}
                 onReplicate={() => setShowReplicarModal(true)}
                 onTransfer={() => setShowTransferirModal(true)}
+                onManualValuation={() => setShowInventoryValuationModal(true)}
                 onRestockHistory={() => setShowRestockHistoryModal(true)}
                 onCorrectInventory={() => {
                   setStockModalPreset({ initialOperation: "correct" });
@@ -4707,6 +4710,20 @@ export default function ProductosPage() {
           <RestockHistoryModal
             branchId={branchId}
             onClose={() => setShowRestockHistoryModal(false)}
+          />
+        </ModalPortal>
+      )}
+
+      {showInventoryValuationModal && (
+        <ModalPortal>
+          <InventoryValuationModal
+            branchId={branchId}
+            products={products}
+            onClose={() => setShowInventoryValuationModal(false)}
+            onSaved={() => {
+              setCatalogNotice("Valorizacion manual guardada.");
+              void fetchProducts();
+            }}
           />
         </ModalPortal>
       )}

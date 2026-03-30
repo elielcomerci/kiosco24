@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { guardOperationalAccess } from "@/lib/access-control";
 import { getBranchId } from "@/lib/branch";
+import { allocateSaleItemCosts } from "@/lib/inventory-cost-consumption";
 import { consumeTrackedLotsFefo, getOpenStockLots, summarizeTrackedLots } from "@/lib/inventory-expiry";
 import { PaymentMethod, Prisma, prisma } from "@/lib/prisma";
 import { todayRange } from "@/lib/utils";
@@ -512,6 +513,14 @@ export async function POST(req: Request) {
           variantId: item.variantId,
           quantity: item.quantity,
           saleItemId: item.id,
+        });
+
+        await allocateSaleItemCosts(tx, {
+          saleItemId: item.id,
+          branchId,
+          productId: item.productId,
+          variantId: item.variantId,
+          quantity: item.quantity,
         });
       }
 

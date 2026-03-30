@@ -4,6 +4,7 @@ import { PlatformSyncMode } from "@prisma/client";
 import { canAccessSetupWithoutSubscription, getKioscoAccessContextForSession } from "@/lib/access-control";
 import { auth } from "@/lib/auth";
 import { getBranchContext } from "@/lib/branch";
+import { applyInventoryCorrectionToCostLayers } from "@/lib/inventory-cost-consumption";
 import { hasBlockingStockLots, summarizeTrackedLots } from "@/lib/inventory-expiry";
 import { DEFAULT_PRICING_MODE, syncSharedPricingFromBranch } from "@/lib/pricing-mode";
 import { hasPlatformSyncUpdate } from "@/lib/platform-product-sync";
@@ -632,6 +633,9 @@ export async function PATCH(
           continue;
         }
 
+        const previousStock = currentVariantStockById.get(actualVariant.id) ?? 0;
+        const nextStock = typeof variant.stock === "number" ? variant.stock : previousStock;
+
         await prisma.variantInventory.upsert({
           where: {
             variantId_branchId: {
@@ -650,6 +654,17 @@ export async function PATCH(
             ...(variant.minStock !== undefined && { minStock: variant.minStock }),
           },
         });
+
+        if (typeof variant.stock === "number" && nextStock < previousStock) {
+          await prisma.$transaction(async (tx) => {
+            await applyInventoryCorrectionToCostLayers(tx, {
+              branchId,
+              productId: id,
+              variantId: actualVariant.id,
+              delta: nextStock - previousStock,
+            });
+          });
+        }
       }
     }
   }
@@ -673,6 +688,17 @@ export async function PATCH(
       ...(showInGrid !== undefined && { showInGrid }),
     },
   });
+
+  if (typeof stock === "number" && stock < (currentInventory?.stock ?? 0)) {
+    await prisma.$transaction(async (tx) => {
+      await applyInventoryCorrectionToCostLayers(tx, {
+        branchId,
+        productId: id,
+        variantId: null,
+        delta: stock - (currentInventory?.stock ?? 0),
+      });
+    });
+  }
 
   if (pricingMode === "SHARED" && (price !== undefined || cost !== undefined)) {
     await syncSharedPricingFromBranch(prisma, {

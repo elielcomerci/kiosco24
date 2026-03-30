@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { guardOperationalAccess } from "@/lib/access-control";
 import { auth } from "@/lib/auth";
 import { getBranchContext } from "@/lib/branch";
+import { applyInventoryCorrectionToCostLayers } from "@/lib/inventory-cost-consumption";
 import { DEFAULT_PRICING_MODE } from "@/lib/pricing-mode";
 import { prisma } from "@/lib/prisma";
 
@@ -144,6 +145,7 @@ export async function POST(req: Request) {
             continue;
           }
           if (action === "overwrite") {
+            const previousStock = existingRecord.stock ?? 0;
             await prisma.inventoryRecord.update({
               where: { id: existingRecord.id },
               data: {
@@ -151,6 +153,16 @@ export async function POST(req: Request) {
                 ...(copyStock && { stock: sourceStock }),
               },
             });
+            if (copyStock && sourceStock < previousStock) {
+              await prisma.$transaction(async (tx) => {
+                await applyInventoryCorrectionToCostLayers(tx, {
+                  branchId: targetBranchId,
+                  productId,
+                  variantId: null,
+                  delta: sourceStock - previousStock,
+                });
+              });
+            }
             upsertCount++;
           }
         } else {

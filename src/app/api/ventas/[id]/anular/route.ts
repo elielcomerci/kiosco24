@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { guardOperationalAccess } from "@/lib/access-control";
 import { getBranchContext } from "@/lib/branch";
+import { restoreSaleItemCostTracking } from "@/lib/inventory-cost-consumption";
 import { restoreLotConsumptions } from "@/lib/inventory-expiry";
 import { prisma } from "@/lib/prisma";
 import { createShiftForbiddenResponse, getActiveShift } from "@/lib/shift-access";
@@ -94,6 +95,8 @@ export async function POST(
             consumptions: item.lotConsumptions,
           });
         }
+
+        await restoreSaleItemCostTracking(tx, item.id);
         continue;
       }
 
@@ -116,6 +119,8 @@ export async function POST(
           consumptions: item.lotConsumptions,
         });
       }
+
+      await restoreSaleItemCostTracking(tx, item.id);
     }
 
     await tx.sale.update({

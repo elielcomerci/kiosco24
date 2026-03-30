@@ -23,15 +23,32 @@ export default function FiadosPage() {
   const [search, setSearch] = useState("");
   const [cobrarCustomer, setCobrarCustomer] = useState<CreditCustomer | null>(null);
   const [payAmount, setPayAmount] = useState("");
+  const [error, setError] = useState<string | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   const fetchCustomers = useCallback(async () => {
     setLoading(true);
-    const res = await fetch("/api/fiados/customers");
-    const data = await res.json();
-    setCustomers(data);
-    setLoading(false);
-  }, []);
+    setError(null);
+
+    try {
+      const res = await fetch("/api/fiados/customers", {
+        headers: { "x-branch-id": branchId },
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data?.error || "No se pudieron cargar los fiados.");
+        return;
+      }
+
+      setCustomers(Array.isArray(data) ? data : []);
+    } catch (fetchError) {
+      console.error(fetchError);
+      setError("No se pudieron cargar los fiados.");
+    } finally {
+      setLoading(false);
+    }
+  }, [branchId]);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -70,17 +87,35 @@ export default function FiadosPage() {
   const handleConfirmPay = async () => {
     if (!cobrarCustomer || !payAmount) return;
     setLoading(true);
-    await fetch("/api/fiados/cobrar", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        customerId: cobrarCustomer.id,
-        amount: parseFloat(payAmount),
-      }),
-    });
-    setCobrarCustomer(null);
-    setPayAmount("");
-    await fetchCustomers();
+    setError(null);
+
+    try {
+      const res = await fetch("/api/fiados/cobrar", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-branch-id": branchId,
+        },
+        body: JSON.stringify({
+          customerId: cobrarCustomer.id,
+          amount: parseFloat(payAmount),
+        }),
+      });
+
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setError(data?.error || "No se pudo registrar el cobro.");
+        return;
+      }
+
+      setCobrarCustomer(null);
+      setPayAmount("");
+      await fetchCustomers();
+    } catch (paymentError) {
+      console.error(paymentError);
+      setError("No se pudo registrar el cobro.");
+      setLoading(false);
+    }
   };
 
   return (
@@ -97,6 +132,23 @@ export default function FiadosPage() {
           Total en la calle:{" "}
           <strong style={{ color: "var(--amber)" }}>{formatARS(totalFiado)}</strong>
         </p>
+
+        {error && (
+          <div
+            style={{
+              marginBottom: "16px",
+              padding: "12px 14px",
+              borderRadius: "14px",
+              border: "1px solid rgba(239,68,68,.24)",
+              background: "rgba(239,68,68,.10)",
+              color: "#fecaca",
+              fontSize: "14px",
+              fontWeight: 600,
+            }}
+          >
+            {error}
+          </div>
+        )}
 
         <input
           ref={searchInputRef}

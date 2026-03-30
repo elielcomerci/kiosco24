@@ -2,7 +2,7 @@ import { UserRole } from "@prisma/client";
 import { NextResponse } from "next/server";
 
 import { auth } from "@/lib/auth";
-import { getBranchId } from "@/lib/branch";
+import { getBranchContext } from "@/lib/branch";
 import { prisma } from "@/lib/prisma";
 import { getActiveShift } from "@/lib/shift-access";
 
@@ -12,7 +12,7 @@ export async function GET(req: Request) {
     return NextResponse.json(null);
   }
 
-  const branchId = await getBranchId(req, session.user.id);
+  const { branchId } = await getBranchContext(req, session.user.id);
   if (!branchId) {
     return NextResponse.json(null);
   }
@@ -27,8 +27,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const branchId = await getBranchId(req, session.user.id);
-  if (!branchId) {
+  const { branchId, kioscoId } = await getBranchContext(req, session.user.id);
+  if (!branchId || !kioscoId) {
     return NextResponse.json({ error: "No branch" }, { status: 404 });
   }
 
@@ -78,6 +78,33 @@ export async function POST(req: Request) {
         throw new Error("ACTIVE_SHIFT_EXISTS");
       }
 
+      const assigneeOpenShift = await tx.shift.findFirst({
+        where: {
+          closedAt: null,
+          branchId: { not: branchId },
+          branch: { kioscoId },
+          ...(finalEmployeeId
+            ? { employeeId: finalEmployeeId }
+            : { employeeId: null, employeeName: finalEmployeeName }),
+        },
+        select: {
+          id: true,
+          openedAt: true,
+          branch: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+        orderBy: { openedAt: "desc" },
+      });
+
+      if (assigneeOpenShift) {
+        const otherBranchName = assigneeOpenShift.branch.name;
+        throw new Error(`ASSIGNEE_ALREADY_OPEN:${otherBranchName}`);
+      }
+
       const createdShift = await tx.shift.create({
         data: {
           branchId,
@@ -109,6 +136,18 @@ export async function POST(req: Request) {
   } catch (error) {
     if (error instanceof Error && error.message === "ACTIVE_SHIFT_EXISTS") {
       return NextResponse.json({ error: "Ya hay un turno abierto en esta sucursal." }, { status: 409 });
+    }
+
+    if (error instanceof Error && error.message.startsWith("ASSIGNEE_ALREADY_OPEN:")) {
+      const branchName = error.message.replace("ASSIGNEE_ALREADY_OPEN:", "").trim();
+      return NextResponse.json(
+        {
+          error: `Ese responsable ya tiene un turno abierto en ${branchName}. Cerra o transferi ese turno antes de abrir otra caja.`,
+          code: "ASSIGNEE_ALREADY_OPEN",
+          branchName,
+        },
+        { status: 409 },
+      );
     }
 
     throw error;

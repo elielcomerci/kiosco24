@@ -477,7 +477,16 @@ export default async function AdminProductsPage() {
   await ensurePlatformAdmin();
   await ensurePlatformCatalogSeeded();
 
-  const [platformProducts, rawPendingSubmissions, linkedProductsCount, autoSyncProductsCount] = await Promise.all([
+  const [
+    platformProducts,
+    rawPendingSubmissions,
+    linkedProductsCount,
+    autoSyncProductsCount,
+    totalPlatformProductsCount,
+    pendingSubmissionsTotalCount,
+    approvedCount,
+    hiddenCount,
+  ] = await Promise.all([
     prisma.platformProduct.findMany({
       include: {
         variants: {
@@ -543,6 +552,16 @@ export default async function AdminProductsPage() {
         platformSyncMode: "AUTO",
       },
     }),
+    prisma.platformProduct.count(),
+    prisma.platformProductSubmission.count({
+      where: { status: PlatformProductSubmissionStatus.PENDING },
+    }),
+    prisma.platformProduct.count({
+      where: { status: PlatformProductStatus.APPROVED },
+    }),
+    prisma.platformProduct.count({
+      where: { status: PlatformProductStatus.HIDDEN },
+    }),
   ]);
   const pendingSubmissions = await Promise.all(
     rawPendingSubmissions.map(async (submission) => {
@@ -572,8 +591,6 @@ export default async function AdminProductsPage() {
       };
     }),
   );
-  const approvedCount = platformProducts.filter((product) => product.status === PlatformProductStatus.APPROVED).length;
-  const hiddenCount = platformProducts.filter((product) => product.status === PlatformProductStatus.HIDDEN).length;
   const noChangePendingCount = pendingSubmissions.filter(
     (submission) => submission.effectivePlatformProduct && submission.diffRows.length === 0,
   ).length;
@@ -624,7 +641,7 @@ export default async function AdminProductsPage() {
           }}
         >
           {[
-            { label: "Aportes pendientes", value: pendingSubmissions.length, tone: "#f59e0b" },
+            { label: "Aportes pendientes", value: pendingSubmissionsTotalCount, tone: "#f59e0b" },
             { label: "Productos aprobados", value: approvedCount, tone: "#22c55e" },
             { label: "Productos ocultos", value: hiddenCount, tone: "#94a3b8" },
             { label: "Vinculados en kioscos", value: linkedProductsCount, tone: "#38bdf8" },
@@ -672,7 +689,9 @@ export default async function AdminProductsPage() {
                   </button>
                 </form>
               )}
-              <div style={{ color: "#94a3b8" }}>{pendingSubmissions.length} pendientes</div>
+              <div style={{ color: "#94a3b8" }}>
+                Mostrando {pendingSubmissions.length} de {pendingSubmissionsTotalCount} pendientes
+              </div>
             </div>
           </div>
 
@@ -908,7 +927,9 @@ export default async function AdminProductsPage() {
               </div>
             </div>
             <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
-              <div style={{ color: "#94a3b8" }}>{platformProducts.length} productos cargados</div>
+              <div style={{ color: "#94a3b8" }}>
+                Mostrando {platformProducts.length} de {totalPlatformProductsCount} productos cargados
+              </div>
               <Link href="/admin/productos#editor-rapido" className="btn btn-ghost">
                 Ir al editor
               </Link>

@@ -20,7 +20,7 @@ function sanitizeSegment(value: string, fallback: string) {
 }
 
 function getSafeFolder(rawFolder: string | null) {
-  const allowedFolders = new Set(["products", "branding", "uploads"]);
+  const allowedFolders = new Set(["products", "branding", "uploads", "receipts"]);
   return rawFolder && allowedFolders.has(rawFolder) ? rawFolder : "uploads";
 }
 

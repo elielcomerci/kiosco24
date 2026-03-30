@@ -94,3 +94,7 @@ export function optimizeProductImage(file: File) {
 export function optimizeBrandingImage(file: File) {
   return optimizeImageForUpload(file, { maxDimension: 800, quality: 0.9 });
 }
+
+export function optimizeReceiptImage(file: File) {
+  return optimizeImageForUpload(file, { maxDimension: 1800, quality: 0.84 });
+}

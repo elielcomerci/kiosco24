@@ -154,6 +154,7 @@ model Branch {
   mpPosId                  String? // external_id del punto de venta en MP
   mpIncomingPaymentNotices MpIncomingPaymentNotice[]
   restockEvents            RestockEvent[]
+  inventoryCostLayers      InventoryCostLayer[]
   stockLots                StockLot[]
   ticketSettings           TicketSettings?
   fiscalSettings           BranchFiscalSettings?
@@ -240,6 +241,7 @@ model Product {
   kioscoId          String
   kiosco            Kiosco            @relation(fields: [kioscoId], references: [id], onDelete: Cascade)
   inventory         InventoryRecord[]
+  inventoryCostLayers InventoryCostLayer[]
   variants          Variant[]
   restocks          RestockItem[]
   stockLots         StockLot[]
@@ -352,6 +354,7 @@ model Variant {
   updatedAt DateTime @updatedAt
 
   inventory VariantInventory[]
+  inventoryCostLayers InventoryCostLayer[]
   restocks  RestockItem[]
   stockLots StockLot[]
 
@@ -572,18 +575,41 @@ model CreditPayment {
 
 // ── Auditoría de Stock (Ingresos de mercadería) ──────────────────────────────
 
+enum RestockEventType {
+  RECEIVE
+  CORRECTION
+  TRANSFER
+}
+
+enum RestockValuationStatus {
+  PENDING
+  COMPLETED
+  NOT_APPLICABLE
+}
+
+enum InventoryCostLayerSourceType {
+  RECEIVE
+  LEGACY_SNAPSHOT
+  MANUAL_VALUATION
+}
+
 model RestockEvent {
-  id         String        @id @default(cuid())
-  note       String?       @db.Text
-  employeeId String?
-  employee   Employee?     @relation(fields: [employeeId], references: [id], onDelete: SetNull)
-  branchId   String
-  branch     Branch        @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  items      RestockItem[]
-  createdAt  DateTime      @default(now())
+  id              String                 @id @default(cuid())
+  type            RestockEventType       @default(RECEIVE)
+  note            String?                @db.Text
+  supplierName    String?
+  valuationStatus RestockValuationStatus @default(PENDING)
+  employeeId      String?
+  employee        Employee?              @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  branchId        String
+  branch          Branch                 @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  items           RestockItem[]
+  attachments     RestockAttachment[]
+  createdAt       DateTime               @default(now())
 
   @@index([branchId])
   @@index([employeeId])
+  @@index([branchId, type, createdAt])
 }
 
 model RestockItem {
@@ -595,10 +621,46 @@ model RestockItem {
   variantId      String?
   variant        Variant?     @relation(fields: [variantId], references: [id], onDelete: Cascade)
   quantity       Int // Cantidad sumada
+  unitCost       Float?
+  salePrice      Float?
+  inventoryCostLayers InventoryCostLayer[]
 
   @@index([restockEventId])
   @@index([productId])
   @@index([variantId])
+}
+
+model InventoryCostLayer {
+  id             String                       @id @default(cuid())
+  branchId       String
+  branch         Branch                       @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  productId      String
+  product        Product                      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variantId      String?
+  variant        Variant?                     @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  restockItemId  String?                      @unique
+  restockItem    RestockItem?                 @relation(fields: [restockItemId], references: [id], onDelete: Cascade)
+  sourceType     InventoryCostLayerSourceType @default(RECEIVE)
+  unitCost       Float
+  initialQuantity Int
+  remainingQuantity Int
+  receivedAt     DateTime
+  createdAt      DateTime                     @default(now())
+  updatedAt      DateTime                     @updatedAt
+
+  @@index([branchId, productId, receivedAt])
+  @@index([branchId, variantId, receivedAt])
+  @@index([branchId, sourceType, createdAt])
+}
+
+model RestockAttachment {
+  id             String       @id @default(cuid())
+  restockEventId String
+  restockEvent   RestockEvent @relation(fields: [restockEventId], references: [id], onDelete: Cascade)
+  url            String
+  createdAt      DateTime     @default(now())
+
+  @@index([restockEventId])
 }
 
 model StockLot {

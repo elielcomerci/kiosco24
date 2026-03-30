@@ -440,7 +440,7 @@ export async function PATCH(
 
   if (simpleStockChanged && await hasBlockingStockLots(prisma, { branchId, productId: id })) {
     return NextResponse.json(
-      { error: "Este producto tiene vencimientos cargados. Ajusta el stock desde Cargar stock." },
+      { error: "Este producto tiene vencimientos cargados. Ajusta el stock desde Corregir inventario." },
       { status: 409 },
     );
   }
@@ -457,7 +457,7 @@ export async function PATCH(
 
     if (await hasBlockingStockLots(prisma, { branchId, productId: id, variantId: variant.id })) {
       return NextResponse.json(
-        { error: `La variante ${variant.name} tiene vencimientos cargados. Ajusta el stock desde Cargar stock.` },
+        { error: `La variante ${variant.name} tiene vencimientos cargados. Ajusta el stock desde Corregir inventario.` },
         { status: 409 },
       );
     }

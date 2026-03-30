@@ -13,6 +13,8 @@ export default function ProductsActionsMenu({
   onPlatformSync,
   onReplicate,
   onTransfer,
+  onCorrectInventory,
+  onRestockHistory,
   onUpdatePrices,
   onSelectionMode,
 }: {
@@ -26,6 +28,8 @@ export default function ProductsActionsMenu({
   onPlatformSync: () => void;
   onReplicate: () => void;
   onTransfer: () => void;
+  onCorrectInventory: () => void;
+  onRestockHistory: () => void;
   onUpdatePrices: () => void;
   onSelectionMode: () => void;
 }) {
@@ -81,6 +85,12 @@ export default function ProductsActionsMenu({
         >
           <button className="btn btn-ghost" style={menuButtonStyle} onClick={() => run(onUpdatePrices)}>
             Actualizar precios
+          </button>
+          <button className="btn btn-ghost" style={menuButtonStyle} onClick={() => run(onRestockHistory)}>
+            Historial ingresos
+          </button>
+          <button className="btn btn-ghost" style={menuButtonStyle} onClick={() => run(onCorrectInventory)}>
+            Corregir inventario
           </button>
           <button className="btn btn-ghost" style={menuButtonStyle} onClick={() => run(onSelectionMode)}>
             Seleccionar varios

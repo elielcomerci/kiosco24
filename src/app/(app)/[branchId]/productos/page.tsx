@@ -15,6 +15,7 @@ import CategoryModal, { type CategoryRecord } from "@/components/config/Category
 import CatalogSpreadsheetModal from "@/components/products/CatalogSpreadsheetModal";
 import ProductThumb from "@/components/products/ProductThumb";
 import ProductsActionsMenu from "@/components/products/ProductsActionsMenu";
+import RestockHistoryModal from "@/components/products/RestockHistoryModal";
 import BackButton from "@/components/ui/BackButton";
 import ModalPortal from "@/components/ui/ModalPortal";
 import PrintablePage from "@/components/print/PrintablePage";
@@ -24,7 +25,7 @@ import {
   type StockTransferStrategy,
   type TransferPlanLotInput,
 } from "@/lib/stock-transfer-plan";
-import { optimizeProductImage } from "@/lib/image-upload";
+import { optimizeProductImage, optimizeReceiptImage } from "@/lib/image-upload";
 
 interface Variant {
   id?: string;
@@ -84,11 +85,30 @@ type LotDraft = {
   existing?: boolean;
 };
 
+type RestockAttachmentDraft = {
+  url: string;
+  name: string;
+};
+
+type StockModalOperation = "receive" | "correct";
+
 type ProductModalSavePayload = {
   openStockAfter?: boolean;
   productId?: string;
   productName?: string;
   hasVariants?: boolean;
+};
+
+type ProductModalDraft = {
+  name?: string;
+  barcode?: string | null;
+  internalCode?: string | null;
+  image?: string | null;
+  brand?: string | null;
+  description?: string | null;
+  presentation?: string | null;
+  supplierName?: string | null;
+  categoryId?: string | null;
 };
 
 type PricingMode = "SHARED" | "BRANCH";
@@ -102,7 +122,7 @@ type TransferLotRecord = TransferPlanLotInput & {
 
 type StockModalPreset = {
   initialSearch?: string;
-  initialMode?: "sumar" | "corregir";
+  initialOperation?: StockModalOperation;
   spotlightProductId?: string | null;
   entryNote?: string | null;
 };
@@ -409,6 +429,7 @@ function getProductCardBorder(product: Product) {
 // ─── Product Form Modal ────────────────────────────────────────────────────────
 function ProductModal({
   product,
+  draft = null,
   branchId,
   pricingMode,
   categories,
@@ -416,8 +437,10 @@ function ProductModal({
   onSave,
   onCategoriesChange,
   isOwner,
+  allowOpenStockAfter = true,
 }: {
   product: Product | null;
+  draft?: ProductModalDraft | null;
   branchId: string;
   pricingMode: PricingMode;
   categories: Category[];
@@ -425,19 +448,22 @@ function ProductModal({
   onSave: (payload?: ProductModalSavePayload) => void;
   onCategoriesChange: (categories: Category[]) => void;
   isOwner: boolean;
+  allowOpenStockAfter?: boolean;
 }) {
   const isNew = !product;
-  const [name, setName] = useState(product?.name || "");
+  const isInlineCreateOnly = isNew && !allowOpenStockAfter;
+  const draftSeed = product ? null : draft;
+  const [name, setName] = useState(product?.name ?? draftSeed?.name ?? "");
   const [emoji, setEmoji] = useState(product?.emoji || "");
-  const [barcode, setBarcode] = useState(product?.barcode || "");
-  const [internalCode, setInternalCode] = useState(product?.internalCode || "");
-  const [image, setImage] = useState(product?.image || "");
-  const [brand, setBrand] = useState(product?.brand || "");
-  const [description, setDescription] = useState(product?.description || "");
-  const [presentation, setPresentation] = useState(product?.presentation || "");
-  const [supplierName, setSupplierName] = useState(product?.supplierName || "");
+  const [barcode, setBarcode] = useState(product?.barcode ?? draftSeed?.barcode ?? "");
+  const [internalCode, setInternalCode] = useState(product?.internalCode ?? draftSeed?.internalCode ?? "");
+  const [image, setImage] = useState(product?.image ?? draftSeed?.image ?? "");
+  const [brand, setBrand] = useState(product?.brand ?? draftSeed?.brand ?? "");
+  const [description, setDescription] = useState(product?.description ?? draftSeed?.description ?? "");
+  const [presentation, setPresentation] = useState(product?.presentation ?? draftSeed?.presentation ?? "");
+  const [supplierName, setSupplierName] = useState(product?.supplierName ?? draftSeed?.supplierName ?? "");
   const [notes, setNotes] = useState(product?.notes || "");
-  const [categoryId, setCategoryId] = useState(product?.categoryId || "");
+  const [categoryId, setCategoryId] = useState(product?.categoryId ?? draftSeed?.categoryId ?? "");
   const [price, setPrice] = useState(product?.price?.toString() || "");
   const [cost, setCost] = useState(product?.cost?.toString() || "");
   const [stock, setStock] = useState(product?.stock?.toString() || "");
@@ -783,9 +809,9 @@ function ProductModal({
       supplierName: supplierName.trim() || null,
       notes: notes.trim() || null,
       categoryId: categoryId || null,
-      price: toNum(price),
-      cost: toNum(cost),
-      stock: hasVariants ? null : toNum(stock),
+      price: isInlineCreateOnly ? null : toNum(price),
+      cost: isInlineCreateOnly ? null : toNum(cost),
+      stock: hasVariants ? null : isInlineCreateOnly ? 0 : toNum(stock),
       minStock: hasVariants ? null : toNum(minStock),
       showInGrid,
       ...(isOwner ? { platformSyncMode } : {}),
@@ -793,7 +819,7 @@ function ProductModal({
         id: v.id,
         name: v.name.trim(),
         barcode: v.barcode?.trim() || null,
-        stock: toNum(v.stock?.toString() || ""),
+        stock: isInlineCreateOnly ? null : toNum(v.stock?.toString() || ""),
         minStock: toNum(v.minStock?.toString() || "")
       })).filter(v => v.name) : []
     };
@@ -1593,41 +1619,48 @@ function ProductModal({
               lineHeight: 1.5,
             }}
           >
-            <div>Completa precio, costo y stock para venderlo.</div>
-            <div style={{ marginTop: "6px" }}>
-              {pricingMode === "SHARED"
-                ? "Precio y costo: todas las sucursales."
-                : "Precio y costo: solo esta sucursal."}
+            <div>
+              {isInlineCreateOnly
+                ? "Armá la ficha y volvés al ingreso para cargar cantidad, costo y precio sin salir del flujo."
+                : "Completa precio, costo y stock para venderlo."}
             </div>
+            {!isInlineCreateOnly && (
+              <div style={{ marginTop: "6px" }}>
+                {pricingMode === "SHARED"
+                  ? "Precio y costo: todas las sucursales."
+                  : "Precio y costo: solo esta sucursal."}
+              </div>
+            )}
           </div>
 
-          {/* Price & Cost */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "12px" }}>
+          {!isInlineCreateOnly && (
+            <div style={{ display: "grid", gridTemplateColumns: isInlineCreateOnly ? "1fr" : "1fr 1fr", gap: "10px", marginBottom: "12px" }}>
+              <div>
+                <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase" }}>Precio</label>
+              <input
+                className="input"
+                type="number"
+                inputMode="decimal"
+                placeholder="0"
+                value={price}
+                onChange={(e) => setPrice(e.target.value)}
+                style={{ textAlign: "right" }}
+              />
+            </div>
             <div>
-              <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase" }}>Precio</label>
-            <input
-              className="input"
-              type="number"
-              inputMode="decimal"
-              placeholder="0"
-              value={price}
-              onChange={(e) => setPrice(e.target.value)}
-              style={{ textAlign: "right" }}
-            />
+              <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase" }}>Costo</label>
+              <input
+                className="input"
+                type="number"
+                inputMode="decimal"
+                placeholder="0"
+                value={cost}
+                onChange={(e) => setCost(e.target.value)}
+                style={{ textAlign: "right" }}
+              />
+            </div>
           </div>
-          <div>
-            <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase" }}>Costo</label>
-            <input
-              className="input"
-              type="number"
-              inputMode="decimal"
-              placeholder="0"
-              value={cost}
-              onChange={(e) => setCost(e.target.value)}
-              style={{ textAlign: "right" }}
-            />
-          </div>
-        </div>
+          )}
 
         {/* Modificador de Variantes y Stock/Barcode alternativo */}
         <div style={{ marginBottom: "12px", borderTop: "1px solid var(--border)", paddingTop: "12px" }}>
@@ -1685,7 +1718,7 @@ function ProductModal({
                      }} 
                      style={{color: "var(--red)", fontSize: "16px"}}
                      disabled={Boolean(v.id && v.hasTrackedLots)}
-                     title={v.id && v.hasTrackedLots ? "Quitá los vencimientos desde Cargar stock antes de eliminar esta variante." : undefined}
+                     title={v.id && v.hasTrackedLots ? "Quitá los vencimientos desde Corregir inventario antes de eliminar esta variante." : undefined}
                    >
                      🗑
                    </button>
@@ -1704,21 +1737,23 @@ function ProductModal({
                         }} 
                       />
                     </div>
-                    <div>
-                      <label style={{ fontSize: "10px", color: "var(--text-3)", textTransform: "uppercase", fontWeight: 600 }}>STOCK</label>
-                      <input 
-                        className="input" 
-                        type="number" 
-                        placeholder="Stock..." 
-                        value={v.stock?.toString() || ""} 
-                        onChange={(e) => {
-                          const newV = [...variants];
-                          newV[i].stock = e.target.value ? parseInt(e.target.value) : null;
-                          setVariants(newV);
-                        }} 
-                        disabled={Boolean(v.id && v.hasTrackedLots)}
-                      />
-                    </div>
+                    {!isInlineCreateOnly && (
+                      <div>
+                        <label style={{ fontSize: "10px", color: "var(--text-3)", textTransform: "uppercase", fontWeight: 600 }}>STOCK</label>
+                        <input 
+                          className="input" 
+                          type="number" 
+                          placeholder="Stock..." 
+                          value={v.stock?.toString() || ""} 
+                          onChange={(e) => {
+                            const newV = [...variants];
+                            newV[i].stock = e.target.value ? parseInt(e.target.value) : null;
+                            setVariants(newV);
+                          }} 
+                          disabled={Boolean(v.id && v.hasTrackedLots)}
+                        />
+                      </div>
+                    )}
                  </div>
                  {!isNew && !v.hasTrackedLots && currentVariantStock < 0 && (
                    <div
@@ -1766,7 +1801,7 @@ function ProductModal({
                  )}
                  {v.id && v.hasTrackedLots && (
                    <div style={{ marginTop: "8px", fontSize: "11px", color: "var(--amber)" }}>
-                     Esta variante tiene vencimientos cargados. Ajustá su stock desde Cargar stock.
+                    Esta variante tiene vencimientos cargados. Ajustá su stock desde Corregir inventario.
                    </div>
                  )}
               </div>
@@ -1782,7 +1817,8 @@ function ProductModal({
         ) : (
           <>
             {/* Stock Base */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "12px" }}>
+            <div style={{ display: "grid", gridTemplateColumns: isInlineCreateOnly ? "1fr" : "1fr 1fr", gap: "10px", marginBottom: "12px" }}>
+              {!isInlineCreateOnly && (
               <div>
                 <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase" }}>Stock</label>
                 <input
@@ -1796,6 +1832,7 @@ function ProductModal({
                   disabled={!isNew && productHasTrackedLots}
                 />
               </div>
+              )}
               <div>
                 <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase" }}>Stock mín.</label>
                 <input
@@ -1861,7 +1898,7 @@ function ProductModal({
             )}
             {!isNew && productHasTrackedLots && (
               <div style={{ marginTop: "-4px", marginBottom: "12px", fontSize: "12px", color: "var(--amber)" }}>
-                Este producto tiene vencimientos cargados. Ajustá el stock desde Cargar stock para no romper el desglose por lotes.
+                Este producto tiene vencimientos cargados. Ajustá el stock desde Corregir inventario para no romper el desglose por lotes.
               </div>
             )}
 
@@ -1968,11 +2005,11 @@ function ProductModal({
           </>
         )}
 
-        {isNew && (
+        {isNew && allowOpenStockAfter && (
           <div style={{ marginBottom: "12px", fontSize: "12px", color: "var(--text-3)" }}>
             {hasVariants
-              ? "Tip: podés usar Crear y cargar stock para dejar cada variante lista con su stock y vencimientos enseguida."
-              : "Tip: podés usar Crear y cargar stock para dejar el producto listo en el mismo flujo."}
+              ? "Tip: podés usar Crear y definir stock para dejar cada variante lista con su stock y vencimientos enseguida."
+              : "Tip: podés usar Crear y definir stock para dejar el producto listo en el mismo flujo."}
           </div>
         )}
 
@@ -2044,23 +2081,23 @@ function ProductModal({
           <button className="btn btn-ghost" style={{ flex: 1 }} onClick={onClose} disabled={loading}>
             Cancelar
           </button>
-          {isNew && (
+          {isNew && allowOpenStockAfter && (
             <button
               className="btn btn-ghost"
               style={{ flex: 2, border: "1px solid var(--border)" }}
               onClick={() => void handleSave(true)}
               disabled={loading || !name.trim()}
             >
-              {loading ? "..." : "Crear y cargar stock"}
+              {loading ? "..." : "Crear y definir stock"}
             </button>
           )}
           <button
             className="btn btn-green"
-            style={{ flex: isNew ? 1.6 : 2 }}
+            style={{ flex: isNew && allowOpenStockAfter ? 1.6 : 2 }}
             onClick={() => void handleSave(false)}
             disabled={loading || !name.trim()}
           >
-            {loading ? "..." : isNew ? "Crear" : "Guardar"}
+            {loading ? "..." : isNew ? (allowOpenStockAfter ? "Crear" : "Crear producto") : "Guardar"}
           </button>
         </div>
       </div>
@@ -2097,40 +2134,180 @@ function ProductModal({
 function StockLoadingModal({
   products,
   branchId,
+  categories,
+  pricingMode,
+  isOwner,
   onClose,
   onSaved,
+  onCategoriesChange,
   initialSearch = "",
-  initialMode = "sumar",
+  initialOperation = "receive",
   spotlightProductId = null,
   entryNote = null,
 }: {
   products: Product[];
   branchId: string;
+  categories: Category[];
+  pricingMode: PricingMode;
+  isOwner: boolean;
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: () => Promise<void> | void;
+  onCategoriesChange: (categories: Category[]) => void;
   initialSearch?: string;
-  initialMode?: "sumar" | "corregir";
+  initialOperation?: StockModalOperation;
   spotlightProductId?: string | null;
   entryNote?: string | null;
 }) {
   const [search, setSearch] = useState(initialSearch);
   const [saving, setSaving] = useState(false);
-  const [mode, setMode] = useState<"sumar" | "corregir">(initialMode);
+  const [mode, setMode] = useState<"sumar" | "corregir">(initialOperation === "correct" ? "corregir" : "sumar");
   const [inputs, setInputs] = useState<Record<string, string>>({});
   const [variantInputs, setVariantInputs] = useState<Record<string, string>>({});
+  const [costInputs, setCostInputs] = useState<Record<string, string>>({});
+  const [priceInputs, setPriceInputs] = useState<Record<string, string>>({});
   const [lotInputs, setLotInputs] = useState<Record<string, LotDraft[]>>({});
   const [loadedLots, setLoadedLots] = useState<Record<string, LotDraft[]>>({});
   const [openLotPanels, setOpenLotPanels] = useState<Record<string, boolean>>({});
   const [lotLoading, setLotLoading] = useState<Record<string, boolean>>({});
+  const [supplierName, setSupplierName] = useState("");
+  const [restockNote, setRestockNote] = useState("");
+  const [trackCosts, setTrackCosts] = useState(initialOperation === "receive");
+  const [attachments, setAttachments] = useState<RestockAttachmentDraft[]>([]);
+  const [uploadingAttachments, setUploadingAttachments] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [inlineNotice, setInlineNotice] = useState<string | null>(null);
+  const [inlineCreateDraft, setInlineCreateDraft] = useState<ProductModalDraft | null>(null);
+  const [inlineSpotlightProductId, setInlineSpotlightProductId] = useState<string | null>(spotlightProductId);
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const attachmentInputRef = useRef<HTMLInputElement>(null);
+  const isReceiveFlow = initialOperation === "receive";
+  const modalTitle = isReceiveFlow ? "📥 Recibir mercadería" : "🧮 Corregir inventario";
+  const saveLabel = isReceiveFlow ? "Guardar ingreso" : "Guardar corrección";
 
   useEffect(() => {
     setSearch(initialSearch);
   }, [initialSearch]);
 
   useEffect(() => {
-    setMode(initialMode);
-  }, [initialMode]);
+    setMode(initialOperation === "correct" ? "corregir" : "sumar");
+    setSupplierName("");
+    setRestockNote("");
+    setTrackCosts(initialOperation === "receive");
+    setAttachments([]);
+    setCostInputs({});
+    setPriceInputs({});
+    setSaveError(null);
+    setInlineNotice(null);
+    setInlineCreateDraft(null);
+    setScannerOpen(false);
+  }, [initialOperation]);
+
+  useEffect(() => {
+    setInlineSpotlightProductId(spotlightProductId);
+  }, [spotlightProductId]);
+
+  useEffect(() => {
+    if (!inlineNotice) {
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setInlineNotice(null);
+    }, 3200);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [inlineNotice]);
+
+  const handlePickAttachments = () => {
+    attachmentInputRef.current?.click();
+  };
+
+  const buildInlineProductDraft = (): ProductModalDraft => {
+    const trimmedSearch = search.trim();
+    const normalizedSearchCode = normalizeBarcodeCode(trimmedSearch);
+    const barcodeSeed = canLookupBarcode(normalizedSearchCode) ? normalizedSearchCode : null;
+
+    return {
+      name: barcodeSeed ? "" : trimmedSearch,
+      barcode: barcodeSeed,
+      supplierName: supplierName.trim() || null,
+    };
+  };
+
+  const openInlineCreate = () => {
+    setInlineCreateDraft(buildInlineProductDraft());
+  };
+
+  const handleInlineProductSave = async (payload?: ProductModalSavePayload) => {
+    const nextName = payload?.productName?.trim() || buildInlineProductDraft().name || "";
+    const nextProductId = payload?.productId ?? null;
+
+    setInlineCreateDraft(null);
+    await onSaved();
+    if (nextName) {
+      setSearch(nextName);
+    }
+    if (nextProductId) {
+      setInlineSpotlightProductId(nextProductId);
+    }
+    setInlineNotice(
+      payload?.hasVariants
+        ? "Producto creado. Ahora podés cargar cantidades y costos por variante."
+        : "Producto creado. Ahora podés completar cantidad, costo y precio en este ingreso.",
+    );
+  };
+
+  const handleAttachmentFiles = async (files: FileList | null) => {
+    if (!files || files.length === 0) {
+      return;
+    }
+
+    setSaveError(null);
+    setUploadingAttachments(true);
+
+    try {
+      const uploaded: RestockAttachmentDraft[] = [];
+
+      for (const file of Array.from(files).slice(0, 4)) {
+        const optimized = await optimizeReceiptImage(file);
+        const formData = new FormData();
+        formData.append("file", optimized);
+        formData.append("folder", "receipts");
+
+        const response = await fetch("/api/upload", {
+          method: "POST",
+          headers: { "x-branch-id": branchId },
+          body: formData,
+        });
+
+        const data = await response.json().catch(() => null);
+        if (!response.ok || typeof data?.url !== "string") {
+          throw new Error(data?.error || "No pudimos subir una foto del comprobante.");
+        }
+
+        uploaded.push({
+          url: data.url,
+          name: optimized.name || file.name || "comprobante",
+        });
+      }
+
+      setAttachments((prev) => [...prev, ...uploaded].slice(0, 6));
+      if (attachmentInputRef.current) {
+        attachmentInputRef.current.value = "";
+      }
+    } catch (error) {
+      console.error(error);
+      setSaveError(error instanceof Error ? error.message : "No pudimos subir una foto del comprobante.");
+    } finally {
+      setUploadingAttachments(false);
+    }
+  };
+
+  const removeAttachment = (url: string) => {
+    setAttachments((prev) => prev.filter((item) => item.url !== url));
+  };
 
   const eligible = products
     .filter((p) => {
@@ -2145,15 +2322,16 @@ function StockLoadingModal({
       );
     })
     .sort((left, right) => {
-      if (!spotlightProductId) {
+      const activeSpotlightId = inlineSpotlightProductId ?? spotlightProductId;
+      if (!activeSpotlightId) {
         return 0;
       }
 
-      if (left.id === spotlightProductId) {
+      if (left.id === activeSpotlightId) {
         return -1;
       }
 
-      if (right.id === spotlightProductId) {
+      if (right.id === activeSpotlightId) {
         return 1;
       }
 
@@ -2165,6 +2343,19 @@ function StockLoadingModal({
     val: string,
     setter: React.Dispatch<React.SetStateAction<Record<string, string>>>
   ) => setter((prev) => ({ ...prev, [key]: val }));
+
+  const getPricingKey = (productId: string, variantId?: string | null) =>
+    variantId ? `variant:${variantId}` : `product:${productId}`;
+
+  const parseMoneyInput = (value: string) => {
+    const normalized = value.trim().replace(",", ".");
+    if (!normalized) {
+      return null;
+    }
+
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+  };
 
   const getInputValue = (productId: string, variantId?: string | null) =>
     variantId ? (variantInputs[variantId] ?? "") : (inputs[productId] ?? "");
@@ -2329,6 +2520,8 @@ function StockLoadingModal({
         variantId?: string;
         quantityWithoutExpiry: number;
         lots: Array<{ quantity: number; expiresOn: string }>;
+        unitCost?: number | null;
+        salePrice?: number | null;
       }> = [];
 
       for (const p of products) {
@@ -2355,6 +2548,8 @@ function StockLoadingModal({
               variantId: v.id,
               quantityWithoutExpiry,
               lots,
+              unitCost: parseMoneyInput(costInputs[getPricingKey(p.id, v.id)] ?? ""),
+              salePrice: parseMoneyInput(priceInputs[getPricingKey(p.id, v.id)] ?? ""),
             });
           }
         } else {
@@ -2378,6 +2573,8 @@ function StockLoadingModal({
             productId: p.id,
             quantityWithoutExpiry,
             lots,
+            unitCost: parseMoneyInput(costInputs[getPricingKey(p.id)] ?? ""),
+            salePrice: parseMoneyInput(priceInputs[getPricingKey(p.id)] ?? ""),
           });
         }
       }
@@ -2390,7 +2587,15 @@ function StockLoadingModal({
       const res = await fetch("/api/inventario/ingreso-rapido", {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-branch-id": branchId },
-        body: JSON.stringify({ mode, items }),
+        body: JSON.stringify({
+          mode,
+          operation: initialOperation,
+          items,
+          note: restockNote.trim() || undefined,
+          supplierName: isReceiveFlow ? supplierName.trim() || undefined : undefined,
+          trackCosts: isReceiveFlow ? trackCosts : undefined,
+          attachmentUrls: isReceiveFlow ? attachments.map((attachment) => attachment.url) : [],
+        }),
       });
 
       if (!res.ok) {
@@ -2399,7 +2604,7 @@ function StockLoadingModal({
         return;
       }
 
-      onSaved();
+      await onSaved();
       onClose();
     } finally {
       setSaving(false);
@@ -2495,6 +2700,7 @@ function StockLoadingModal({
   };
 
   return (
+    <>
     <div
       className="modal-overlay animate-fade-in"
       onClick={onClose}
@@ -2507,11 +2713,11 @@ function StockLoadingModal({
       >
         {/* Header */}
         <div style={{ padding: "16px 20px 12px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--border)" }}>
-          <h2 style={{ fontSize: "18px", fontWeight: 800 }}>📦 Cargar Stock</h2>
+          <h2 style={{ fontSize: "18px", fontWeight: 800 }}>{modalTitle}</h2>
           <button className="btn btn-sm btn-ghost" onClick={onClose}>✕</button>
         </div>
 
-        {/* Filter + mode */}
+        {/* Filter + metadata */}
         <div style={{ padding: "12px 20px", display: "flex", flexDirection: "column", gap: "8px", borderBottom: "1px solid var(--border)" }}>
           <input
             className="input"
@@ -2520,34 +2726,228 @@ function StockLoadingModal({
             onChange={(e) => setSearch(e.target.value)}
             autoFocus
           />
+          {false && (
+          <div style={{ display: "flex", gap: "8px", alignItems: "center", justifyContent: "space-between" }}>
+            <div style={{ fontSize: "11px", color: "var(--text-3)" }}>
+              EscaneÃ¡ o filtra y, si falta el producto, podÃ©s darlo de alta acÃ¡ mismo.
+            </div>
+            <div style={{ display: "flex", gap: "8px", alignItems: "center", flexShrink: 0 }}>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                style={{ padding: "0 14px", fontSize: "20px" }}
+                onClick={() => setScannerOpen(true)}
+                title="Escanear para buscar"
+              >
+                ðŸ“·
+              </button>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                style={{ border: "1px solid var(--border)", fontWeight: 700 }}
+                onClick={openInlineCreate}
+              >
+                + Nuevo
+              </button>
+            </div>
+          </div>
+          )}
+          <div style={{ display: "flex", gap: "8px", alignItems: "center", justifyContent: "space-between" }}>
+            <div style={{ fontSize: "11px", color: "var(--text-3)" }}>
+              Escanea o filtra y, si falta el producto, podes darlo de alta aca mismo.
+            </div>
+            <div style={{ display: "flex", gap: "8px", alignItems: "center", flexShrink: 0 }}>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                style={{ padding: "0 12px", fontWeight: 700 }}
+                onClick={() => setScannerOpen(true)}
+                title="Escanear para buscar"
+              >
+                Scan
+              </button>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                style={{ border: "1px solid var(--border)", fontWeight: 700 }}
+                onClick={openInlineCreate}
+              >
+                + Nuevo
+              </button>
+            </div>
+          </div>
+          {inlineNotice && (
+            <div style={{ fontSize: "11px", color: "var(--green)", fontWeight: 700 }}>
+              {inlineNotice}
+            </div>
+          )}
           {entryNote && (
             <div style={{ fontSize: "11px", color: "var(--primary)", fontWeight: 600 }}>
               {entryNote}
             </div>
           )}
-          <div style={{ display: "flex", gap: "8px" }}>
-            {(["sumar", "corregir"] as const).map((m) => (
-              <button
-                key={m}
-                className={`btn btn-sm ${mode === m ? "btn-green" : "btn-ghost"}`}
-                style={{ flex: 1, fontWeight: 600 }}
-                onClick={() => setMode(m)}
-              >
-                {m === "sumar" ? "➕ Sumar" : "✏️ Establecer"}
-              </button>
-            ))}
+          <div
+            style={{
+              fontSize: "11px",
+              color: "var(--text-3)",
+              padding: "10px 12px",
+              borderRadius: "12px",
+              border: "1px solid var(--border)",
+              background: "var(--surface-2)",
+            }}
+          >
+            {isReceiveFlow
+              ? "Ingresá cuántas unidades llegaron. El sistema las suma al stock actual y deja el ingreso trazado para completar costos más adelante si hace falta."
+              : "Ingresá el stock físico correcto total. Esto corrige el inventario actual sin mezclarlo con una compra."}
           </div>
-          {mode === "sumar" ? (
-            <div style={{ fontSize: "11px", color: "var(--text-3)" }}>Ingresá cuántas unidades llegaron. Se suman al stock actual.</div>
+
+          {isReceiveFlow ? (
+            <>
+              <input
+                className="input"
+                placeholder="Proveedor (opcional)"
+                value={supplierName}
+                onChange={(e) => setSupplierName(e.target.value)}
+              />
+              <textarea
+                className="input"
+                placeholder="Nota del ingreso o detalle del comprobante (opcional)"
+                value={restockNote}
+                onChange={(e) => setRestockNote(e.target.value)}
+                rows={2}
+                style={{ resize: "vertical", minHeight: "78px" }}
+              />
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "8px",
+                  padding: "10px 12px",
+                  borderRadius: "12px",
+                  border: "1px solid var(--border)",
+                  background: "rgba(15,23,42,.42)",
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
+                  <div>
+                    <div style={{ fontSize: "12px", fontWeight: 700 }}>Comprobante</div>
+                    <div style={{ fontSize: "11px", color: "var(--text-3)" }}>
+                      Adjuntá una foto para completar costos más tarde sin frenar la carga.
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-ghost"
+                    style={{ border: "1px solid var(--border)", fontWeight: 700 }}
+                    onClick={handlePickAttachments}
+                    disabled={uploadingAttachments}
+                  >
+                    {uploadingAttachments ? "Subiendo..." : "📷 Adjuntar foto"}
+                  </button>
+                </div>
+                <input
+                  ref={attachmentInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  multiple
+                  style={{ display: "none" }}
+                  onChange={(event) => void handleAttachmentFiles(event.target.files)}
+                />
+                {attachments.length > 0 && (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                    {attachments.map((attachment) => (
+                      <div
+                        key={attachment.url}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "8px",
+                          padding: "6px 8px",
+                          borderRadius: "999px",
+                          border: "1px solid var(--border)",
+                          background: "var(--surface)",
+                          maxWidth: "100%",
+                        }}
+                      >
+                        <span style={{ fontSize: "12px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "180px" }}>
+                          {attachment.name}
+                        </span>
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-ghost"
+                          style={{ padding: "0 4px", minHeight: "auto" }}
+                          onClick={() => removeAttachment(attachment.url)}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <label
+                style={{
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: "10px",
+                  padding: "10px 12px",
+                  borderRadius: "12px",
+                  border: "1px solid var(--border)",
+                  background: "var(--surface-2)",
+                  cursor: "pointer",
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={trackCosts}
+                  onChange={(e) => setTrackCosts(e.target.checked)}
+                  style={{ marginTop: "2px" }}
+                />
+                <div>
+                  <div style={{ fontSize: "12px", fontWeight: 700 }}>Seguir costos de esta mercadería</div>
+                  <div style={{ fontSize: "11px", color: "var(--text-3)" }}>
+                    Si queda activo, este ingreso se marca como pendiente para completar la valorización más adelante.
+                  </div>
+                </div>
+              </label>
+            </>
           ) : (
-            <div style={{ fontSize: "11px", color: "var(--text-3)" }}>Ingresá el stock correcto total. Reemplaza el valor actual.</div>
+            <textarea
+              className="input"
+              placeholder="Motivo de la corrección (opcional)"
+              value={restockNote}
+              onChange={(e) => setRestockNote(e.target.value)}
+              rows={2}
+              style={{ resize: "vertical", minHeight: "78px" }}
+            />
           )}
         </div>
 
         {/* Product list */}
         <div style={{ flex: 1, overflowY: "auto", padding: "8px 20px", display: "flex", flexDirection: "column", gap: "6px" }}>
           {eligible.length === 0 ? (
-            <div style={{ textAlign: "center", padding: "32px", color: "var(--text-3)" }}>Sin resultados para &quot;{search}&quot;</div>
+            <div
+              style={{
+                textAlign: "center",
+                padding: "32px",
+                color: "var(--text-3)",
+                display: "flex",
+                flexDirection: "column",
+                gap: "12px",
+                alignItems: "center",
+              }}
+            >
+              <div>Sin resultados para &quot;{search}&quot;</div>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                style={{ border: "1px solid var(--border)", fontWeight: 700 }}
+                onClick={openInlineCreate}
+              >
+                + Crear producto nuevo
+              </button>
+            </div>
           ) : (
             eligible.map((p) => (
               <div
@@ -2600,6 +3000,26 @@ function StockLoadingModal({
                         {lotLoading[lotOwnerKey(p.id)] ? "..." : "📅"}
                       </button>
                     </div>
+                    {isReceiveFlow && (
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                        <input
+                          className="input"
+                          type="number"
+                          inputMode="decimal"
+                          placeholder="Costo unit."
+                          value={costInputs[getPricingKey(p.id)] ?? ""}
+                          onChange={(e) => setQty(getPricingKey(p.id), e.target.value, setCostInputs)}
+                        />
+                        <input
+                          className="input"
+                          type="number"
+                          inputMode="decimal"
+                          placeholder="Precio venta"
+                          value={priceInputs[getPricingKey(p.id)] ?? ""}
+                          onChange={(e) => setQty(getPricingKey(p.id), e.target.value, setPriceInputs)}
+                        />
+                      </div>
+                    )}
                     {openLotPanels[lotOwnerKey(p.id)] && renderLotsPanel(p, p.stock)}
                   </div>
                 )}
@@ -2639,6 +3059,26 @@ function StockLoadingModal({
                               {lotLoading[lotOwnerKey(p.id, v.id)] ? "..." : "📅"}
                             </button>
                           </div>
+                          {isReceiveFlow && v.id && (
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                              <input
+                                className="input"
+                                type="number"
+                                inputMode="decimal"
+                                placeholder="Costo unit."
+                                value={costInputs[getPricingKey(p.id, v.id)] ?? ""}
+                                onChange={(e) => setQty(getPricingKey(p.id, v.id), e.target.value, setCostInputs)}
+                              />
+                              <input
+                                className="input"
+                                type="number"
+                                inputMode="decimal"
+                                placeholder="Precio venta"
+                                value={priceInputs[getPricingKey(p.id, v.id)] ?? ""}
+                                onChange={(e) => setQty(getPricingKey(p.id, v.id), e.target.value, setPriceInputs)}
+                              />
+                            </div>
+                          )}
                           {openLotPanels[lotOwnerKey(p.id, v.id)] && renderLotsPanel(p, v.stock, v)}
                         </div>
                       );
@@ -2665,13 +3105,45 @@ function StockLoadingModal({
             className="btn btn-green"
             style={{ flexShrink: 0 }}
             onClick={handleSaveAll}
-            disabled={saving || changesCount === 0 || hasInvalidRows}
+            disabled={saving || uploadingAttachments || changesCount === 0 || hasInvalidRows}
           >
-            {saving ? "Guardando..." : `Guardar${changesCount > 0 ? ` (${changesCount})` : ""}`}
+            {saving
+              ? "Guardando..."
+              : uploadingAttachments
+                ? "Subiendo..."
+                : `${saveLabel}${changesCount > 0 ? ` (${changesCount})` : ""}`}
           </button>
         </div>
       </div>
     </div>
+    {scannerOpen && (
+      <BarcodeScanner
+        onScan={(result) => {
+          setSearch(result);
+          setScannerOpen(false);
+        }}
+        onClose={() => setScannerOpen(false)}
+      />
+    )}
+    {inlineCreateDraft && (
+      <ModalPortal>
+        <ProductModal
+          product={null}
+          draft={inlineCreateDraft}
+          branchId={branchId}
+          pricingMode={pricingMode}
+          categories={categories}
+          onClose={() => setInlineCreateDraft(null)}
+          onSave={(payload) => {
+            void handleInlineProductSave(payload);
+          }}
+          onCategoriesChange={onCategoriesChange}
+          isOwner={isOwner}
+          allowOpenStockAfter={false}
+        />
+      </ModalPortal>
+    )}
+    </>
   );
 }
 
@@ -3493,6 +3965,7 @@ export default function ProductosPage() {
   const [showTransferirModal, setShowTransferirModal] = useState(false);
   const [showCatalogImportModal, setShowCatalogImportModal] = useState(false);
   const [showPlatformSyncModal, setShowPlatformSyncModal] = useState(false);
+  const [showRestockHistoryModal, setShowRestockHistoryModal] = useState(false);
   const [syncingPlatformCatalog, setSyncingPlatformCatalog] = useState(false);
   const [catalogNotice, setCatalogNotice] = useState<string | null>(null);
   const [exportingCatalog, setExportingCatalog] = useState(false);
@@ -3749,7 +4222,7 @@ export default function ProductosPage() {
     if (payload?.openStockAfter && payload.productId) {
       setStockModalPreset({
         initialSearch: payload.productName ?? "",
-        initialMode: "corregir",
+        initialOperation: "correct",
         spotlightProductId: payload.productId,
         entryNote: payload.hasVariants
           ? "Producto creado. Definí el stock final y, si querés, cargá vencimientos por variante."
@@ -3818,11 +4291,11 @@ export default function ProductosPage() {
                 className="btn btn-sm btn-ghost"
                 style={{ border: "1px solid var(--border)", fontWeight: 700 }}
                 onClick={() => {
-                  setStockModalPreset(null);
+                  setStockModalPreset({ initialOperation: "receive" });
                   setShowStockModal(true);
                 }}
-                title="Cargar stock"
-              >📦 Stock</button>
+                title="Recibir mercadería"
+              >📥 Recibir</button>
               {isOwner && (
                 <>
                   <button
@@ -3867,6 +4340,11 @@ export default function ProductosPage() {
                 onPlatformSync={() => setShowPlatformSyncModal(true)}
                 onReplicate={() => setShowReplicarModal(true)}
                 onTransfer={() => setShowTransferirModal(true)}
+                onRestockHistory={() => setShowRestockHistoryModal(true)}
+                onCorrectInventory={() => {
+                  setStockModalPreset({ initialOperation: "correct" });
+                  setShowStockModal(true);
+                }}
                 onUpdatePrices={() => setShowUpdateModal(true)}
                 onSelectionMode={toggleSelectionMode}
               />
@@ -4224,6 +4702,15 @@ export default function ProductosPage() {
         />
       )}
 
+      {showRestockHistoryModal && (
+        <ModalPortal>
+          <RestockHistoryModal
+            branchId={branchId}
+            onClose={() => setShowRestockHistoryModal(false)}
+          />
+        </ModalPortal>
+      )}
+
       {/* Update Prices Modal */}
       {showUpdateModal && (
         <ModalPortal>
@@ -4309,13 +4796,17 @@ export default function ProductosPage() {
             <StockLoadingModal
               products={stockProducts}
               branchId={branchId}
+              categories={categories}
+              pricingMode={pricingMode}
+              isOwner={Boolean(isOwner)}
               onClose={() => {
                 setShowStockModal(false);
                 setStockModalPreset(null);
               }}
               onSaved={fetchProducts}
+              onCategoriesChange={setCategories}
               initialSearch={stockModalPreset?.initialSearch}
-              initialMode={stockModalPreset?.initialMode}
+              initialOperation={stockModalPreset?.initialOperation}
               spotlightProductId={stockModalPreset?.spotlightProductId}
               entryNote={stockModalPreset?.entryNote}
             />

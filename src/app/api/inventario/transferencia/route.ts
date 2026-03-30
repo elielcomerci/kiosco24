@@ -1,4 +1,4 @@
-import { Prisma } from "@prisma/client";
+import { Prisma, RestockEventType, RestockValuationStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
 
 import { guardOperationalAccess } from "@/lib/access-control";
@@ -357,6 +357,8 @@ export async function POST(req: Request) {
           await tx.restockEvent.create({
             data: {
               branchId,
+              type: RestockEventType.TRANSFER,
+              valuationStatus: RestockValuationStatus.NOT_APPLICABLE,
               note: `[Transferencia → ${targetBranchId}] ${[
                 note && typeof note === "string" ? note : null,
                 transferNotes.length > 0 ? transferNotes.join(" · ") : null,

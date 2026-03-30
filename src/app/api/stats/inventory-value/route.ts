@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 
 import { auth } from "@/lib/auth";
-import { getBranchId } from "@/lib/branch";
-import { getBranchInventoryValuation } from "@/lib/inventory-valuation";
+import { getBranchContext } from "@/lib/branch";
+import { getInventoryValuation, type InventoryValuationScope } from "@/lib/inventory-valuation";
 
 export async function GET(req: Request) {
   const session = await auth();
@@ -17,11 +17,31 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const branchId = await getBranchId(req, session.user.id);
+  const url = new URL(req.url);
+  const requestedScope = url.searchParams.get("scope") === "kiosco" ? "kiosco" : "branch";
+  const { branchId, kioscoId } = await getBranchContext(req, session.user.id);
+
   if (!branchId) {
     return NextResponse.json({ error: "No branch" }, { status: 404 });
   }
 
-  const inventoryValue = await getBranchInventoryValuation(branchId);
-  return NextResponse.json(inventoryValue);
+  if (requestedScope === "kiosco" && !isOwner) {
+    return NextResponse.json({ error: "Solo el owner puede ver el consolidado del kiosco." }, { status: 403 });
+  }
+
+  const scope: InventoryValuationScope = requestedScope;
+  const inventoryValue = await getInventoryValuation({
+    scope,
+    branchId,
+    kioscoId,
+  });
+
+  return NextResponse.json({
+    ...inventoryValue,
+    meta: {
+      ...inventoryValue.meta,
+      scope,
+      canViewKioscoScope: isOwner && Boolean(kioscoId),
+    },
+  });
 }

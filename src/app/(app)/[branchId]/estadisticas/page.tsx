@@ -6,6 +6,7 @@ import { formatARS, todayART } from "@/lib/utils";
 import TurnosHistorial from "@/components/turnos/TurnosHistorial";
 import BackButton from "@/components/ui/BackButton";
 import PrintablePage from "@/components/print/PrintablePage";
+import InventoryValuationPanel from "@/components/stats/InventoryValuationPanel";
 import { useRegisterShortcuts } from "@/components/ui/BranchWorkspace";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -31,54 +32,6 @@ interface PeriodoData {
     gananciasNetas: number | null;
     hasCosts: boolean;
   };
-}
-
-interface InventoryValueData {
-  summary: {
-    actualStock: number;
-    valuedCapital: number;
-    valuedUnits: number;
-    pendingUnits: number;
-    pendingLines: number;
-    uncoveredUnits: number;
-    overtrackedUnits: number;
-    negativePendingUnits: number;
-    negativeReservations: number;
-    pendingProducts: number;
-    uncoveredProducts: number;
-    layersCount: number;
-  };
-  products: Array<{
-    key: string;
-    productId: string;
-    productName: string;
-    productImage: string | null;
-    productBarcode: string | null;
-    variantId: string | null;
-    variantName: string | null;
-    variantBarcode: string | null;
-    displayName: string;
-    actualStock: number;
-    valuedUnits: number;
-    valuedCapital: number;
-    weightedAverageCost: number | null;
-    pendingUnits: number;
-    pendingLines: number;
-    uncoveredUnits: number;
-    overtrackedUnits: number;
-    negativePendingUnits: number;
-    negativeReservations: number;
-    layersCount: number;
-    latestReceivedAt: string | null;
-    layers: Array<{
-      id: string;
-      sourceType: string;
-      unitCost: number;
-      remainingQuantity: number;
-      totalValue: number;
-      receivedAt: string;
-    }>;
-  }>;
 }
 
 type Periodo = "dia" | "semana" | "mes";
@@ -336,10 +289,7 @@ export default function EstadisticasPage() {
   const [periodo, setPeriodo] = useState<Periodo>("semana");
   const [currentDate, setCurrentDate] = useState<string>(today);
   const [data, setData] = useState<PeriodoData | null>(null);
-  const [inventoryValue, setInventoryValue] = useState<InventoryValueData | null>(null);
   const [loading, setLoading] = useState(false);
-  const [inventoryLoading, setInventoryLoading] = useState(false);
-  const [expandedInventoryKeys, setExpandedInventoryKeys] = useState<string[]>([]);
 
   const load = useCallback(async (p: Periodo, iso: string) => {
     setLoading(true);
@@ -356,32 +306,9 @@ export default function EstadisticasPage() {
     }
   }, [branchId]);
 
-  const loadInventoryValue = useCallback(async () => {
-    setInventoryLoading(true);
-    try {
-      const res = await fetch("/api/stats/inventory-value", {
-        headers: { "x-branch-id": branchId },
-      });
-      const json = await res.json().catch(() => null);
-      if (!res.ok) {
-        throw new Error(json?.error || "No pudimos cargar la valorizacion de inventario.");
-      }
-      setInventoryValue(json as InventoryValueData);
-    } catch (error) {
-      console.error(error);
-      setInventoryValue(null);
-    } finally {
-      setInventoryLoading(false);
-    }
-  }, [branchId]);
-
   useEffect(() => {
     load(periodo, currentDate);
   }, [periodo, currentDate, load]);
-
-  useEffect(() => {
-    loadInventoryValue();
-  }, [loadInventoryValue]);
 
   const handlePeriodoChange = (p: Periodo) => {
     setPeriodo(p);
@@ -390,12 +317,6 @@ export default function EstadisticasPage() {
 
   const handleNav = (dir: 1 | -1) => {
     setCurrentDate((prev) => offsetDate(prev, periodo, dir));
-  };
-
-  const toggleInventoryProduct = (key: string) => {
-    setExpandedInventoryKeys((current) =>
-      current.includes(key) ? current.filter((item) => item !== key) : [...current, key],
-    );
   };
 
   // Build period date range for TurnosHistorial
@@ -539,39 +460,9 @@ export default function EstadisticasPage() {
 
       {!loading && data && (
         <>
-          <div
-            className="card"
-            style={{
-              padding: "16px",
-              display: "grid",
-              gap: "14px",
-              background: "linear-gradient(180deg, rgba(56,189,248,0.08), rgba(15,23,42,0.9))",
-              border: "1px solid rgba(56,189,248,0.18)",
-            }}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "flex-start", flexWrap: "wrap" }}>
-              <div>
-                <h3
-                  style={{
-                    fontSize: 11,
-                    fontWeight: 700,
-                    textTransform: "uppercase",
-                    letterSpacing: "0.08em",
-                    color: "var(--text-3)",
-                    marginBottom: 8,
-                  }}
-                >
-                  Inventario valorizado
-                </h3>
-                <div style={{ fontSize: 13, color: "var(--text-2)", lineHeight: 1.5 }}>
-                  Capital cargado desde ingresos con costo. Ya descontamos ventas nuevas, anulaciones y
-                  transferencias en paralelo; esta vista sirve para auditar compras, faltantes de costo y
-                  diferencias entre el stock fisico y sus capas contables.
-                </div>
-              </div>
-              {inventoryLoading && <div style={{ color: "var(--text-3)", fontSize: 13 }}>Actualizando...</div>}
-            </div>
+          <InventoryValuationPanel branchId={branchId} />
 
+          {/* Legacy inventory block kept here only as migration reference.
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
               <KpiCard
                 label="Capital valorizado"
@@ -624,7 +515,7 @@ export default function EstadisticasPage() {
 
             {inventoryValue && inventoryValue.products.length > 0 ? (
               <div style={{ display: "grid", gap: "10px" }}>
-                {inventoryValue.products.slice(0, 8).map((product) => (
+                {inventoryValue.products.slice(0, 8).map((product: any) => (
                   <div
                     key={product.key}
                     style={{
@@ -724,7 +615,7 @@ export default function EstadisticasPage() {
                           border: "1px solid rgba(148,163,184,0.12)",
                         }}
                       >
-                        {product.layers.map((layer) => (
+                        {product.layers.map((layer: any) => (
                           <div
                             key={layer.id}
                             style={{
@@ -782,7 +673,8 @@ export default function EstadisticasPage() {
                 </div>
               )
             )}
-          </div>
+            */
+          }
 
           {/* KPIs grid */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>

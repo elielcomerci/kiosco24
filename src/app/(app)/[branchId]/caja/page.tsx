@@ -11,7 +11,6 @@ import OtroModal from "@/components/caja/OtroModal";
 import RetiroModal from "@/components/caja/RetiroModal";
 import CreditCustomerModal from "@/components/caja/CreditCustomerModal";
 import CajaTotalsBreakdownModal from "@/components/caja/CajaTotalsBreakdownModal";
-import MpIncomingPaymentToasts from "@/components/caja/MpIncomingPaymentToasts";
 import OpenShiftModal, { type ShiftAssignee } from "@/components/turnos/OpenShiftModal";
 import CloseShiftModal from "@/components/turnos/CloseShiftModal";
 import TransferShiftModal from "@/components/turnos/TransferShiftModal";
@@ -120,6 +119,7 @@ type NavigatorWithWakeLock = Navigator & {
 // ... (types)
 
 type ShiftReminderDelivery = "NEXT_SHIFT" | "SCHEDULED";
+const REMINDER_LOCAL_MAX_DELAY_MS = 2_147_000_000;
 
 interface PendingShiftReminder {
   id: string;
@@ -331,6 +331,8 @@ export default function CajaPage() {
   const keyboardScanLastKeyAtRef = useRef(0);
   const pendingManualSearchRef = useRef("");
   const manualSearchTimerRef = useRef<number | null>(null);
+  const reminderTimeoutRef = useRef<number | null>(null);
+  const scheduledReminderIdRef = useRef<string | null>(null);
 
   const isOnline = useOnlineStatus();
   const allowNegativeStock = products[0]?.allowNegativeStock ?? false;
@@ -553,6 +555,43 @@ export default function CajaPage() {
     }
   }, []);
 
+  const clearReminderTimer = useCallback(() => {
+    if (reminderTimeoutRef.current) {
+      window.clearTimeout(reminderTimeoutRef.current);
+      reminderTimeoutRef.current = null;
+    }
+    scheduledReminderIdRef.current = null;
+  }, []);
+
+  const scheduleReminderLocally = useCallback((reminder: PendingShiftReminder) => {
+    if (!reminder.scheduledFor) {
+      clearReminderTimer();
+      setPendingReminder((current) => current ?? reminder);
+      return;
+    }
+
+    const scheduledAt = new Date(reminder.scheduledFor).getTime();
+    if (!Number.isFinite(scheduledAt)) {
+      clearReminderTimer();
+      return;
+    }
+
+    const delay = scheduledAt - Date.now();
+    if (delay <= 0) {
+      clearReminderTimer();
+      setPendingReminder((current) => current ?? reminder);
+      return;
+    }
+
+    clearReminderTimer();
+    scheduledReminderIdRef.current = reminder.id;
+    reminderTimeoutRef.current = window.setTimeout(() => {
+      scheduledReminderIdRef.current = null;
+      reminderTimeoutRef.current = null;
+      setPendingReminder((current) => current ?? reminder);
+    }, Math.min(delay, REMINDER_LOCAL_MAX_DELAY_MS));
+  }, [clearReminderTimer]);
+
   const handleOpenShift = async ({ openingAmount, assignee }: { openingAmount: number; assignee: ShiftAssignee }) => {
     const res = await fetch("/api/turnos", {
       method: "POST",
@@ -693,6 +732,9 @@ export default function CajaPage() {
     if (status !== "authenticated") return;
 
     const refreshShift = () => {
+      if (document.visibilityState === "hidden") {
+        return;
+      }
       void fetchActiveShift();
     };
 
@@ -702,7 +744,7 @@ export default function CajaPage() {
       }
     };
 
-    const intervalId = window.setInterval(refreshShift, 8000);
+    const intervalId = window.setInterval(refreshShift, 60_000);
     window.addEventListener("focus", refreshShift);
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
@@ -722,7 +764,12 @@ export default function CajaPage() {
 
   const fetchPendingReminder = useCallback(async () => {
     if (!activeShift) {
+      clearReminderTimer();
       setPendingReminder(null);
+      return;
+    }
+
+    if (pendingReminder) {
       return;
     }
 
@@ -736,34 +783,69 @@ export default function CajaPage() {
       }
 
       const data = await res.json();
-      setPendingReminder((current) => {
-        const nextReminder = data?.reminder ?? null;
-        if (!nextReminder) {
-          return null;
+      const nextReminder = data?.reminder ?? null;
+
+      if (!nextReminder) {
+        clearReminderTimer();
+        setPendingReminder(null);
+        return;
+      }
+
+      if (
+        nextReminder.delivery === "SCHEDULED" &&
+        nextReminder.scheduledFor &&
+        new Date(nextReminder.scheduledFor).getTime() > Date.now()
+      ) {
+        if (scheduledReminderIdRef.current !== nextReminder.id) {
+          scheduleReminderLocally(nextReminder);
         }
-        if (current?.id === nextReminder.id) {
-          return current;
-        }
-        return nextReminder;
-      });
+        return;
+      }
+
+      clearReminderTimer();
+      setPendingReminder((current) => current ?? nextReminder);
     } catch {}
-  }, [activeShift, branchId]);
+  }, [activeShift, branchId, clearReminderTimer, pendingReminder, scheduleReminderLocally]);
 
   useEffect(() => {
     if (!activeShift) {
+      clearReminderTimer();
       setPendingReminder(null);
       return;
     }
 
     void fetchPendingReminder();
-    const intervalId = window.setInterval(() => {
+  }, [activeShift?.id, clearReminderTimer, fetchPendingReminder]);
+
+  useEffect(() => {
+    if (!activeShift) {
+      return;
+    }
+
+    const refreshReminder = () => {
       void fetchPendingReminder();
-    }, 60_000);
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        refreshReminder();
+      }
+    };
+
+    window.addEventListener("focus", refreshReminder);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
-      window.clearInterval(intervalId);
+      window.removeEventListener("focus", refreshReminder);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [activeShift, fetchPendingReminder]);
+  }, [activeShift?.id, fetchPendingReminder]);
+
+  useEffect(() => {
+    return () => {
+      clearReminderTimer();
+    };
+  }, [clearReminderTimer]);
 
   const acknowledgePendingReminder = useCallback(async () => {
     if (!pendingReminder) return;
@@ -1625,9 +1707,9 @@ export default function CajaPage() {
                   image={product.image}
                   emoji={product.emoji}
                   name={product.name}
-                  size={38}
-                  radius={12}
-                  fontSize={20}
+                  size={44}
+                  radius={14}
+                  fontSize={22}
                 />
                 <span className="product-btn-name">{product.name}</span>
                 <span className="product-btn-price">{formatARS(product.price)}</span>
@@ -2214,11 +2296,6 @@ export default function CajaPage() {
           </div>
         </ModalPortal>
       )}
-
-      <MpIncomingPaymentToasts
-        branchId={branchId}
-        enabled={Boolean(activeShift && (userRole === "OWNER" || canOperateCurrentShift))}
-      />
     </div>
   );
 }

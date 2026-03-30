@@ -6,6 +6,7 @@ import { notFound, redirect } from "next/navigation";
 import BottomNav from "@/components/ui/BottomNav";
 import BranchSelector from "@/components/ui/BranchSelector";
 import { BranchWorkspaceProvider } from "@/components/ui/BranchWorkspace";
+import InstallAppButton from "@/components/pwa/InstallAppButton";
 import { hexToRgb } from "@/lib/utils";
 
 export default async function BranchLayout({
@@ -106,6 +107,7 @@ export default async function BranchLayout({
           <BranchSelector branches={branches} currentBranchId={effectiveBranchId} />
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <InstallAppButton compact />
           <a
             href={`/${effectiveBranchId}/tickets`}
             style={{ fontSize: "20px", textDecoration: "none", color: "var(--text)" }}

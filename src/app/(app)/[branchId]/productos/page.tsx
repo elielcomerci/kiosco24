@@ -396,6 +396,7 @@ function ProductModal({
   const [nameSuggestions, setNameSuggestions] = useState<BarcodeSuggestion[]>([]);
   const [catalogSuggestions, setCatalogSuggestions] = useState<BarcodeSuggestion[]>([]);
   const [catalogSearch, setCatalogSearch] = useState("");
+  const [showCatalogBrowser, setShowCatalogBrowser] = useState(false);
   const [lookupState, setLookupState] = useState<"idle" | "loading" | "ready">("idle");
   const [nameLookupState, setNameLookupState] = useState<"idle" | "loading" | "ready">("idle");
   const [catalogLookupState, setCatalogLookupState] = useState<"idle" | "loading" | "ready">("idle");
@@ -542,6 +543,7 @@ function ProductModal({
     setNameLookupState("idle");
     setCatalogSearch("");
     setCatalogLookupState("idle");
+    setShowCatalogBrowser(false);
     setSuggestion(nextSuggestion);
     setLookupState("ready");
     setDismissedSuggestionCode(null);
@@ -1098,43 +1100,75 @@ function ProductModal({
               gap: "10px",
             }}
           >
-            <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={() => setShowCatalogBrowser((current) => !current)}
+              style={{
+                display: "flex",
+                width: "100%",
+                justifyContent: "space-between",
+                gap: "12px",
+                alignItems: "center",
+                padding: 0,
+                border: "none",
+                background: "transparent",
+                textAlign: "left",
+              }}
+            >
               <div>
                 <div style={{ fontSize: "12px", fontWeight: 700, textTransform: "uppercase", color: "#38bdf8" }}>
                   Base general
                 </div>
                 <div style={{ fontSize: "12px", color: "var(--text-2)", marginTop: "4px", lineHeight: 1.45 }}>
-                  Busca por nombre o codigo y carga la ficha en un toque. Si todavia no filtras, vas a ver productos recientes.
+                  {showCatalogBrowser
+                    ? "Busca por nombre o codigo y carga la ficha en un toque."
+                    : "Opcional. Abrila solo si necesitas buscar en la base colaborativa."}
                 </div>
               </div>
-              <span
-                style={{
-                  fontSize: "11px",
-                  fontWeight: 700,
-                  color: "var(--text-3)",
-                  padding: "4px 8px",
-                  borderRadius: "999px",
-                  background: "rgba(15,23,42,0.08)",
-                  border: "1px solid rgba(148,163,184,0.18)",
-                }}
-              >
-                {catalogSuggestions.length} visibles
-              </span>
-            </div>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
+                {showCatalogBrowser && (
+                  <span
+                    style={{
+                      fontSize: "11px",
+                      fontWeight: 700,
+                      color: "var(--text-3)",
+                      padding: "4px 8px",
+                      borderRadius: "999px",
+                      background: "rgba(15,23,42,0.08)",
+                      border: "1px solid rgba(148,163,184,0.18)",
+                    }}
+                  >
+                    {catalogSuggestions.length} visibles
+                  </span>
+                )}
+                <span style={{ fontSize: "13px", fontWeight: 700, color: "#38bdf8" }}>
+                  {showCatalogBrowser ? "Ocultar" : "Abrir"}
+                </span>
+              </div>
+            </button>
 
+            {showCatalogBrowser && (
+              <>
             <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
               <input
                 className="input"
                 placeholder="Buscar por nombre o escanear codigo"
                 value={catalogSearch}
-                onChange={(e) => setCatalogSearch(e.target.value)}
+                onChange={(e) => {
+                  setShowCatalogBrowser(true);
+                  setCatalogSearch(e.target.value);
+                }}
                 style={{ flex: 1 }}
               />
               <button
                 type="button"
                 className="btn btn-ghost"
                 style={{ padding: "0 14px", flexShrink: 0, fontSize: "20px" }}
-                onClick={() => setScannerTarget("catalog")}
+                onClick={() => {
+                  setShowCatalogBrowser(true);
+                  setScannerTarget("catalog");
+                }}
                 title="Escanear para buscar en la base general"
               >
                 📷
@@ -1229,6 +1263,8 @@ function ProductModal({
                   </div>
                 ))}
               </div>
+            )}
+              </>
             )}
           </div>
         )}
@@ -1971,6 +2007,7 @@ function ProductModal({
         <BarcodeScanner
           onScan={(result) => {
             if (scannerTarget === "catalog") {
+              setShowCatalogBrowser(true);
               setCatalogSearch(result);
             } else {
               setBarcode(result);
@@ -3868,7 +3905,7 @@ export default function ProductosPage() {
                 }}>
                   {isSelected ? "✓" : ""}
                 </div>
-                <ProductThumb image={p.image} emoji={p.emoji} name={p.name} size={40} radius={12} />
+                <ProductThumb image={p.image} emoji={p.emoji} name={p.name} size={48} radius={14} previewable />
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 600 }}>{p.name}</div>
                   <div style={{ fontSize: "12px", color: "var(--text-3)" }}>
@@ -3911,7 +3948,7 @@ export default function ProductosPage() {
                 }}
                 onClick={() => setModal(p)}
               >
-                <ProductThumb image={p.image} emoji={p.emoji} name={p.name} size={44} radius={12} />
+                <ProductThumb image={p.image} emoji={p.emoji} name={p.name} size={52} radius={14} previewable />
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 600 }}>
                     {p.name}

@@ -3,6 +3,7 @@
 import { type ReactNode, useEffect, useMemo, useState, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import BarcodeScanner from "@/components/caja/BarcodeScanner";
+import ProductThumb from "@/components/products/ProductThumb";
 import ModalPortal from "@/components/ui/ModalPortal";
 import { optimizeProductImage } from "@/lib/image-upload";
 
@@ -646,7 +647,9 @@ export default function PlatformProductQuickEditor({
                     onClick={() => loadProduct(product)}
                     style={{
                       display: "grid",
-                      gap: "4px",
+                      gridTemplateColumns: "auto 1fr",
+                      gap: "10px",
+                      alignItems: "center",
                       textAlign: "left",
                       padding: "12px",
                       borderRadius: "14px",
@@ -656,19 +659,29 @@ export default function PlatformProductQuickEditor({
                       cursor: "pointer",
                     }}
                   >
-                    <div style={{ fontWeight: 700 }}>{product.name}</div>
-                    <div style={{ color: "#94a3b8", fontSize: "13px" }}>
-                      {product.barcode || product.variants[0]?.barcode || "Sin barcode base"}
-                      {product.brand ? ` | ${product.brand}` : ""}
-                      {product.categoryName ? ` | ${product.categoryName}` : ""}
-                    </div>
-                    {product.variants.length > 0 && (
-                      <div style={{ color: "#94a3b8", fontSize: "12px" }}>
-                        {product.variants.length} variante{product.variants.length === 1 ? "" : "s"}
+                    <ProductThumb
+                      image={product.image}
+                      emoji={null}
+                      name={product.name}
+                      size={52}
+                      radius={14}
+                      previewable
+                    />
+                    <div style={{ minWidth: 0, display: "grid", gap: "4px" }}>
+                      <div style={{ fontWeight: 700 }}>{product.name}</div>
+                      <div style={{ color: "#94a3b8", fontSize: "13px" }}>
+                        {product.barcode || product.variants[0]?.barcode || "Sin barcode base"}
+                        {product.brand ? ` | ${product.brand}` : ""}
+                        {product.categoryName ? ` | ${product.categoryName}` : ""}
                       </div>
-                    )}
-                    <div style={{ fontSize: "12px", color: product.status === "HIDDEN" ? "#fca5a5" : "#86efac" }}>
-                      {product.status === "HIDDEN" ? "Oculto" : "Aprobado"}
+                      {product.variants.length > 0 && (
+                        <div style={{ color: "#94a3b8", fontSize: "12px" }}>
+                          {product.variants.length} variante{product.variants.length === 1 ? "" : "s"}
+                        </div>
+                      )}
+                      <div style={{ fontSize: "12px", color: product.status === "HIDDEN" ? "#fca5a5" : "#86efac" }}>
+                        {product.status === "HIDDEN" ? "Oculto" : "Aprobado"}
+                      </div>
                     </div>
                   </button>
                 );

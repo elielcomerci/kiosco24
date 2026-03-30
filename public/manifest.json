@@ -6,8 +6,11 @@
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
   "background_color": "#0a0a0a",
   "theme_color": "#22c55e",
+  "categories": ["business", "productivity"],
+  "orientation": "portrait-primary",
   "icons": [
     {
       "src": "/icons/icon-192.png",
@@ -26,6 +29,23 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Abrir Kiosco24",
+      "short_name": "Abrir",
+      "url": "/"
+    },
+    {
+      "name": "Ingresar",
+      "short_name": "Login",
+      "url": "/login"
+    },
+    {
+      "name": "Crear cuenta",
+      "short_name": "Alta",
+      "url": "/login?register=1"
     }
   ]
 }

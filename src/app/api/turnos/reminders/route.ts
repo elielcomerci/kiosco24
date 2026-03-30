@@ -19,22 +19,32 @@ function pickReminder(
   }>,
   activeShiftId: string,
 ) {
+  const now = new Date();
   const dueScheduled = reminders
-    .filter((reminder) => reminder.delivery === "SCHEDULED" && reminder.scheduledFor && reminder.scheduledFor <= new Date())
+    .filter((reminder) => reminder.delivery === "SCHEDULED" && reminder.scheduledFor && reminder.scheduledFor <= now)
     .sort((left, right) => left.scheduledFor!.getTime() - right.scheduledFor!.getTime());
 
   if (dueScheduled.length > 0) {
     return dueScheduled[0] ?? null;
   }
 
-  return (
+  const nextShiftReminder =
     reminders
       .filter(
         (reminder) =>
           reminder.delivery === "NEXT_SHIFT" &&
           (!reminder.createdDuringShiftId || reminder.createdDuringShiftId !== activeShiftId),
       )
-      .sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime())[0] ?? null
+      .sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime())[0] ?? null;
+
+  if (nextShiftReminder) {
+    return nextShiftReminder;
+  }
+
+  return (
+    reminders
+      .filter((reminder) => reminder.delivery === "SCHEDULED" && reminder.scheduledFor && reminder.scheduledFor > now)
+      .sort((left, right) => left.scheduledFor!.getTime() - right.scheduledFor!.getTime())[0] ?? null
   );
 }
 

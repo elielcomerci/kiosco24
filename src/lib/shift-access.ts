@@ -42,6 +42,25 @@ export function canManageShiftLifecycle(user: SessionUserLike, shift: { employee
   return true;
 }
 
+export function canCreateShiftReminder(
+  user: SessionUserLike,
+  shift: { employeeId: string | null } | null,
+) {
+  if (user.role !== "EMPLOYEE") {
+    return true;
+  }
+
+  if (user.employeeRole === "MANAGER") {
+    return true;
+  }
+
+  if (!shift?.employeeId || !user.employeeId) {
+    return false;
+  }
+
+  return shift.employeeId === user.employeeId;
+}
+
 export function createShiftForbiddenResponse(shift: { employeeName: string; employee?: { name: string } | null }) {
   return NextResponse.json(
     {

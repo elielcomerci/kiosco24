@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import PrintablePage from "@/components/print/PrintablePage";
 import { useRegisterShortcuts } from "@/components/ui/BranchWorkspace";
 import ModalPortal from "@/components/ui/ModalPortal";
@@ -17,6 +17,7 @@ interface CreditCustomer {
 
 export default function FiadosPage() {
   const params = useParams();
+  const router = useRouter();
   const branchId = params.branchId as string;
   const [customers, setCustomers] = useState<CreditCustomer[]>([]);
   const [loading, setLoading] = useState(true);
@@ -104,6 +105,15 @@ export default function FiadosPage() {
 
       const data = await res.json().catch(() => null);
       if (!res.ok) {
+        if (res.status === 402) {
+          const shouldOpen = window.confirm(
+            `${data?.error || "Necesitas una suscripcion activa para registrar cobros."}\n\n¿Quieres ir a Suscripcion ahora?`,
+          );
+          if (shouldOpen) {
+            router.push("/suscripcion");
+          }
+          return;
+        }
         setError(data?.error || "No se pudo registrar el cobro.");
         return;
       }

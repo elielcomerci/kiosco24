@@ -2,6 +2,7 @@ import { UserRole } from "@prisma/client";
 import { NextResponse } from "next/server";
 
 import { auth } from "@/lib/auth";
+import { guardOperationalAccess } from "@/lib/access-control";
 import { getBranchId } from "@/lib/branch";
 import { prisma } from "@/lib/prisma";
 import { canOperateShift, createShiftForbiddenResponse, getActiveShift } from "@/lib/shift-access";
@@ -10,6 +11,11 @@ export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const accessResponse = await guardOperationalAccess(session.user);
+  if (accessResponse) {
+    return accessResponse;
   }
 
   const branchId = await getBranchId(req, session.user.id);

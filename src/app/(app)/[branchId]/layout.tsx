@@ -1,5 +1,5 @@
 import { auth, signOut } from "@/lib/auth";
-import { getKioscoAccessContextForSession } from "@/lib/access-control";
+import { canAccessSetupWithoutSubscription, getKioscoAccessContextForSession } from "@/lib/access-control";
 import { isPlatformAdmin } from "@/lib/platform-admin";
 import { prisma } from "@/lib/prisma";
 import { notFound, redirect } from "next/navigation";
@@ -29,7 +29,7 @@ export default async function BranchLayout({
     redirect("/onboarding");
   }
 
-  if (!access.allowed) {
+  if (!access.allowed && !canAccessSetupWithoutSubscription(session.user, access)) {
     redirect("/suscripcion");
   }
 

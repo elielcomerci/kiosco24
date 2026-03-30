@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { PlatformSyncMode } from "@prisma/client";
 
+import { canAccessSetupWithoutSubscription, getKioscoAccessContextForSession } from "@/lib/access-control";
 import { auth } from "@/lib/auth";
 import { getBranchContext } from "@/lib/branch";
 import { summarizeTrackedLots } from "@/lib/inventory-expiry";
@@ -346,6 +347,16 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const access = await getKioscoAccessContextForSession(session.user);
+  const setupAllowed = canAccessSetupWithoutSubscription(session.user, access);
+  if (!access.allowed && !setupAllowed) {
+    return NextResponse.json(
+      { error: "Necesitas una suscripcion activa para usar esta cuenta.", code: access.reason },
+      { status: 402 },
+    );
+  }
+  const hasOperationalAccess = access.allowed;
+
   const { kioscoId, branchId } = await getBranchContext(req, session.user.id);
   if (!kioscoId || !branchId) {
     return NextResponse.json({ error: "No kiosco/branch" }, { status: 404 });
@@ -382,6 +393,25 @@ export async function POST(req: Request) {
 
   try {
     const normalizedVariants = normalizeVariantPayload(variants);
+    const requestedSimpleStock =
+      typeof stock === "number"
+        ? stock
+        : Number.isFinite(Number(stock))
+          ? Number(stock)
+          : 0;
+    const requestsOperationalStock =
+      requestedSimpleStock !== 0 || normalizedVariants.some((variant) => (variant.stock ?? 0) !== 0);
+
+    if (!hasOperationalAccess && requestsOperationalStock) {
+      return NextResponse.json(
+        {
+          error: "Puedes cargar productos sin limite, pero para registrar stock o movimientos operativos primero activa la suscripcion.",
+          code: "NO_SUBSCRIPTION_OPERATIONAL",
+        },
+        { status: 402 },
+      );
+    }
+
     const normalizedName = normalizeCatalogTitle(name);
     const normalizedInternalCode =
       typeof internalCode === "string" ? internalCode.trim() || null : null;

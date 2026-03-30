@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { guardOperationalAccess } from "@/lib/access-control";
 import { auth } from "@/lib/auth";
 import { getBranchContext } from "@/lib/branch";
 import { DEFAULT_PRICING_MODE } from "@/lib/pricing-mode";
@@ -31,6 +32,11 @@ export async function POST(req: Request) {
     }
 
     if (copyStock) {
+      const accessResponse = await guardOperationalAccess(session.user);
+      if (accessResponse) {
+        return accessResponse;
+      }
+
       const trackedLots = await prisma.stockLot.findMany({
         where: {
           branchId,

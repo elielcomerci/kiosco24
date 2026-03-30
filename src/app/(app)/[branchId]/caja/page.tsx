@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useSession } from "next-auth/react";
+import { useParams, useRouter } from "next/navigation";
 import { formatARS, getCashSuggestions } from "@/lib/utils";
 import NumPad from "@/components/ui/NumPad";
 import ConfirmationScreen from "@/components/caja/ConfirmationScreen";
@@ -116,9 +117,18 @@ type NavigatorWithWakeLock = Navigator & {
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
-import { useParams } from "next/navigation";
-
 // ... (types)
+
+type ShiftReminderDelivery = "NEXT_SHIFT" | "SCHEDULED";
+
+interface PendingShiftReminder {
+  id: string;
+  message: string;
+  delivery: ShiftReminderDelivery;
+  scheduledFor: string | null;
+  createdByLabel: string;
+  createdAt: string;
+}
 
 function BarcodeActionIcon() {
   return (
@@ -255,11 +265,13 @@ function createClientSaleId() {
 
 export default function CajaPage() {
   const params = useParams();
+  const router = useRouter();
   const branchId = params.branchId as string;
   const isDesktop = useIsDesktop();
   const { data: session, status } = useSession();
   const userRole = session?.user?.role;
   const employeeId = session?.user?.employeeId;
+  const employeeRole = session?.user?.employeeRole;
   const isCashier = userRole === "EMPLOYEE" && session?.user?.employeeRole === "CASHIER";
   
   const [products, setProducts] = useState<Product[]>([]);
@@ -299,6 +311,12 @@ export default function CajaPage() {
   const [showTransferShift, setShowTransferShift] = useState(false);
   const [showTotalsBreakdown, setShowTotalsBreakdown] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
+  const [showReminderComposer, setShowReminderComposer] = useState(false);
+  const [savingReminder, setSavingReminder] = useState(false);
+  const [reminderMessage, setReminderMessage] = useState("");
+  const [reminderDelivery, setReminderDelivery] = useState<ShiftReminderDelivery>("NEXT_SHIFT");
+  const [reminderScheduledFor, setReminderScheduledFor] = useState("");
+  const [pendingReminder, setPendingReminder] = useState<PendingShiftReminder | null>(null);
 
   const [cajaSearch, setCajaSearch] = useState("");
   const [categories, setCategories] = useState<Category[]>([]);
@@ -337,7 +355,12 @@ export default function CajaPage() {
       return Boolean(employeeId && activeShift.employeeId && activeShift.employeeId === employeeId);
     }
     return false;
-  }, [activeShift, employeeId, userRole, session?.user?.employeeRole]);
+  }, [activeShift, employeeId, userRole, employeeRole]);
+  const canCreateReminders = useMemo(() => {
+    if (userRole === "OWNER") return true;
+    if (employeeRole === "MANAGER") return true;
+    return Boolean(activeShift && canOperateCurrentShift);
+  }, [activeShift, canOperateCurrentShift, employeeRole, userRole]);
   const shiftLocked = Boolean(activeShift && !canOperateCurrentShift);
   const operationsDisabled = !activeShift || shiftLocked;
   
@@ -385,7 +408,10 @@ export default function CajaPage() {
         showCredit ||
         showOpenShift ||
         showCloseShift ||
+        showTransferShift ||
         showScanner ||
+        showReminderComposer ||
+        pendingReminder ||
         variantSelector ||
         showCashNumpad ||
         confirmedSale ||
@@ -479,42 +505,35 @@ export default function CajaPage() {
       window.removeEventListener("keydown", handleGlobalKeyDown);
     };
   }, [
-    showGasto, showOtro, showRetiro, showCredit, showOpenShift, showCloseShift, 
-    showScanner, variantSelector, showCashNumpad, confirmedSale, showInvoiceDraftModal, invoiceSaleId
+    showGasto, showOtro, showRetiro, showCredit, showOpenShift, showCloseShift,
+    showTransferShift, showScanner, showReminderComposer, pendingReminder, variantSelector,
+    showCashNumpad, confirmedSale, showInvoiceDraftModal, invoiceSaleId
   ]);
 
   // ─── Startup Logic: Onboarding & Shift ──────────────────────────────────
   useEffect(() => {
     if (status === "loading") return;
-    checkOnboardingAndShift();
+    loadCajaData();
   }, [status, branchId]);
 
-  const checkOnboardingAndShift = async () => {
+  const loadCajaData = async () => {
     try {
-      if (userRole !== "EMPLOYEE") {
-        // 1. Check Onboarding
-        const res = await fetch("/api/onboarding");
-        const data = await res.json();
-        if (!data.setup) {
-          // Auto-setup with suggested products
-          const setupRes = await fetch("/api/onboarding", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ kioscoName: "Mi Kiosco" })
-          });
-          await setupRes.json();
-        }
-      }
-
-      // 2. Fetch dependencies
       await fetchProducts();
       await fetchStats();
-
-      // 3. Check Active Shift
       await fetchActiveShift();
     } catch {
     }
   };
+
+  const promptSubscriptionActivation = useCallback((message: string) => {
+    const shouldOpen = window.confirm(
+      `${message}\n\nActiva la suscripcion para empezar a vender, cobrar y registrar movimientos.\n\n¿Quieres ir a Suscripcion ahora?`,
+    );
+
+    if (shouldOpen) {
+      router.push("/suscripcion");
+    }
+  }, [router]);
 
   const explainShiftLock = () => {
     alert(`La caja está a nombre de ${shiftResponsibleName}. Transferí o cerrá el turno para operar con este usuario.`);
@@ -550,6 +569,10 @@ export default function CajaPage() {
       fetchStats();
     } else {
       const data = await res.json().catch(() => null);
+      if (res.status === 402) {
+        promptSubscriptionActivation(data?.error || "Necesitas una suscripcion activa para abrir la caja.");
+        return;
+      }
       alert(data?.error || "No se pudo abrir el turno.");
     }
   };
@@ -613,6 +636,9 @@ export default function CajaPage() {
       const res = await fetch(`/api/productos`, {
         headers: { "x-branch-id": branchId }
       });
+      if (!res.ok) {
+        return;
+      }
       const data = await res.json();
       setProducts(data);
 
@@ -632,6 +658,9 @@ export default function CajaPage() {
       const res = await fetch(`/api/stats/hoy`, {
         headers: { "x-branch-id": branchId }
       });
+      if (!res.ok) {
+        return;
+      }
       const data = await res.json();
       setCajaStats(data);
     } catch {}
@@ -683,6 +712,119 @@ export default function CajaPage() {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [fetchActiveShift, status]);
+
+  const resetReminderComposer = useCallback(() => {
+    setReminderMessage("");
+    setReminderDelivery("NEXT_SHIFT");
+    setReminderScheduledFor("");
+    setSavingReminder(false);
+  }, []);
+
+  const fetchPendingReminder = useCallback(async () => {
+    if (!activeShift) {
+      setPendingReminder(null);
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/turnos/reminders", {
+        headers: { "x-branch-id": branchId },
+      });
+
+      if (!res.ok) {
+        return;
+      }
+
+      const data = await res.json();
+      setPendingReminder((current) => {
+        const nextReminder = data?.reminder ?? null;
+        if (!nextReminder) {
+          return null;
+        }
+        if (current?.id === nextReminder.id) {
+          return current;
+        }
+        return nextReminder;
+      });
+    } catch {}
+  }, [activeShift, branchId]);
+
+  useEffect(() => {
+    if (!activeShift) {
+      setPendingReminder(null);
+      return;
+    }
+
+    void fetchPendingReminder();
+    const intervalId = window.setInterval(() => {
+      void fetchPendingReminder();
+    }, 60_000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [activeShift, fetchPendingReminder]);
+
+  const acknowledgePendingReminder = useCallback(async () => {
+    if (!pendingReminder) return;
+
+    const reminderId = pendingReminder.id;
+    setPendingReminder(null);
+
+    try {
+      await fetch(`/api/turnos/reminders/${reminderId}/ack`, {
+        method: "POST",
+        headers: { "x-branch-id": branchId },
+      });
+      void fetchPendingReminder();
+    } catch {}
+  }, [branchId, fetchPendingReminder, pendingReminder]);
+
+  const handleSaveReminder = async () => {
+    if (!reminderMessage.trim()) {
+      alert("Escribe un recordatorio.");
+      return;
+    }
+
+    setSavingReminder(true);
+    try {
+      const res = await fetch("/api/turnos/reminders", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-branch-id": branchId,
+        },
+        body: JSON.stringify({
+          message: reminderMessage,
+          delivery: reminderDelivery,
+          scheduledFor:
+            reminderDelivery === "SCHEDULED" && reminderScheduledFor
+              ? new Date(reminderScheduledFor).toISOString()
+              : null,
+        }),
+      });
+
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        if (res.status === 402) {
+          promptSubscriptionActivation(data?.error || "Necesitas una suscripcion activa para dejar recordatorios de turno.");
+          return;
+        }
+
+        alert(data?.error || "No se pudo guardar el recordatorio.");
+        return;
+      }
+
+      resetReminderComposer();
+      setShowReminderComposer(false);
+      alert("Recordatorio guardado.");
+      void fetchPendingReminder();
+    } catch {
+      alert("No se pudo guardar el recordatorio.");
+    } finally {
+      setSavingReminder(false);
+    }
+  };
 
   // ─── Product tap ─────────────────────────────────────────────────────────
   const ensureCanOperateCurrentShift = () => {
@@ -876,13 +1018,21 @@ export default function CajaPage() {
             if (!res.ok) {
               const errorText = await res.text().catch(() => "");
               let serverMessage = "";
+              let serverCode = "";
               try {
                 const parsed = JSON.parse(errorText);
                 if (parsed && typeof parsed.error === "string") {
                   serverMessage = parsed.error;
                 }
+                if (parsed && typeof parsed.code === "string") {
+                  serverCode = parsed.code;
+                }
               } catch {}
               console.error("[Ventas] Error HTTP registrando venta:", res.status, errorText);
+              if (res.status === 402 || serverCode === "NO_SUBSCRIPTION_OPERATIONAL") {
+                promptSubscriptionActivation(serverMessage || "Necesitas una suscripcion activa para registrar ventas.");
+                return;
+              }
               alert(serverMessage || "No se pudo registrar la venta en el servidor. Intentá de nuevo en unos segundos.");
               return;
             }
@@ -1307,6 +1457,12 @@ export default function CajaPage() {
              </span>
              📷
            </button>
+
+           {canCreateReminders && (
+             <button className="btn btn-sm btn-ghost" style={{ padding: "4px 8px", fontSize: "12px" }} onClick={() => setShowReminderComposer(true)}>
+               Recordatorio
+             </button>
+           )}
 
            {activeShift && canManageCurrentShift && (
              <button className="btn btn-sm btn-ghost" style={{ padding: "4px 8px", fontSize: "12px" }} onClick={() => setShowTransferShift(true)}>
@@ -1797,6 +1953,136 @@ export default function CajaPage() {
       </div> {/* End of POS BODY */}
 
       {/* Modals */}
+      {showReminderComposer && (
+        <ModalPortal>
+          <div className="modal-overlay animate-fade-in" onClick={() => { setShowReminderComposer(false); resetReminderComposer(); }}>
+            <div className="modal animate-slide-up" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "520px" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+                <div>
+                  <h2 style={{ fontSize: "20px", fontWeight: 700, margin: 0 }}>Dejar recordatorio</h2>
+                  <p style={{ color: "var(--text-2)", fontSize: "14px", margin: "8px 0 0" }}>
+                    Sirve para recordar algo al proximo turno o dispararlo a una hora puntual.
+                  </p>
+                </div>
+
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    className={`btn btn-sm ${reminderDelivery === "NEXT_SHIFT" ? "btn-green" : "btn-ghost"}`}
+                    onClick={() => setReminderDelivery("NEXT_SHIFT")}
+                  >
+                    Al empezar el proximo turno
+                  </button>
+                  <button
+                    type="button"
+                    className={`btn btn-sm ${reminderDelivery === "SCHEDULED" ? "btn-green" : "btn-ghost"}`}
+                    onClick={() => setReminderDelivery("SCHEDULED")}
+                  >
+                    A una hora puntual
+                  </button>
+                </div>
+
+                {reminderDelivery === "SCHEDULED" && (
+                  <div>
+                    <label style={{ display: "block", marginBottom: "8px", fontSize: "12px", fontWeight: 700, color: "var(--text-3)", textTransform: "uppercase" }}>
+                      Fecha y hora
+                    </label>
+                    <input
+                      type="datetime-local"
+                      className="input"
+                      value={reminderScheduledFor}
+                      onChange={(e) => setReminderScheduledFor(e.target.value)}
+                      style={{ width: "100%" }}
+                    />
+                  </div>
+                )}
+
+                <div>
+                  <label style={{ display: "block", marginBottom: "8px", fontSize: "12px", fontWeight: 700, color: "var(--text-3)", textTransform: "uppercase" }}>
+                    Mensaje
+                  </label>
+                  <textarea
+                    className="input"
+                    value={reminderMessage}
+                    onChange={(e) => setReminderMessage(e.target.value)}
+                    placeholder="Ej: revisar la heladera, dejar cambio chico, controlar pedido..."
+                    rows={5}
+                    maxLength={500}
+                    style={{ width: "100%", resize: "vertical" }}
+                  />
+                  <div style={{ marginTop: "6px", textAlign: "right", fontSize: "12px", color: "var(--text-3)" }}>
+                    {reminderMessage.trim().length}/500
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", gap: "10px" }}>
+                  <button
+                    className="btn btn-ghost"
+                    style={{ flex: 1 }}
+                    onClick={() => {
+                      setShowReminderComposer(false);
+                      resetReminderComposer();
+                    }}
+                  >
+                    Cancelar
+                  </button>
+                  <button className="btn btn-green" style={{ flex: 1.5 }} onClick={handleSaveReminder} disabled={savingReminder}>
+                    {savingReminder ? "Guardando..." : "Guardar recordatorio"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </ModalPortal>
+      )}
+
+      {pendingReminder && (
+        <ModalPortal>
+          <div className="modal-overlay animate-fade-in" onClick={() => void acknowledgePendingReminder()}>
+            <div className="modal animate-slide-up" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "460px" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+                <div>
+                  <div style={{ fontSize: "12px", fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--primary)" }}>
+                    Recordatorio
+                  </div>
+                  <h2 style={{ fontSize: "22px", fontWeight: 800, margin: "6px 0 0" }}>
+                    {pendingReminder.delivery === "SCHEDULED" ? "Mensaje para este turno" : "Mensaje del turno anterior"}
+                  </h2>
+                </div>
+
+                <div
+                  style={{
+                    borderRadius: "16px",
+                    border: "1px solid var(--border)",
+                    background: "var(--surface-2)",
+                    padding: "16px",
+                    whiteSpace: "pre-wrap",
+                    lineHeight: 1.45,
+                    fontSize: "15px",
+                  }}
+                >
+                  {pendingReminder.message}
+                </div>
+
+                <div style={{ fontSize: "13px", color: "var(--text-2)" }}>
+                  Lo dejo {pendingReminder.createdByLabel}
+                  {pendingReminder.scheduledFor
+                    ? ` para ${new Intl.DateTimeFormat("es-AR", {
+                        dateStyle: "short",
+                        timeStyle: "short",
+                      }).format(new Date(pendingReminder.scheduledFor))}`
+                    : "."}
+                </div>
+
+                <button className="btn btn-green" onClick={() => void acknowledgePendingReminder()}>
+                  Entendido
+                </button>
+              </div>
+            </div>
+          </div>
+        </ModalPortal>
+      )}
+
       {showGasto && (
         <GastoModal
           employeeId={employeeId}

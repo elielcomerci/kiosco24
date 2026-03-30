@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { guardOperationalAccess } from "@/lib/access-control";
 import { auth } from "@/lib/auth";
 import { getBranchContext } from "@/lib/branch";
 import {
@@ -42,6 +43,13 @@ export async function POST(req: Request) {
     }
     if (!(file instanceof File)) {
       return NextResponse.json({ error: "Adjunta un archivo XLSX." }, { status: 400 });
+    }
+
+    if (scope === "everything" || scope === "stock" || scope === "lots") {
+      const accessResponse = await guardOperationalAccess(session.user);
+      if (accessResponse) {
+        return accessResponse;
+      }
     }
 
     const arrayBuffer = await file.arrayBuffer();

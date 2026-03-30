@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { PlatformSyncMode } from "@prisma/client";
 
+import { canAccessSetupWithoutSubscription, getKioscoAccessContextForSession } from "@/lib/access-control";
 import { auth } from "@/lib/auth";
 import { getBranchContext } from "@/lib/branch";
 import { hasBlockingStockLots, summarizeTrackedLots } from "@/lib/inventory-expiry";
@@ -310,6 +311,16 @@ export async function PATCH(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const access = await getKioscoAccessContextForSession(session.user);
+  const setupAllowed = canAccessSetupWithoutSubscription(session.user, access);
+  if (!access.allowed && !setupAllowed) {
+    return NextResponse.json(
+      { error: "Necesitas una suscripcion activa para usar esta cuenta.", code: access.reason },
+      { status: 402 },
+    );
+  }
+  const hasOperationalAccess = access.allowed;
+
   const { kioscoId, branchId } = await getBranchContext(req, session.user.id);
   if (!kioscoId || !branchId) {
     return NextResponse.json({ error: "No branch" }, { status: 404 });
@@ -393,7 +404,33 @@ export async function PATCH(
   );
 
   const normalizedVariants = normalizeVariantPayload(variants);
-  const simpleStockChanged = stock !== undefined && typeof stock === "number" && stock !== (currentInventory?.stock ?? 0);
+  const requestedSimpleStock =
+    stock !== undefined
+      ? typeof stock === "number"
+        ? stock
+        : Number.isFinite(Number(stock))
+          ? Number(stock)
+          : currentInventory?.stock ?? 0
+      : currentInventory?.stock ?? 0;
+  const simpleStockChanged = stock !== undefined && requestedSimpleStock !== (currentInventory?.stock ?? 0);
+  const variantStockChanged = normalizedVariants.some((variant) => {
+    if (!variant.id || typeof variant.stock !== "number") {
+      return false;
+    }
+
+    return variant.stock !== (currentVariantStockById.get(variant.id) ?? 0);
+  });
+
+  if (!hasOperationalAccess && (simpleStockChanged || variantStockChanged)) {
+    return NextResponse.json(
+      {
+        error: "Puedes editar la ficha del producto, pero para mover stock o registrar ajustes primero activa la suscripcion.",
+        code: "NO_SUBSCRIPTION_OPERATIONAL",
+      },
+      { status: 402 },
+    );
+  }
+
   const currentVariantIds = product.variants.map((variant) => variant.id);
   const submittedVariantIds = normalizedVariants
     .filter((variant): variant is VariantPayload & { id: string } => Boolean(variant.id))

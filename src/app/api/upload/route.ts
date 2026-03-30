@@ -2,7 +2,7 @@ import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { put } from "@vercel/blob";
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { guardOperationalAccess } from "@/lib/access-control";
+import { guardSetupAccess } from "@/lib/access-control";
 
 export const runtime = "nodejs";
 
@@ -71,7 +71,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const accessResponse = await guardOperationalAccess(session.user);
+    const accessResponse = await guardSetupAccess(session.user);
     if (accessResponse) {
       return accessResponse;
     }

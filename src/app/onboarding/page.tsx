@@ -12,6 +12,9 @@ export default function OnboardingPage() {
   const [kioscoName, setKioscoName] = useState("");
   const [loading, setLoading] = useState(false);
   const [loadingText, setLoadingText] = useState("Creando kiosco...");
+  const [createdBranchId, setCreatedBranchId] = useState<string | null>(null);
+  const [createdKioscoName, setCreatedKioscoName] = useState("");
+  const [subscriptionLoading, setSubscriptionLoading] = useState(false);
   const router = useRouter();
 
   const handleSetup = async (e: React.FormEvent) => {
@@ -32,22 +35,41 @@ export default function OnboardingPage() {
         setLoading(false);
         return;
       }
-
-      setLoadingText("Generando link de pago seguro...");
-      const subRes = await fetch("/api/subscription/create", { method: "POST" });
-      const subData = await subRes.json();
-
-      if (subData.init_point) {
-        window.location.href = subData.init_point;
-      } else {
-        alert("Tu kiosco fue creado, pero falta activar la suscripcion.");
-        router.push("/suscripcion");
-      }
+      setCreatedKioscoName((data?.kiosco?.name as string) || kioscoName.trim());
+      setCreatedBranchId(data.branchId as string);
+      setLoading(false);
     } catch (err) {
       console.error(err);
       alert("Error de conexion.");
       setLoading(false);
     }
+  };
+
+  const handleGoToSubscription = async () => {
+    setSubscriptionLoading(true);
+
+    try {
+      const subRes = await fetch("/api/subscription/create", { method: "POST" });
+      const subData = await subRes.json();
+
+      if (subData.init_point) {
+        window.location.href = subData.init_point;
+        return;
+      }
+
+      router.push("/suscripcion");
+    } catch (error) {
+      console.error(error);
+      alert("No pudimos abrir el pago ahora. Puedes intentarlo desde Suscripcion.");
+      router.push("/suscripcion");
+    } finally {
+      setSubscriptionLoading(false);
+    }
+  };
+
+  const handleSkipForNow = () => {
+    if (!createdBranchId) return;
+    router.push(`/${createdBranchId}/productos`);
   };
 
   return (
@@ -62,51 +84,86 @@ export default function OnboardingPage() {
       }}
     >
       <div className="card" style={{ maxWidth: "400px", width: "100%", padding: "40px" }}>
-        <div style={{ fontSize: "48px", textAlign: "center", marginBottom: "20px" }}>{"\uD83D\uDE80"}</div>
-        <h1 style={{ fontSize: "24px", fontWeight: 800, textAlign: "center", marginBottom: "10px" }}>
-          Bienvenido
-        </h1>
-        <p style={{ textAlign: "center", color: "var(--text-2)", marginBottom: "30px", fontSize: "15px" }}>
-          Solo un paso mas. Como se llama tu negocio?
-        </p>
-
-        <form onSubmit={handleSetup} style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-          <div>
-            <label
-              style={{
-                fontSize: "13px",
-                fontWeight: 600,
-                color: "var(--text-3)",
-                display: "block",
-                marginBottom: "8px",
-              }}
-            >
-              Nombre del kiosco o local
-            </label>
-            <input
-              type="text"
-              className="input"
-              placeholder="Ej: Kiosco El Paso"
-              value={kioscoName}
-              onChange={(e) => setKioscoName(e.target.value)}
-              required
-              autoFocus
-              style={{ width: "100%" }}
-            />
-          </div>
-
-          <button
-            type="submit"
-            className="btn btn-primary btn-lg btn-full"
-            disabled={loading || !kioscoName.trim()}
-          >
-            {loading ? loadingText : "Crear kiosco y continuar"}
-          </button>
-
-          <p style={{ textAlign: "center", fontSize: "12px", color: "var(--text-3)", marginTop: "-10px" }}>
-            {SUBSCRIPTION_PROMO_LABEL} {SUBSCRIPTION_CANCEL_LABEL}
+        {!createdBranchId ? (
+          <>
+            <div style={{ fontSize: "48px", textAlign: "center", marginBottom: "20px" }}>{"\uD83D\uDE80"}</div>
+            <h1 style={{ fontSize: "24px", fontWeight: 800, textAlign: "center", marginBottom: "10px" }}>
+              Bienvenido
+            </h1>
+            <p style={{ textAlign: "center", color: "var(--text-2)", marginBottom: "30px", fontSize: "15px" }}>
+              Crea tu kiosco y empieza a cargar el catalogo desde ahora.
             </p>
-        </form>
+
+            <form onSubmit={handleSetup} style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+              <div>
+                <label
+                  style={{
+                    fontSize: "13px",
+                    fontWeight: 600,
+                    color: "var(--text-3)",
+                    display: "block",
+                    marginBottom: "8px",
+                  }}
+                >
+                  Nombre del kiosco o local
+                </label>
+                <input
+                  type="text"
+                  className="input"
+                  placeholder="Ej: Kiosco El Paso"
+                  value={kioscoName}
+                  onChange={(e) => setKioscoName(e.target.value)}
+                  required
+                  autoFocus
+                  style={{ width: "100%" }}
+                />
+              </div>
+
+              <button
+                type="submit"
+                className="btn btn-primary btn-lg btn-full"
+                disabled={loading || !kioscoName.trim()}
+              >
+                {loading ? loadingText : "Crear kiosco"}
+              </button>
+
+              <p style={{ textAlign: "center", fontSize: "12px", color: "var(--text-3)", marginTop: "-10px" }}>
+                Puedes cargar productos sin limite. La suscripcion se activa cuando quieras empezar a vender.
+              </p>
+            </form>
+          </>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: "18px" }}>
+            <div style={{ fontSize: "44px", textAlign: "center" }}>{"\u2705"}</div>
+            <h1 style={{ fontSize: "24px", fontWeight: 800, textAlign: "center", margin: 0 }}>
+              {createdKioscoName || "Tu kiosco"} ya esta listo
+            </h1>
+            <p style={{ textAlign: "center", color: "var(--text-2)", margin: 0, fontSize: "15px" }}>
+              Puedes empezar a cargar productos ahora y activar la suscripcion cuando quieras operar ventas, cobros o movimientos.
+            </p>
+
+            <button
+              type="button"
+              className="btn btn-primary btn-lg btn-full"
+              disabled={subscriptionLoading}
+              onClick={handleGoToSubscription}
+            >
+              {subscriptionLoading ? "Abriendo pago..." : "Ir a pagar suscripcion"}
+            </button>
+
+            <button
+              type="button"
+              className="btn btn-ghost btn-lg btn-full"
+              onClick={handleSkipForNow}
+            >
+              Cargar productos primero
+            </button>
+
+            <p style={{ textAlign: "center", fontSize: "12px", color: "var(--text-3)", margin: 0 }}>
+              {SUBSCRIPTION_PROMO_LABEL} {SUBSCRIPTION_CANCEL_LABEL}
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );

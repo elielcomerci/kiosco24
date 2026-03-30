@@ -1,5 +1,5 @@
 import { auth } from "@/lib/auth";
-import { getKioscoAccessContextForSession } from "@/lib/access-control";
+import { canAccessSetupWithoutSubscription, getKioscoAccessContextForSession } from "@/lib/access-control";
 import { isPlatformAdmin } from "@/lib/platform-admin";
 import { redirect } from "next/navigation";
 
@@ -19,12 +19,12 @@ export default async function AppPage() {
     redirect("/onboarding");
   }
 
-  if (!access.allowed) {
+  if (!access.allowed && !canAccessSetupWithoutSubscription(session.user, access)) {
     redirect("/suscripcion");
   }
 
   if (access.firstBranchId) {
-    redirect(`/${access.firstBranchId}/caja`);
+    redirect(`/${access.firstBranchId}/${access.allowed ? "caja" : "productos"}`);
   }
 
   redirect("/onboarding");

@@ -9,7 +9,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { isPlatformAdmin } from "@/lib/platform-admin";
 
-type SessionUserLike = {
+export type SessionUserLike = {
   id?: string;
   role?: UserRole;
   email?: string | null;
@@ -228,6 +228,26 @@ export function getAccessBlockMessage(reason: AccessBlockReason) {
   }
 }
 
+export function canAccessSetupWithoutSubscription(
+  user: SessionUserLike | null | undefined,
+  access: Pick<KioscoAccessContext, "allowed" | "reason" | "kioscoId">,
+) {
+  if (access.allowed) {
+    return true;
+  }
+
+  if (!user?.id || user.role === "EMPLOYEE" || !access.kioscoId) {
+    return false;
+  }
+
+  return (
+    access.reason === "NO_SUBSCRIPTION" ||
+    access.reason === "SUBSCRIPTION_PENDING" ||
+    access.reason === "SUBSCRIPTION_PAUSED" ||
+    access.reason === "SUBSCRIPTION_CANCELLED"
+  );
+}
+
 export async function getKioscoAccessContextForSession(user: SessionUserLike | null | undefined): Promise<KioscoAccessContext> {
   if (!user?.id) {
     return {
@@ -419,6 +439,21 @@ export async function getKioscoAccessContextByAccessKey(accessKey: string): Prom
 export async function guardOperationalAccess(user: SessionUserLike | null | undefined) {
   const access = await getKioscoAccessContextForSession(user);
   if (access.allowed) {
+    return null;
+  }
+
+  return NextResponse.json(
+    {
+      error: getAccessBlockMessage(access.reason),
+      code: access.reason,
+    },
+    { status: 402 },
+  );
+}
+
+export async function guardSetupAccess(user: SessionUserLike | null | undefined) {
+  const access = await getKioscoAccessContextForSession(user);
+  if (access.allowed || canAccessSetupWithoutSubscription(user, access)) {
     return null;
   }
 

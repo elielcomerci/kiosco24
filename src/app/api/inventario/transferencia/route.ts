@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 
+import { guardOperationalAccess } from "@/lib/access-control";
 import { auth } from "@/lib/auth";
 import { getBranchContext } from "@/lib/branch";
 import { addTrackedLots } from "@/lib/inventory-expiry";
@@ -22,6 +23,11 @@ export async function POST(req: Request) {
     const session = await auth();
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const accessResponse = await guardOperationalAccess(session.user);
+    if (accessResponse) {
+      return accessResponse;
     }
 
     const { branchId, kioscoId } = await getBranchContext(req, session.user.id);

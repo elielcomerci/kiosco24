@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import TicketPreview from "@/components/ticket/TicketPreview";
 import ModalPortal from "@/components/ui/ModalPortal";
@@ -25,6 +25,11 @@ export default function TicketModal({
   const [loading, setLoading] = useState(Boolean(saleId && !initialTicket));
   const [error, setError] = useState<string | null>(null);
   const [shouldEmitOnOpen] = useState(emitOnOpen);
+  const onResolvedRef = useRef(onResolved);
+
+  useEffect(() => {
+    onResolvedRef.current = onResolved;
+  }, [onResolved]);
 
   useEffect(() => {
     if (!saleId || initialTicket) return;
@@ -47,7 +52,7 @@ export default function TicketModal({
         }
         if (active) {
           setTicket(data);
-          onResolved?.(data);
+          onResolvedRef.current?.(data);
         }
       } catch (err) {
         if (active) {
@@ -65,7 +70,7 @@ export default function TicketModal({
     return () => {
       active = false;
     };
-  }, [branchId, initialTicket, onResolved, saleId, shouldEmitOnOpen]);
+  }, [branchId, initialTicket, saleId, shouldEmitOnOpen]);
 
   const whatsappUrl = useMemo(() => {
     if (!ticket) return null;

@@ -1732,6 +1732,7 @@ export default function CajaPage() {
                 className="product-btn"
                 ref={(el) => { if (isSelected && el) el.scrollIntoView({ block: 'nearest' }); }}
                 onClick={() => handleProductTap(product)}
+                onContextMenu={(event) => event.preventDefault()}
                 onMouseDown={() => handleLongPressStart(product)}
                 onMouseUp={handleLongPressEnd}
                 onTouchStart={() => handleLongPressStart(product)}
@@ -1767,7 +1768,7 @@ export default function CajaPage() {
                 >
                   {product.image ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={product.image} alt={product.name} />
+                    <img src={product.image} alt={product.name} draggable={false} />
                   ) : product.emoji ? (
                     <div className="product-btn-media-fallback" data-kind="emoji">
                       {product.emoji}

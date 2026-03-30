@@ -2,10 +2,13 @@ import { auth, signOut } from "@/lib/auth";
 import { canAccessSetupWithoutSubscription, getKioscoAccessContextForSession } from "@/lib/access-control";
 import { isPlatformAdmin } from "@/lib/platform-admin";
 import { prisma } from "@/lib/prisma";
+import { cookies } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import BottomNav from "@/components/ui/BottomNav";
 import BranchSelector from "@/components/ui/BranchSelector";
 import { BranchWorkspaceProvider } from "@/components/ui/BranchWorkspace";
+import DeviceTextScaleControl from "@/components/ui/DeviceTextScaleControl";
+import { DEVICE_TEXT_SCALE_COOKIE, normalizeDeviceTextScale } from "@/lib/device-text-scale";
 import { hexToRgb } from "@/lib/utils";
 
 export default async function BranchLayout({
@@ -78,10 +81,15 @@ export default async function BranchLayout({
   const primaryColor = currentBranch.primaryColor || "#22c55e";
   const bgColor = currentBranch.bgColor || "#0f172a";
   const primaryRgb = hexToRgb(primaryColor);
+  const cookieStore = await cookies();
+  const initialTextScale = normalizeDeviceTextScale(
+    cookieStore.get(DEVICE_TEXT_SCALE_COOKIE)?.value,
+  );
 
   return (
     <div
       className="app-layout branch-context"
+      data-text-scale={initialTextScale}
       style={{
         "--primary": primaryColor,
         "--primary-rgb": primaryRgb,
@@ -94,6 +102,7 @@ export default async function BranchLayout({
           <BranchSelector branches={branches} currentBranchId={effectiveBranchId} />
         </div>
         <div className="app-header-actions">
+          <DeviceTextScaleControl initialScale={initialTextScale} />
           <a
             href={`/${effectiveBranchId}/tickets`}
             className="app-header-icon-link"
@@ -133,6 +142,9 @@ export default async function BranchLayout({
               className="btn btn-sm btn-ghost app-header-logout"
               title="Salir"
             >
+              <span className="app-header-logout-icon" aria-hidden="true">
+                {"\u21AA"}
+              </span>
               <span className="app-header-logout-label">Salir</span>
             </button>
           </form>

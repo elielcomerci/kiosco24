@@ -289,6 +289,68 @@ function renderStockBadge(product: Product) {
   );
 }
 
+function getProductTotalStock(product: Product) {
+  if (product.variants && product.variants.length > 0) {
+    return product.variants.reduce((acc, variant) => acc + (variant.stock || 0), 0);
+  }
+
+  return product.stock;
+}
+
+function renderProductStockSummary(product: Product) {
+  const totalStock = getProductTotalStock(product);
+  if (totalStock === null || totalStock === undefined) {
+    return null;
+  }
+
+  const tone =
+    typeof totalStock === "number" && totalStock < 0
+      ? {
+          color: "var(--red)",
+          background: "rgba(127,29,29,.82)",
+          border: "rgba(248,113,113,.35)",
+        }
+      : totalStock > 0
+        ? {
+            color: "#f8fafc",
+            background: "rgba(15,23,42,.92)",
+            border: "rgba(148,163,184,.24)",
+          }
+        : {
+            color: "#fff7ed",
+            background: "rgba(124,45,18,.9)",
+            border: "rgba(251,146,60,.35)",
+          };
+
+  const availableHint =
+    typeof product.availableStock === "number" && product.availableStock !== product.stock
+      ? ` · Vendible ${product.availableStock}`
+      : "";
+
+  return (
+    <div
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "6px",
+        marginTop: "8px",
+        padding: "6px 10px",
+        borderRadius: "999px",
+        fontSize: "calc(12px * var(--device-font-scale, 1))",
+        fontWeight: 800,
+        color: tone.color,
+        background: tone.background,
+        border: `1px solid ${tone.border}`,
+        boxShadow: "0 8px 18px rgba(2,6,23,.18)",
+      }}
+    >
+      <span style={{ letterSpacing: ".02em", textTransform: "uppercase", opacity: 0.86 }}>Stock</span>
+      <span style={{ fontVariantNumeric: "tabular-nums" }}>{totalStock}</span>
+      {availableHint && <span style={{ fontWeight: 700, opacity: 0.92 }}>{availableHint}</span>}
+    </div>
+  );
+}
+
 function renderPlatformSyncBadge(product: Product, visible: boolean) {
   if (!visible || !product.platformProductId || !product.platformUpdateAvailable) {
     return null;
@@ -3864,6 +3926,7 @@ export default function ProductosPage() {
             const isSelected = selected.has(p.id);
             const expiryBadge = renderExpiryBadge(p);
             const stockBadge = renderStockBadge(p);
+            const stockSummary = renderProductStockSummary(p);
             const platformSyncBadge = renderPlatformSyncBadge(p, Boolean(isOwner));
             const cardChrome = getProductCardBorder(p);
             return selectionMode ? (
@@ -3907,26 +3970,52 @@ export default function ProductosPage() {
                 </div>
                 <ProductThumb image={p.image} emoji={p.emoji} name={p.name} size={56} radius={16} previewable />
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 600 }}>{p.name}</div>
+                  <div style={{ fontWeight: 700, fontSize: "calc(15px * var(--device-font-scale, 1))", color: "var(--text)" }}>{p.name}</div>
                   <div style={{ fontSize: "12px", color: "var(--text-3)" }}>
                     {[p.internalCode, p.barcode, p.supplierName].filter(Boolean).join(" · ") || "Sin codigo extra"}
                   </div>
-                  {(() => {
-                    const totalStock = p.variants && p.variants.length > 0
-                      ? p.variants.reduce((acc, v) => acc + (v.stock || 0), 0)
-                      : p.stock;
-                    
-                    return totalStock !== null && (
-                      <div style={{ fontSize: "12px", color: typeof totalStock === "number" && totalStock < 0 ? "var(--red)" : totalStock > 0 ? "var(--text-3)" : "var(--red)" }}>
-                        Stock: {totalStock}
-                      </div>
-                    );
-                  })()}
+                  {stockSummary}
                   {stockBadge}
                   {platformSyncBadge}
                   {expiryBadge}
                 </div>
-                <div style={{ fontSize: "16px", fontWeight: 700, color: "var(--text-2)" }}>{formatARS(p.price)}</div>
+                <div
+                  style={{
+                    display: "grid",
+                    gap: "4px",
+                    justifyItems: "end",
+                    alignSelf: "center",
+                    flexShrink: 0,
+                    minWidth: "84px",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: "calc(11px * var(--device-font-scale, 1))",
+                      fontWeight: 800,
+                      letterSpacing: ".08em",
+                      textTransform: "uppercase",
+                      color: "var(--text-3)",
+                    }}
+                  >
+                    Precio
+                  </div>
+                  <div
+                    style={{
+                      fontSize: "calc(18px * var(--device-font-scale, 1))",
+                      fontWeight: 900,
+                      color: "#f8fafc",
+                      background: "linear-gradient(180deg, rgba(15,23,42,.96), rgba(30,41,59,.96))",
+                      border: "1px solid rgba(148,163,184,.2)",
+                      borderRadius: "14px",
+                      padding: "8px 10px",
+                      boxShadow: "0 10px 22px rgba(2,6,23,.18)",
+                      fontVariantNumeric: "tabular-nums",
+                    }}
+                  >
+                    {formatARS(p.price)}
+                  </div>
+                </div>
               </button>
             ) : (
               // ─── Normal Card
@@ -3950,29 +4039,55 @@ export default function ProductosPage() {
               >
                 <ProductThumb image={p.image} emoji={p.emoji} name={p.name} size={60} radius={16} previewable />
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 600 }}>
+                  <div style={{ fontWeight: 700, fontSize: "calc(15px * var(--device-font-scale, 1))", color: "var(--text)" }}>
                     {p.name}
                     {!p.showInGrid && <span style={{ fontSize: "10px", color: "var(--text-3)", marginLeft: "6px" }}>oculto</span>}
                   </div>
                   <div style={{ fontSize: "12px", color: "var(--text-3)" }}>
                     {[p.internalCode, p.barcode, p.supplierName].filter(Boolean).join(" · ") || "Sin codigo extra"}
                   </div>
-                  {(() => {
-                    const totalStock = p.variants && p.variants.length > 0
-                      ? p.variants.reduce((acc, v) => acc + (v.stock || 0), 0)
-                      : p.stock;
-                    
-                    return totalStock !== null && (
-                      <div style={{ fontSize: "12px", color: typeof totalStock === "number" && totalStock < 0 ? "var(--red)" : totalStock > 0 ? "var(--text-3)" : "var(--red)" }}>
-                        Stock: {totalStock}
-                      </div>
-                    );
-                  })()}
+                  {stockSummary}
                   {stockBadge}
                   {platformSyncBadge}
                   {expiryBadge}
                 </div>
-                <div style={{ fontSize: "18px", fontWeight: 700 }}>{formatARS(p.price)}</div>
+                <div
+                  style={{
+                    display: "grid",
+                    gap: "4px",
+                    justifyItems: "end",
+                    alignSelf: "center",
+                    flexShrink: 0,
+                    minWidth: "96px",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: "calc(11px * var(--device-font-scale, 1))",
+                      fontWeight: 800,
+                      letterSpacing: ".08em",
+                      textTransform: "uppercase",
+                      color: "var(--text-3)",
+                    }}
+                  >
+                    Precio
+                  </div>
+                  <div
+                    style={{
+                      fontSize: "calc(20px * var(--device-font-scale, 1))",
+                      fontWeight: 900,
+                      color: "#f8fafc",
+                      background: "linear-gradient(180deg, rgba(15,23,42,.96), rgba(30,41,59,.96))",
+                      border: "1px solid rgba(148,163,184,.2)",
+                      borderRadius: "14px",
+                      padding: "9px 12px",
+                      boxShadow: "0 10px 22px rgba(2,6,23,.18)",
+                      fontVariantNumeric: "tabular-nums",
+                    }}
+                  >
+                    {formatARS(p.price)}
+                  </div>
+                </div>
                 <span style={{ color: "var(--text-3)" }}>›</span>
               </button>
             );

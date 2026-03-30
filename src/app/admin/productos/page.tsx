@@ -4,7 +4,9 @@ import {
 } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import {
+  buildPlatformSubmissionDraft,
   ensurePlatformCatalogSeeded,
+  findApprovedPlatformProductByBarcode,
   getPlatformDraftChanges,
   type PlatformDraftChangeField,
 } from "@/lib/platform-catalog";
@@ -43,6 +45,7 @@ type SubmissionDiffSource = {
     barcode: string | null;
   }>;
   platformProduct?: {
+    id?: string;
     barcode: string | null;
     name: string;
     brand: string | null;
@@ -55,6 +58,10 @@ type SubmissionDiffSource = {
       barcode: string | null;
     }>;
   } | null;
+};
+
+type SubmissionComparisonProduct = NonNullable<SubmissionDiffSource["platformProduct"]> & {
+  id: string;
 };
 
 function formatDiffValue(value?: string | null, emptyLabel = "Sin dato") {
@@ -161,6 +168,40 @@ function buildSubmissionDiffRows(submission: SubmissionDiffSource) {
   });
 }
 
+async function resolveSubmissionComparisonProduct(submission: {
+  barcode: string | null;
+  platformProduct?: SubmissionComparisonProduct | null;
+}) {
+  if (submission.platformProduct) {
+    return submission.platformProduct;
+  }
+
+  if (!submission.barcode) {
+    return null;
+  }
+
+  const matchedProduct = await findApprovedPlatformProductByBarcode(submission.barcode);
+  if (!matchedProduct) {
+    return null;
+  }
+
+  return {
+    id: matchedProduct.id,
+    barcode: matchedProduct.barcode,
+    name: matchedProduct.name,
+    brand: matchedProduct.brand,
+    categoryName: matchedProduct.categoryName,
+    description: matchedProduct.description,
+    presentation: matchedProduct.presentation,
+    image: matchedProduct.image,
+    variants: matchedProduct.variants.map((variant) => ({
+      id: variant.id,
+      name: variant.name,
+      barcode: variant.barcode,
+    })),
+  };
+}
+
 async function ensurePlatformAdmin() {
   const session = await auth();
   if (!session?.user?.id) {
@@ -189,6 +230,26 @@ async function reviewSubmission(formData: FormData) {
   const submission = await prisma.platformProductSubmission.findUnique({
     where: { id: submissionId },
     include: {
+      platformProduct: {
+        select: {
+          id: true,
+          barcode: true,
+          name: true,
+          brand: true,
+          categoryName: true,
+          description: true,
+          presentation: true,
+          image: true,
+          variants: {
+            select: {
+              id: true,
+              name: true,
+              barcode: true,
+            },
+            orderBy: { name: "asc" },
+          },
+        },
+      },
       variants: true,
     },
   });
@@ -212,23 +273,41 @@ async function reviewSubmission(formData: FormData) {
     return;
   }
 
-  const variantData = submission.variants.map((variant) => ({
+  const comparisonProduct = await resolveSubmissionComparisonProduct({
+    barcode: submission.barcode,
+    platformProduct: submission.platformProduct,
+  });
+  const mergedDraft = buildPlatformSubmissionDraft(comparisonProduct, {
+    barcode: submission.barcode,
+    name: submission.name,
+    brand: submission.brand,
+    categoryName: submission.categoryName,
+    description: submission.description,
+    presentation: submission.presentation,
+    image: submission.image,
+    variants: submission.variants.map((variant) => ({
+      name: variant.name,
+      barcode: variant.barcode,
+    })),
+  });
+  const variantData = mergedDraft.variants.map((variant) => ({
     name: variant.name,
     barcode: variant.barcode,
   }));
-  const effectiveBarcode = variantData.length > 0 ? null : submission.barcode;
+  const effectiveBarcode = variantData.length > 0 ? null : mergedDraft.barcode;
+  const targetPlatformProductId = comparisonProduct?.id ?? submission.platformProductId ?? null;
 
-  const platformProduct = submission.platformProductId
+  const platformProduct = targetPlatformProductId
     ? await prisma.platformProduct.update({
-        where: { id: submission.platformProductId },
+        where: { id: targetPlatformProductId },
         data: {
           barcode: effectiveBarcode,
-          name: submission.name,
-          brand: submission.brand,
-          categoryName: submission.categoryName,
-          description: submission.description,
-          presentation: submission.presentation,
-          image: submission.image,
+          name: mergedDraft.name,
+          brand: mergedDraft.brand,
+          categoryName: mergedDraft.categoryName,
+          description: mergedDraft.description,
+          presentation: mergedDraft.presentation,
+          image: mergedDraft.image,
           status: PlatformProductStatus.APPROVED,
           variants: {
             deleteMany: {},
@@ -241,12 +320,12 @@ async function reviewSubmission(formData: FormData) {
       ? await prisma.platformProduct.upsert({
           where: { barcode: effectiveBarcode },
           update: {
-            name: submission.name,
-            brand: submission.brand,
-            categoryName: submission.categoryName,
-            description: submission.description,
-            presentation: submission.presentation,
-            image: submission.image,
+            name: mergedDraft.name,
+            brand: mergedDraft.brand,
+            categoryName: mergedDraft.categoryName,
+            description: mergedDraft.description,
+            presentation: mergedDraft.presentation,
+            image: mergedDraft.image,
             status: PlatformProductStatus.APPROVED,
             variants: {
               deleteMany: {},
@@ -255,12 +334,12 @@ async function reviewSubmission(formData: FormData) {
           },
           create: {
             barcode: effectiveBarcode,
-            name: submission.name,
-            brand: submission.brand,
-            categoryName: submission.categoryName,
-            description: submission.description,
-            presentation: submission.presentation,
-            image: submission.image,
+            name: mergedDraft.name,
+            brand: mergedDraft.brand,
+            categoryName: mergedDraft.categoryName,
+            description: mergedDraft.description,
+            presentation: mergedDraft.presentation,
+            image: mergedDraft.image,
             status: PlatformProductStatus.APPROVED,
             variants: {
               create: variantData,
@@ -271,12 +350,12 @@ async function reviewSubmission(formData: FormData) {
       : await prisma.platformProduct.create({
         data: {
           barcode: effectiveBarcode,
-          name: submission.name,
-          brand: submission.brand,
-          categoryName: submission.categoryName,
-          description: submission.description,
-          presentation: submission.presentation,
-          image: submission.image,
+          name: mergedDraft.name,
+          brand: mergedDraft.brand,
+          categoryName: mergedDraft.categoryName,
+          description: mergedDraft.description,
+          presentation: mergedDraft.presentation,
+          image: mergedDraft.image,
           status: PlatformProductStatus.APPROVED,
           variants: {
             create: variantData,
@@ -309,11 +388,96 @@ async function ensureDefaultCatalogAction() {
   revalidatePath("/admin/productos");
 }
 
+async function clearNoChangeSubmissionsAction() {
+  "use server";
+
+  const session = await ensurePlatformAdmin();
+
+  const pendingSubmissions = await prisma.platformProductSubmission.findMany({
+    where: { status: PlatformProductSubmissionStatus.PENDING },
+    include: {
+      platformProduct: {
+        select: {
+          id: true,
+          barcode: true,
+          name: true,
+          brand: true,
+          categoryName: true,
+          description: true,
+          presentation: true,
+          image: true,
+          variants: {
+            select: {
+              id: true,
+              name: true,
+              barcode: true,
+            },
+            orderBy: { name: "asc" },
+          },
+        },
+      },
+      variants: {
+        orderBy: { name: "asc" },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  const staleSubmissionIds: string[] = [];
+
+  for (const submission of pendingSubmissions) {
+    const comparisonProduct = await resolveSubmissionComparisonProduct({
+      barcode: submission.barcode,
+      platformProduct: submission.platformProduct,
+    });
+
+    if (!comparisonProduct) {
+      continue;
+    }
+
+    const diffRows = buildSubmissionDiffRows({
+      barcode: submission.barcode,
+      name: submission.name,
+      brand: submission.brand,
+      categoryName: submission.categoryName,
+      description: submission.description,
+      presentation: submission.presentation,
+      image: submission.image,
+      variants: submission.variants.map((variant) => ({
+        name: variant.name,
+        barcode: variant.barcode,
+      })),
+      platformProduct: comparisonProduct,
+    });
+
+    if (diffRows.length === 0) {
+      staleSubmissionIds.push(submission.id);
+    }
+  }
+
+  if (staleSubmissionIds.length > 0) {
+    await prisma.platformProductSubmission.updateMany({
+      where: {
+        id: { in: staleSubmissionIds },
+        status: PlatformProductSubmissionStatus.PENDING,
+      },
+      data: {
+        status: PlatformProductSubmissionStatus.REJECTED,
+        reviewNote: "Sin cambios respecto a la ficha global.",
+        reviewedAt: new Date(),
+        reviewedById: session.user.id,
+      },
+    });
+  }
+
+  revalidatePath("/admin/productos");
+}
+
 export default async function AdminProductsPage() {
   await ensurePlatformAdmin();
   await ensurePlatformCatalogSeeded();
 
-  const [platformProducts, pendingSubmissions, linkedProductsCount, autoSyncProductsCount] = await Promise.all([
+  const [platformProducts, rawPendingSubmissions, linkedProductsCount, autoSyncProductsCount] = await Promise.all([
     prisma.platformProduct.findMany({
       include: {
         variants: {
@@ -380,8 +544,39 @@ export default async function AdminProductsPage() {
       },
     }),
   ]);
+  const pendingSubmissions = await Promise.all(
+    rawPendingSubmissions.map(async (submission) => {
+      const effectivePlatformProduct = await resolveSubmissionComparisonProduct({
+        barcode: submission.barcode,
+        platformProduct: submission.platformProduct,
+      });
+      const diffRows = buildSubmissionDiffRows({
+        barcode: submission.barcode,
+        name: submission.name,
+        brand: submission.brand,
+        categoryName: submission.categoryName,
+        description: submission.description,
+        presentation: submission.presentation,
+        image: submission.image,
+        variants: submission.variants.map((variant) => ({
+          name: variant.name,
+          barcode: variant.barcode,
+        })),
+        platformProduct: effectivePlatformProduct,
+      });
+
+      return {
+        ...submission,
+        effectivePlatformProduct,
+        diffRows,
+      };
+    }),
+  );
   const approvedCount = platformProducts.filter((product) => product.status === PlatformProductStatus.APPROVED).length;
   const hiddenCount = platformProducts.filter((product) => product.status === PlatformProductStatus.HIDDEN).length;
+  const noChangePendingCount = pendingSubmissions.filter(
+    (submission) => submission.effectivePlatformProduct && submission.diffRows.length === 0,
+  ).length;
 
   return (
     <div style={{ minHeight: "100dvh", background: "#020617", padding: "24px", color: "white" }}>
@@ -469,7 +664,16 @@ export default async function AdminProductsPage() {
                 Revisalos rapido y publica solo lo que mejora la ficha general.
               </div>
             </div>
-            <div style={{ color: "#94a3b8" }}>{pendingSubmissions.length} pendientes</div>
+            <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
+              {noChangePendingCount > 0 && (
+                <form action={clearNoChangeSubmissionsAction}>
+                  <button type="submit" className="btn btn-ghost">
+                    Limpiar sin cambios ({noChangePendingCount})
+                  </button>
+                </form>
+              )}
+              <div style={{ color: "#94a3b8" }}>{pendingSubmissions.length} pendientes</div>
+            </div>
           </div>
 
           {pendingSubmissions.length === 0 ? (
@@ -477,34 +681,8 @@ export default async function AdminProductsPage() {
           ) : (
             <div style={{ display: "grid", gap: "12px" }}>
               {pendingSubmissions.map((submission) => {
-                const diffRows = buildSubmissionDiffRows({
-                  barcode: submission.barcode,
-                  name: submission.name,
-                  brand: submission.brand,
-                  categoryName: submission.categoryName,
-                  description: submission.description,
-                  presentation: submission.presentation,
-                  image: submission.image,
-                  variants: submission.variants.map((variant) => ({
-                    name: variant.name,
-                    barcode: variant.barcode,
-                  })),
-                  platformProduct: submission.platformProduct
-                    ? {
-                        barcode: submission.platformProduct.barcode,
-                        name: submission.platformProduct.name,
-                        brand: submission.platformProduct.brand,
-                        categoryName: submission.platformProduct.categoryName,
-                        description: submission.platformProduct.description,
-                        presentation: submission.platformProduct.presentation,
-                        image: submission.platformProduct.image,
-                        variants: submission.platformProduct.variants.map((variant) => ({
-                          name: variant.name,
-                          barcode: variant.barcode,
-                        })),
-                      }
-                    : null,
-                });
+                const diffRows = submission.diffRows;
+                const comparisonProduct = submission.effectivePlatformProduct;
 
                 return (
                   <form
@@ -537,16 +715,16 @@ export default async function AdminProductsPage() {
                             borderRadius: "999px",
                             fontSize: "12px",
                             fontWeight: 700,
-                            color: submission.platformProduct ? "#38bdf8" : "#f59e0b",
-                            background: submission.platformProduct
+                            color: comparisonProduct ? "#38bdf8" : "#f59e0b",
+                            background: comparisonProduct
                               ? "rgba(56,189,248,0.12)"
                               : "rgba(245,158,11,0.12)",
-                            border: submission.platformProduct
+                            border: comparisonProduct
                               ? "1px solid rgba(56,189,248,0.22)"
                               : "1px solid rgba(245,158,11,0.22)",
                           }}
                         >
-                          {submission.platformProduct ? "Mejora sobre ficha existente" : "Producto nuevo para revisar"}
+                          {comparisonProduct ? "Mejora sobre ficha existente" : "Producto nuevo para revisar"}
                         </div>
                       </div>
                       <div style={{ color: "#94a3b8", fontSize: "13px" }}>
@@ -586,7 +764,7 @@ export default async function AdminProductsPage() {
                           ))}
                         </div>
 
-                        {submission.platformProduct && (
+                        {comparisonProduct && (
                           <div style={{ display: "grid", gap: "8px" }}>
                             {diffRows.map((row) => (
                               <div

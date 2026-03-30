@@ -57,11 +57,11 @@ export default function BranchSelector({
             style={{ width: "38px", height: "38px", borderRadius: "10px", objectFit: "cover", flexShrink: 0 }} 
           />
         ) : (
-          <span style={{ fontSize: "20px" }}>🏪</span>
+          <span style={{ fontSize: "calc(20px * var(--device-font-scale, 1))" }}>🏪</span>
         )}
         <h1
           style={{
-            fontSize: "18px",
+            fontSize: "calc(18px * var(--device-font-scale, 1))",
             fontWeight: 800,
             whiteSpace: "nowrap",
             overflow: "hidden",
@@ -99,11 +99,11 @@ export default function BranchSelector({
             style={{ width: "38px", height: "38px", borderRadius: "10px", objectFit: "cover", flexShrink: 0 }} 
           />
         ) : (
-          <span style={{ fontSize: "18px" }}>🏪</span>
+          <span style={{ fontSize: "calc(18px * var(--device-font-scale, 1))" }}>🏪</span>
         )}
         <h1
           style={{
-            fontSize: "18px",
+            fontSize: "calc(18px * var(--device-font-scale, 1))",
             fontWeight: 800,
             color: "var(--text)",
             whiteSpace: "nowrap",
@@ -114,7 +114,7 @@ export default function BranchSelector({
         >
           {currentBranch?.name}
         </h1>
-        <span style={{ fontSize: "12px", color: "var(--text-3)", transform: open ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s", flexShrink: 0 }}>
+        <span style={{ fontSize: "calc(12px * var(--device-font-scale, 1))", color: "var(--text-3)", transform: open ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s", flexShrink: 0 }}>
           ▼
         </span>
       </button>
@@ -165,7 +165,7 @@ export default function BranchSelector({
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  fontSize: "12px",
+                  fontSize: "calc(12px * var(--device-font-scale, 1))",
                 }}
               >
                 🏪

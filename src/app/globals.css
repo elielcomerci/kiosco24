@@ -2,6 +2,7 @@
 /* ─── Tokens ─────────────────────────────────────────────────────────────── */
 :root {
   --font-sans: var(--font-geist-sans), "Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+  --device-font-scale: 1;
   --bg:        #0f172a;
   --surface:   color-mix(in srgb, white 7%, var(--bg));
   --surface-2: color-mix(in srgb, white 12%, var(--bg));
@@ -625,6 +626,10 @@ body {
   align-items: center;
   justify-content: center;
   overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .product-btn-media img {
@@ -633,6 +638,10 @@ body {
   object-fit: cover;
   object-position: center;
   display: block;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .product-btn-media-fallback {
@@ -715,6 +724,19 @@ body {
   color: var(--text);
   box-shadow: 0 0 40px rgba(0,0,0,0.5);
   transition: max-width 0.3s ease;
+  font-size: calc(16px * var(--device-font-scale));
+}
+
+.app-layout[data-text-scale="compact"] {
+  --device-font-scale: 0.94;
+}
+
+.app-layout[data-text-scale="default"] {
+  --device-font-scale: 1;
+}
+
+.app-layout[data-text-scale="large"] {
+  --device-font-scale: 1.1;
 }
 
 .app-header {
@@ -759,6 +781,13 @@ body {
   border-radius: 12px;
 }
 
+.app-header-icon-button {
+  appearance: none;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-weight: 800;
+}
+
 .app-header-logout {
   min-height: 36px;
   flex-shrink: 0;
@@ -766,8 +795,76 @@ body {
   padding: 6px 10px;
 }
 
+.app-header-logout-icon {
+  display: none;
+  font-size: 14px;
+  line-height: 1;
+}
+
 .app-header-logout-label {
   font-size: 13px;
+}
+
+.app-layout .card,
+.app-layout .card-2,
+.app-layout .modal,
+.app-layout .status-bar,
+.app-layout .app-header,
+.app-layout .bottom-nav {
+  font-size: calc(1rem * var(--device-font-scale));
+}
+
+.app-layout .btn {
+  font-size: calc(14px * var(--device-font-scale));
+}
+
+.app-layout .btn-lg {
+  font-size: calc(16px * var(--device-font-scale));
+}
+
+.app-layout .btn-sm {
+  font-size: calc(13px * var(--device-font-scale));
+}
+
+.app-layout .input {
+  font-size: calc(15px * var(--device-font-scale));
+}
+
+.app-layout .section-title {
+  font-size: calc(11px * var(--device-font-scale));
+}
+
+.app-layout .badge {
+  font-size: calc(12px * var(--device-font-scale));
+}
+
+.app-layout .amount {
+  font-size: calc(2.5rem * var(--device-font-scale));
+}
+
+.app-layout .amount-sm {
+  font-size: calc(1.5rem * var(--device-font-scale));
+}
+
+.app-layout .bottom-nav-label {
+  font-size: calc(11px * var(--device-font-scale));
+}
+
+.app-layout .app-header-icon-link,
+.app-layout .app-header-icon-button {
+  font-size: calc(18px * var(--device-font-scale));
+}
+
+.app-layout .app-header-logout-label {
+  font-size: calc(13px * var(--device-font-scale));
+}
+
+.app-layout .product-btn-name {
+  font-size: calc(12px * var(--device-font-scale));
+}
+
+.app-layout .product-btn-price {
+  font-size: calc(12px * var(--device-font-scale));
 }
 
 @media (min-width: 1024px) {
@@ -802,6 +899,25 @@ body {
 
   .app-header-logout-label {
     font-size: 12px;
+  }
+}
+
+@media (max-width: 430px) {
+  .app-header-actions {
+    gap: 5px;
+  }
+
+  .app-header-logout {
+    min-width: 34px;
+    padding: 6px 8px;
+  }
+
+  .app-header-logout-icon {
+    display: inline-block;
+  }
+
+  .app-header-logout-label {
+    display: none;
   }
 }
 

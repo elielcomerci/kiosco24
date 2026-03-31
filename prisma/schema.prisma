@@ -272,6 +272,7 @@ model PlatformProduct {
   products     Product[]
   variants     PlatformProductVariant[]
   submissions  PlatformProductSubmission[]
+  scrapedProducts ScrapedProduct[]
   createdAt    DateTime                    @default(now())
   updatedAt    DateTime                    @updatedAt
 
@@ -330,6 +331,57 @@ model PlatformProductSubmissionVariant {
   updatedAt    DateTime                  @updatedAt
 
   @@index([submissionId])
+}
+
+model ScrapeRun {
+  id          String          @id @default(cuid())
+  source      ScraperSource
+  rootUrl     String?
+  categoryUrl String
+  status      ScrapeRunStatus @default(QUEUED)
+  errorMessage String?        @db.Text
+  startedAt   DateTime        @default(now())
+  finishedAt  DateTime?
+  products    ScrapedProduct[]
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@index([source, createdAt])
+  @@index([status, createdAt])
+}
+
+model ScrapedProduct {
+  id                    String                     @id @default(cuid())
+  runId                 String
+  run                   ScrapeRun                  @relation(fields: [runId], references: [id], onDelete: Cascade)
+  source                ScraperSource
+  barcode               String?
+  name                  String
+  brand                 String?
+  categoryName          String?
+  description           String?
+  presentation          String?
+  priceRaw              String?
+  image                 String?
+  imageSourceUrl        String?
+  sourceUrl             String?
+  contentHash           String?
+  syncStatus            ScrapedProductSyncStatus   @default(NEW)
+  reviewAction          ScrapedProductReviewAction @default(PENDING)
+  reviewNote            String?                    @db.Text
+  remotePlatformProductId String?
+  remotePlatformProduct PlatformProduct?           @relation(fields: [remotePlatformProductId], references: [id], onDelete: SetNull)
+  remoteOwnerType       String?
+  remoteSnapshot        Json?
+  conflictFields        Json?
+  publishedAt           DateTime?
+  createdAt             DateTime                   @default(now())
+  updatedAt             DateTime                   @updatedAt
+
+  @@index([runId, createdAt])
+  @@index([barcode])
+  @@index([syncStatus, createdAt])
+  @@index([remotePlatformProductId])
 }
 
 model InventoryRecord {
@@ -853,6 +905,35 @@ enum PlatformProductSubmissionStatus {
   PENDING
   APPROVED
   REJECTED
+}
+
+enum ScraperSource {
+  CARREFOUR
+  COTO
+}
+
+enum ScrapeRunStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+enum ScrapedProductSyncStatus {
+  NEW
+  MATCHED
+  CONFLICT
+  PUBLISHED
+  SKIPPED
+  ERROR
+}
+
+enum ScrapedProductReviewAction {
+  PENDING
+  KEEP_REMOTE
+  USE_SCRAPED
+  COMBINE
+  SKIP
 }
 
 enum MpIncomingPaymentChannel {

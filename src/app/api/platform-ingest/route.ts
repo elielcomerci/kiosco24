@@ -203,13 +203,13 @@ function toRemoteProductPayload(
 }
 
 export async function GET(request: Request) {
-  if (!isAuthorized(request)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
   const token = getIngestToken();
   if (!token) {
     return NextResponse.json({ error: "PLATFORM_INGEST_TOKEN no configurado." }, { status: 503 });
+  }
+
+  if (!isAuthorized(request)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const { searchParams } = new URL(request.url);
@@ -235,13 +235,13 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  if (!isAuthorized(request)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
   const token = getIngestToken();
   if (!token) {
     return NextResponse.json({ error: "PLATFORM_INGEST_TOKEN no configurado." }, { status: 503 });
+  }
+
+  if (!isAuthorized(request)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const body = await request.json().catch(() => ({}));

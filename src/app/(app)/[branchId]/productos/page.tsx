@@ -3617,7 +3617,7 @@ function StockLoadingModal({
 
         {/* Filter + metadata */}
         <div className="restock-modal__toolbar">
-          <div className="restock-modal__field-label">Buscar producto</div>
+          <div className="restock-modal__field-label" style={{ display: "none" }}>Buscar producto</div>
           <input
             className="input restock-modal__search-input"
             placeholder="🔍 Filtrar por nombre, marca, código, proveedor..."
@@ -3625,7 +3625,7 @@ function StockLoadingModal({
             onChange={(e) => setSearch(e.target.value)}
             autoFocus
           />
-          <div className="restock-modal__field-hint">{helperCopy}</div>
+          <div className="restock-modal__field-hint" style={{ display: "none" }}>{helperCopy}</div>
           {isReceiveFlow && shouldLookupCollaborative && collaborativeLookupState === "loading" && (
             <div style={{ fontSize: "11px", color: "var(--text-3)" }}>
               Buscando también en la base colaborativa...

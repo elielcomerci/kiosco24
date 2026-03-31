@@ -708,6 +708,14 @@ body {
   font-weight: 700;
 }
 
+/* Show label and hint only on desktop */
+@media (min-width: 641px) {
+  .restock-modal__field-label,
+  .restock-modal__field-hint {
+    display: block !important;
+  }
+}
+
 .restock-modal__notice {
   padding: 12px 14px;
   border-radius: 14px;
@@ -1149,20 +1157,68 @@ body {
 }
 
 @media (max-width: 640px) {
+  .restock-modal {
+    max-height: min(90dvh, 850px);
+  }
+
   .restock-modal__header,
   .restock-modal__toolbar,
   .restock-modal__list,
   .restock-modal__footer {
-    padding-left: 16px;
-    padding-right: 16px;
+    padding-left: 12px;
+    padding-right: 12px;
   }
 
   .restock-modal__header {
-    padding-top: 18px;
+    padding-top: 14px;
+    padding-bottom: 12px;
+    gap: 8px;
+  }
+
+  .restock-modal__title-wrap {
+    gap: 4px;
+  }
+
+  .restock-modal__eyebrow {
+    font-size: 10px;
+    line-height: 1.2;
   }
 
   .restock-modal__title {
-    font-size: 22px;
+    font-size: 20px;
+    line-height: 1.1;
+  }
+
+  .restock-modal__subtitle {
+    font-size: 12px;
+    line-height: 1.35;
+    max-width: 55ch;
+  }
+
+  .restock-modal__close {
+    font-size: 20px;
+    padding: 6px 8px;
+  }
+
+  .restock-modal__toolbar {
+    padding-top: 12px;
+    padding-bottom: 12px;
+    gap: 8px;
+  }
+
+  .restock-modal__field-label {
+    font-size: 10px;
+    display: none !important;
+  }
+
+  .restock-modal__field-hint {
+    font-size: 11px;
+    display: none !important;
+  }
+
+  .restock-modal__search-input {
+    padding: 12px 14px;
+    font-size: 15px;
   }
 
   .restock-modal__stats,
@@ -1177,6 +1233,7 @@ body {
   .restock-modal__footer {
     flex-direction: column;
     align-items: stretch;
+    gap: 8px;
   }
 
   .restock-modal__quick-actions .btn,
@@ -1184,6 +1241,9 @@ body {
   .restock-modal__lot-button,
   .restock-modal__close {
     width: 100%;
+    font-size: 13px;
+    padding: 10px 12px;
+    min-height: 36px;
   }
 
   .restock-modal__toggle {
@@ -1197,6 +1257,69 @@ body {
 
   .restock-modal__product-head {
     flex-direction: column;
+  }
+
+  .restock-modal__list {
+    padding-top: 12px;
+    padding-bottom: 12px;
+    gap: 10px;
+  }
+
+  .restock-modal__product {
+    padding: 12px;
+    gap: 10px;
+    box-shadow: 0 10px 24px rgba(2, 6, 23, 0.12);
+  }
+}
+
+@media (max-width: 480px) {
+  .restock-modal {
+    max-height: min(88dvh, 780px);
+  }
+
+  .restock-modal__header {
+    padding-top: 12px;
+    padding-bottom: 10px;
+  }
+
+  .restock-modal__title {
+    font-size: 18px;
+  }
+
+  .restock-modal__subtitle {
+    display: none;
+  }
+
+  .restock-modal__toolbar {
+    padding-top: 10px;
+    padding-bottom: 10px;
+    gap: 8px;
+  }
+
+  .restock-modal__search-input {
+    padding: 11px 13px;
+    font-size: 14px;
+  }
+
+  .restock-modal__quick-actions .btn {
+    font-size: 12px;
+    padding: 9px 10px;
+    min-height: 34px;
+  }
+
+  .restock-modal__list {
+    padding: 10px 8px;
+    gap: 8px;
+  }
+
+  .restock-modal__product {
+    padding: 10px;
+    gap: 8px;
+    box-shadow: 0 8px 20px rgba(2, 6, 23, 0.1);
+  }
+
+  .restock-modal__product-head {
+    gap: 10px;
   }
 }
 

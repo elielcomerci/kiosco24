@@ -252,6 +252,15 @@ async fn handle_scan(
         bail!("IndicÃ¡ un --stage-batch-size mayor a 0.");
     }
 
+    if args.resume_page_number.is_some() && args.resume_category_url.is_none() {
+        bail!("Si usÃ¡s --resume-page-number, tambiÃ©n tenÃ©s que indicar --resume-category-url.");
+    }
+
+    let manual_resume_position = args.resume_category_url.clone().map(|category_url| ScanResumePosition {
+        category_url,
+        next_page_number: args.resume_page_number.unwrap_or(1).max(1),
+    });
+
     let output_dir = PathBuf::from(&config.review_output_dir);
     let requested_root_url = args.root_url.clone().or_else(|| config.default_root_url.clone());
     let (
@@ -288,14 +297,16 @@ async fn handle_scan(
                 )
             });
         scan_progress.root_url = effective_root_url.clone();
-        let resume_position = scan_progress
-            .last_completed_category_url
-            .clone()
-            .zip(scan_progress.last_completed_page_number)
-            .map(|(category_url, page_number)| ScanResumePosition {
-                category_url,
-                next_page_number: page_number.saturating_add(1),
-            });
+        let resume_position = manual_resume_position.clone().or_else(|| {
+            scan_progress
+                .last_completed_category_url
+                .clone()
+                .zip(scan_progress.last_completed_page_number)
+                .map(|(category_url, page_number)| ScanResumePosition {
+                    category_url,
+                    next_page_number: page_number.saturating_add(1),
+                })
+        });
 
         resume_run(pool, resume_run_id).await?;
         write_scan_progress_checkpoint(&scan_progress_path, &scan_progress).await?;
@@ -327,7 +338,7 @@ async fn handle_scan(
             requested_root_url,
             scan_progress_path,
             scan_progress,
-            None,
+            manual_resume_position,
         )
     };
 

@@ -66,6 +66,12 @@ Escanear arrancando desde una pagina especifica:
 C:\Users\eliel\.cargo\bin\cargo.exe run -- scan --source carrefour --url "https://www.carrefour.com.ar/almacen?page=2" --root-url "https://www.carrefour.com.ar/" --limit 10
 ```
 
+Reanudar manualmente desde una categoria y pagina puntuales si el checkpoint se rompio:
+
+```powershell
+C:\Users\eliel\.cargo\bin\cargo.exe run -- scan --source carrefour --url "https://www.carrefour.com.ar/" --root-url "https://www.carrefour.com.ar/" --discover-categories --resume-run-id "<run-id>" --resume-category-url "https://www.carrefour.com.ar/bebidas" --resume-page-number 16
+```
+
 Recorrer Carrefour desde la home usando la lista curada de categorias principales:
 
 ```powershell
@@ -128,6 +134,12 @@ Si preferis correrlo por PowerShell y limitar una pasada de prueba:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File "C:\Users\eliel\kiosco24\tools\platform-scraper-rs\scripts\run-carrefour-review.ps1" -Limit 5
+```
+
+Si queres reanudar manualmente desde el launcher:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File "C:\Users\eliel\kiosco24\tools\platform-scraper-rs\scripts\run-carrefour-review.ps1" -ResumeCategoryUrl "https://www.carrefour.com.ar/bebidas" -ResumePageNumber 16
 ```
 
 ## Validacion end-to-end ya comprobada

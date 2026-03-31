@@ -115,6 +115,10 @@ pub struct ScanArgs {
     #[arg(long)]
     pub resume_run_id: Option<String>,
     #[arg(long)]
+    pub resume_category_url: Option<String>,
+    #[arg(long)]
+    pub resume_page_number: Option<usize>,
+    #[arg(long)]
     pub root_url: Option<String>,
     #[arg(long)]
     pub limit: Option<usize>,

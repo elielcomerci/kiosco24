@@ -85,7 +85,11 @@ export default async function SubscriptionPage({
   const shouldAttemptSync =
     session.user.role !== "EMPLOYEE" &&
     Boolean(kiosco?.subscription?.id) &&
-    (query.source === "mercadopago" || query.refresh === "1");
+    (
+      kiosco?.subscription?.status === "PENDING" ||
+      query.source === "mercadopago" ||
+      query.refresh === "1"
+    );
 
   if (shouldAttemptSync && kiosco?.subscription?.id) {
     try {

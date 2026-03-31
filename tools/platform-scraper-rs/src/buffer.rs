@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use chrono::Utc;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::{
     collections::BTreeSet,
     path::{Path, PathBuf},
@@ -183,6 +183,115 @@ pub fn scan_progress_path_for_run(output_dir: &Path, run_id: &str) -> PathBuf {
     output_dir.join(format!("scan-progress-{run_id}.json"))
 }
 
+fn backup_path_for_checkpoint(path: &Path) -> PathBuf {
+    let file_name = path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .map(|value| format!("{value}.bak"))
+        .unwrap_or_else(|| "checkpoint.bak".to_string());
+    path.with_file_name(file_name)
+}
+
+fn sanitize_checkpoint_content(bytes: &[u8]) -> Option<String> {
+    let content = String::from_utf8_lossy(bytes).replace('\0', "");
+    let trimmed = content.trim_matches('\u{feff}').trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    Some(trimmed.to_string())
+}
+
+async fn write_checkpoint_with_backup(path: &PathBuf, content: &str, label: &str) -> Result<()> {
+    tokio::fs::write(path, content)
+        .await
+        .with_context(|| format!("No pude escribir el {label}: {}", path.display()))?;
+
+    let backup_path = backup_path_for_checkpoint(path);
+    tokio::fs::write(&backup_path, content)
+        .await
+        .with_context(|| format!("No pude escribir el backup del {label}: {}", backup_path.display()))?;
+
+    Ok(())
+}
+
+async fn read_checkpoint_with_fallback<T>(
+    path: &PathBuf,
+    label: &str,
+    allow_missing: bool,
+) -> Result<Option<T>>
+where
+    T: DeserializeOwned,
+{
+    let backup_path = backup_path_for_checkpoint(path);
+    let mut last_error = None;
+    let mut saw_candidate = false;
+
+    for candidate in [path.clone(), backup_path.clone()] {
+        if !candidate.exists() {
+            continue;
+        }
+
+        saw_candidate = true;
+
+        let bytes = match tokio::fs::read(&candidate).await {
+            Ok(bytes) => bytes,
+            Err(error) => {
+                last_error = Some(format!(
+                    "No pude leer el {label}: {} ({error})",
+                    candidate.display()
+                ));
+                continue;
+            }
+        };
+
+        let Some(content) = sanitize_checkpoint_content(&bytes) else {
+            last_error = Some(format!(
+                "El {label} quedó vacío o corrupto: {}",
+                candidate.display()
+            ));
+            continue;
+        };
+
+        match serde_json::from_str::<T>(&content) {
+            Ok(value) => {
+                if candidate != *path {
+                    eprintln!(
+                        "Recuperé el {label} desde el backup: {}",
+                        candidate.display()
+                    );
+                    let _ = write_checkpoint_with_backup(path, &content, label).await;
+                }
+                return Ok(Some(value));
+            }
+            Err(error) => {
+                last_error = Some(format!(
+                    "No pude parsear el {label}: {} ({error})",
+                    candidate.display()
+                ));
+            }
+        }
+    }
+
+    if !saw_candidate && allow_missing {
+        return Ok(None);
+    }
+
+    if allow_missing {
+        if let Some(error) = last_error {
+            eprintln!(
+                "Ignoro el {label} dañado y sigo sin resume automático. {error}"
+            );
+        }
+        return Ok(None);
+    }
+
+    Err(anyhow::anyhow!(
+        "{}",
+        last_error.unwrap_or_else(|| format!("No pude recuperar el {label}."))
+    ))
+}
+
 #[allow(dead_code)]
 pub async fn read_buffer_file(path: &PathBuf) -> Result<Vec<BufferedProduct>> {
     read_buffer_file_from(path, 0).await
@@ -260,37 +369,33 @@ pub async fn read_buffer_source_urls(path: &PathBuf) -> Result<BTreeSet<String>>
 }
 
 pub async fn read_buffer_checkpoint(path: &PathBuf) -> Result<usize> {
-    if !path.exists() {
+    if !path.exists() && !backup_path_for_checkpoint(path).exists() {
         return Ok(0);
     }
 
-    let content = tokio::fs::read_to_string(path)
-        .await
-        .with_context(|| format!("No pude leer el checkpoint: {}", path.display()))?;
-    let checkpoint: BufferCheckpoint = serde_json::from_str(&content)
-        .with_context(|| format!("No pude parsear el checkpoint: {}", path.display()))?;
+    let checkpoint = read_checkpoint_with_fallback::<BufferCheckpoint>(path, "checkpoint", false)
+        .await?
+        .context("No pude recuperar el checkpoint.")?;
     Ok(checkpoint.flushed_count)
 }
 
 pub async fn write_buffer_checkpoint(path: &PathBuf, flushed_count: usize) -> Result<()> {
     let content = serde_json::to_string_pretty(&BufferCheckpoint { flushed_count })?;
-    tokio::fs::write(path, content)
-        .await
-        .with_context(|| format!("No pude escribir el checkpoint: {}", path.display()))?;
+    write_checkpoint_with_backup(path, &content, "checkpoint").await?;
     Ok(())
 }
 
 pub async fn read_scan_progress_checkpoint(path: &PathBuf) -> Result<Option<ScanProgressCheckpoint>> {
-    if !path.exists() {
+    if !path.exists() && !backup_path_for_checkpoint(path).exists() {
         return Ok(None);
     }
 
-    let content = tokio::fs::read_to_string(path)
-        .await
-        .with_context(|| format!("No pude leer el checkpoint de scan: {}", path.display()))?;
-    let checkpoint: ScanProgressCheckpoint = serde_json::from_str(&content)
-        .with_context(|| format!("No pude parsear el checkpoint de scan: {}", path.display()))?;
-    Ok(Some(checkpoint))
+    read_checkpoint_with_fallback::<ScanProgressCheckpoint>(
+        path,
+        "checkpoint de scan",
+        true,
+    )
+    .await
 }
 
 pub async fn write_scan_progress_checkpoint(
@@ -298,9 +403,7 @@ pub async fn write_scan_progress_checkpoint(
     checkpoint: &ScanProgressCheckpoint,
 ) -> Result<()> {
     let content = serde_json::to_string_pretty(checkpoint)?;
-    tokio::fs::write(path, content)
-        .await
-        .with_context(|| format!("No pude escribir el checkpoint de scan: {}", path.display()))?;
+    write_checkpoint_with_backup(path, &content, "checkpoint de scan").await?;
     Ok(())
 }
 
@@ -309,6 +412,13 @@ pub async fn cleanup_scan_progress_checkpoint(path: &PathBuf) -> Result<()> {
         tokio::fs::remove_file(path)
             .await
             .with_context(|| format!("No pude eliminar el checkpoint de scan: {}", path.display()))?;
+    }
+
+    let backup_path = backup_path_for_checkpoint(path);
+    if backup_path.exists() {
+        tokio::fs::remove_file(&backup_path)
+            .await
+            .with_context(|| format!("No pude eliminar el backup del checkpoint de scan: {}", backup_path.display()))?;
     }
 
     Ok(())
@@ -326,5 +436,85 @@ pub async fn cleanup_buffer_file(path: &PathBuf) -> Result<()> {
             .with_context(|| format!("No pude eliminar el checkpoint: {}", checkpoint_path.display()))?;
     }
 
+    let checkpoint_backup_path = backup_path_for_checkpoint(&checkpoint_path);
+    if checkpoint_backup_path.exists() {
+        tokio::fs::remove_file(&checkpoint_backup_path)
+            .await
+            .with_context(|| format!("No pude eliminar el backup del checkpoint: {}", checkpoint_backup_path.display()))?;
+    }
+
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use uuid::Uuid;
+
+    fn unique_temp_path(prefix: &str) -> PathBuf {
+        std::env::temp_dir().join(format!("{prefix}-{}.json", Uuid::new_v4()))
+    }
+
+    async fn cleanup_checkpoint_pair(path: &PathBuf) {
+        let _ = tokio::fs::remove_file(path).await;
+        let _ = tokio::fs::remove_file(backup_path_for_checkpoint(path)).await;
+    }
+
+    #[tokio::test]
+    async fn scan_progress_recovers_from_backup_when_primary_is_zeroed() {
+        let path = unique_temp_path("scan-progress");
+        let backup_path = backup_path_for_checkpoint(&path);
+        let checkpoint = ScanProgressCheckpoint::new(
+            "run-test",
+            ScraperSource::Carrefour,
+            "https://www.carrefour.com.ar/",
+            Some("https://www.carrefour.com.ar/"),
+        );
+
+        tokio::fs::write(&path, vec![0u8; 128]).await.unwrap();
+        tokio::fs::write(&backup_path, serde_json::to_string_pretty(&checkpoint).unwrap())
+            .await
+            .unwrap();
+
+        let restored = read_scan_progress_checkpoint(&path).await.unwrap().unwrap();
+        let restored_primary = tokio::fs::read_to_string(&path).await.unwrap();
+
+        assert_eq!(restored.run_id, checkpoint.run_id);
+        assert!(restored_primary.contains("\"run_id\": \"run-test\""));
+
+        cleanup_checkpoint_pair(&path).await;
+    }
+
+    #[tokio::test]
+    async fn scan_progress_ignores_zeroed_primary_without_backup() {
+        let path = unique_temp_path("scan-progress");
+        tokio::fs::write(&path, vec![0u8; 64]).await.unwrap();
+
+        let restored = read_scan_progress_checkpoint(&path).await.unwrap();
+        assert!(restored.is_none());
+
+        cleanup_checkpoint_pair(&path).await;
+    }
+
+    #[tokio::test]
+    async fn buffer_checkpoint_recovers_from_backup() {
+        let path = unique_temp_path("buffer-checkpoint");
+        let backup_path = backup_path_for_checkpoint(&path);
+
+        tokio::fs::write(&path, vec![0u8; 32]).await.unwrap();
+        tokio::fs::write(
+            &backup_path,
+            serde_json::to_string_pretty(&BufferCheckpoint { flushed_count: 42 }).unwrap(),
+        )
+        .await
+        .unwrap();
+
+        let restored = read_buffer_checkpoint(&path).await.unwrap();
+        let restored_primary = tokio::fs::read_to_string(&path).await.unwrap();
+
+        assert_eq!(restored, 42);
+        assert!(restored_primary.contains("\"flushed_count\": 42"));
+
+        cleanup_checkpoint_pair(&path).await;
+    }
 }

@@ -1,6 +1,8 @@
 param(
     [int]$MaxCategories = 14,
     [int]$Limit,
+    [string]$ResumeCategoryUrl,
+    [int]$ResumePageNumber,
     [switch]$NoOpen
 )
 
@@ -12,6 +14,9 @@ $exePath = Join-Path $scraperRoot "target\release\platform-scraper-rs.exe"
 $outputDir = Join-Path $scraperRoot "output"
 $latestRunFile = Join-Path $outputDir "latest-run.txt"
 $dashboardPath = Join-Path $outputDir "live-dashboard.html"
+$dashboardStatePath = Join-Path $outputDir "live-dashboard-state.json"
+$dashboardServerPidPath = Join-Path $outputDir "live-dashboard-server.pid"
+$dashboardServerPortPath = Join-Path $outputDir "live-dashboard-server.port"
 $latestBufferFile = Join-Path $outputDir "latest-buffer.txt"
 $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
 $utf8Strict = [System.Text.UTF8Encoding]::new($false, $true)
@@ -49,6 +54,77 @@ $state = [ordered]@{
     Logs = New-Object System.Collections.ArrayList
     ReviewPath = $null
     Error = $null
+}
+
+if (($PSBoundParameters.ContainsKey('ResumeCategoryUrl') -and -not $PSBoundParameters.ContainsKey('ResumePageNumber')) -or
+    ($PSBoundParameters.ContainsKey('ResumePageNumber') -and -not $PSBoundParameters.ContainsKey('ResumeCategoryUrl'))) {
+    throw "Si queres reanudar manualmente, indicá juntos -ResumeCategoryUrl y -ResumePageNumber."
+}
+
+function Get-AvailableDashboardPort {
+    param(
+        [int]$StartPort = 8765,
+        [int]$EndPort = 8795
+    )
+
+    for ($port = $StartPort; $port -le $EndPort; $port++) {
+        $listener = $null
+        try {
+            $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, $port)
+            $listener.Start()
+            return $port
+        } catch {
+            continue
+        } finally {
+            if ($null -ne $listener) {
+                try {
+                    $listener.Stop()
+                } catch {
+                }
+            }
+        }
+    }
+
+    throw "No encontré un puerto libre para el visor local."
+}
+
+function Get-DashboardBaseUrl {
+    $port = $null
+    $pid = $null
+
+    if ((Test-Path $dashboardServerPidPath) -and (Test-Path $dashboardServerPortPath)) {
+        try {
+            $pid = [int](Get-Content $dashboardServerPidPath -Raw).Trim()
+            $port = [int](Get-Content $dashboardServerPortPath -Raw).Trim()
+            $process = Get-Process -Id $pid -ErrorAction Stop
+            if ($process) {
+                return "http://127.0.0.1:$port/"
+            }
+        } catch {
+            Remove-Item $dashboardServerPidPath -ErrorAction SilentlyContinue
+            Remove-Item $dashboardServerPortPath -ErrorAction SilentlyContinue
+        }
+    }
+
+    $port = Get-AvailableDashboardPort
+    $serverScriptPath = Join-Path $scraperRoot "scripts\serve-live-dashboard.ps1"
+    $powershellExe = Join-Path $PSHOME "powershell.exe"
+    $process = Start-Process `
+        -FilePath $powershellExe `
+        -ArgumentList @(
+            "-ExecutionPolicy", "Bypass",
+            "-File", $serverScriptPath,
+            "-OutputDir", $outputDir,
+            "-Port", $port
+        ) `
+        -WindowStyle Hidden `
+        -PassThru
+
+    Set-Content -Path $dashboardServerPidPath -Value $process.Id -Encoding UTF8
+    Set-Content -Path $dashboardServerPortPath -Value $port -Encoding UTF8
+    Start-Sleep -Milliseconds 400
+
+    return "http://127.0.0.1:$port/"
 }
 
 function Get-ScanProgressPath {
@@ -271,109 +347,21 @@ function Sync-StateFromBuffer {
     Update-StatusCounts
 }
 
-function Write-DashboardHtml {
-    $enc = [System.Net.WebUtility]
-    $reviewUrl = Get-FileUrl $state.ReviewPath
-    $productsHtml = ""
-    $products = @($state.Products)
-    [array]::Reverse($products)
-    $products = $products | Select-Object -First 48
-
-    foreach ($product in $products) {
-        if ($product.image) {
-            $imageHtml = "<img src=""$($enc::HtmlEncode($product.image))"" alt=""preview"" />"
-        } else {
-            $imageHtml = "<div class=""image-placeholder"">Sin imagen</div>"
-        }
-
-        if ($product.barcode) { $barcode = $product.barcode } else { $barcode = "(sin EAN)" }
-        if ($product.categoryName) { $category = $product.categoryName } else { $category = "Sin categoria" }
-        if ($product.presentation) { $presentation = $product.presentation } else { $presentation = "Sin presentacion" }
-        if ($product.syncStatus) { $status = $product.syncStatus } else { $status = "PENDING" }
-        if ($product.sourceUrl) {
-            $sourceLink = "<a href=""$($enc::HtmlEncode($product.sourceUrl))"" target=""_blank"" rel=""noreferrer"">Ver origen</a>"
-        } else {
-            $sourceLink = "<span class=""muted"">Sin origen</span>"
-        }
-
-        $productsHtml += @"
-<article class="product-card">
-  <div class="product-image">$imageHtml</div>
-  <div class="product-body">
-    <div class="product-top">
-      <div>
-        <h3>$($enc::HtmlEncode($product.name))</h3>
-        <p class="muted">$($enc::HtmlEncode($barcode))</p>
-      </div>
-      <span class="pill status-$($status.ToLowerInvariant())">$($enc::HtmlEncode($status))</span>
-    </div>
-    <p class="meta">$($enc::HtmlEncode($category)) | $($enc::HtmlEncode($presentation))</p>
-    <div class="product-footer">
-      <span class="muted">ID: $($enc::HtmlEncode($product.id))</span>
-      $sourceLink
-    </div>
-  </div>
-</article>
-"@
-    }
-
-    if (-not $productsHtml) {
-        $productsHtml = '<div class="empty">Todavia no hay productos listos para mostrar.</div>'
-    }
-
-    $statusChips = ""
-    foreach ($key in $state.StatusCounts.Keys) {
-        $statusChips += "<span class=""pill"">$($enc::HtmlEncode($key)): $($state.StatusCounts[$key])</span>"
-    }
-    if (-not $statusChips) {
-        $statusChips = '<span class="pill">Sin resumen todavia</span>'
-    }
-
-    $progressChips = @(
-        "<span class=""pill"">En buffer: $($state.BufferedCount)</span>",
-        "<span class=""pill"">En staging: $($state.StagedCount)</span>",
-        "<span class=""pill"">Pendientes: $($state.PendingCount)</span>"
-    ) -join ""
-
-    $logsHtml = ""
-    $logs = @($state.Logs)
-    [array]::Reverse($logs)
-    foreach ($line in ($logs | Select-Object -First 20)) {
-        $logsHtml += "<li>$($enc::HtmlEncode($line))</li>"
-    }
-    if (-not $logsHtml) {
-        $logsHtml = "<li>Esperando actividad...</li>"
-    }
-
-    if ($reviewUrl) {
-        $reviewHtml = "<a class=""review-link"" href=""$reviewUrl"">Abrir review final</a>"
+function Write-DashboardShellHtml {
+    $resumeScriptPath = Join-Path $scraperRoot "scripts\run-carrefour-review.ps1"
+    $defaultResumeCategory = if ($state.CurrentCategoryUrl) {
+        $state.CurrentCategoryUrl
     } else {
-        $reviewHtml = "<span class=""muted"">Review todavia no generado</span>"
+        "https://www.carrefour.com.ar/bebidas"
     }
-
-    if ($state.Error) {
-        $errorHtml = "<div class=""error-box"">$($enc::HtmlEncode($state.Error))</div>"
+    $defaultResumePage = if ($state.CurrentPageNumber) {
+        [int]$state.CurrentPageNumber + 1
     } else {
-        $errorHtml = ""
+        16
     }
-
-    if ($state.CurrentPageNumber) {
-        $pageValue = $state.CurrentPageNumber
-    } else {
-        $pageValue = "-"
-    }
-
-    if ($state.CurrentCategoryUrl) {
-        $categoryValue = $state.CurrentCategoryUrl
-    } else {
-        $categoryValue = "Esperando categoria"
-    }
-
-    if ($state.RunId) {
-        $runValue = $state.RunId
-    } else {
-        $runValue = "Todavia sin run id"
-    }
+    $resumeScriptPathJson = $resumeScriptPath | ConvertTo-Json -Compress
+    $defaultResumeCategoryJson = $defaultResumeCategory | ConvertTo-Json -Compress
+    $defaultResumePageJson = $defaultResumePage | ConvertTo-Json -Compress
 
     $html = @"
 <!doctype html>
@@ -381,21 +369,19 @@ function Write-DashboardHtml {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta http-equiv="refresh" content="2" />
   <title>Scrapper Carrefour en vivo</title>
   <style>
     :root {
       color-scheme: dark;
       --bg: #07111d;
-      --panel: #0f1c2b;
-      --panel-2: #132538;
+      --panel: rgba(15, 28, 43, 0.96);
+      --panel-2: rgba(19, 37, 56, 0.96);
       --line: #28415d;
       --text: #eef6ff;
       --muted: #9eb6ce;
-      --ok: #24d67b;
-      --warn: #f5b942;
-      --danger: #ff6b6b;
       --accent: #64c4ff;
+      --ok: #24d67b;
+      --danger: #ff6b6b;
     }
     * { box-sizing: border-box; }
     body {
@@ -403,34 +389,60 @@ function Write-DashboardHtml {
       background: radial-gradient(circle at top, #10233a 0%, var(--bg) 58%);
       color: var(--text);
       font-family: system-ui, sans-serif;
-      padding: 24px;
+      padding: 18px;
     }
     .wrap {
-      max-width: 1400px;
+      max-width: 1420px;
       margin: 0 auto;
       display: grid;
-      gap: 20px;
+      gap: 16px;
     }
-    .hero, .panel {
-      background: rgba(15, 28, 43, 0.94);
+    .panel {
+      background: var(--panel);
       border: 1px solid var(--line);
       border-radius: 22px;
-      padding: 22px;
+      padding: 18px 20px;
       box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
     }
-    .hero h1 {
-      margin: 0 0 8px;
-      font-size: 34px;
+    .hero {
+      display: grid;
+      gap: 18px;
     }
-    .hero p {
-      margin: 0;
+    .hero-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: start;
+      flex-wrap: wrap;
+    }
+    .hero h1 {
+      margin: 0 0 6px;
+      font-size: 30px;
+    }
+    .muted {
       color: var(--muted);
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: rgba(100, 196, 255, 0.12);
+      color: #d9ecff;
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .badge.offline {
+      background: rgba(255, 107, 107, 0.14);
+      border-color: rgba(255, 107, 107, 0.4);
+      color: #ffd1d1;
     }
     .stats {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
       gap: 14px;
-      margin-top: 18px;
     }
     .stat {
       background: var(--panel-2);
@@ -449,10 +461,36 @@ function Write-DashboardHtml {
       font-size: 24px;
       font-weight: 800;
     }
-    .two-col {
-      display: grid;
-      grid-template-columns: minmax(0, 2fr) minmax(320px, 1fr);
-      gap: 20px;
+    .value.compact {
+      font-size: 16px;
+      line-height: 1.45;
+      word-break: break-word;
+    }
+    .toolbar {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .action {
+      border: 1px solid rgba(100, 196, 255, 0.4);
+      border-radius: 12px;
+      background: rgba(100, 196, 255, 0.12);
+      color: #cfeeff;
+      padding: 11px 14px;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .action.secondary {
+      border-color: rgba(158, 182, 206, 0.26);
+      background: rgba(158, 182, 206, 0.08);
+      color: var(--text);
+    }
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
     }
     .pill {
       display: inline-flex;
@@ -463,17 +501,95 @@ function Write-DashboardHtml {
       border: 1px solid var(--line);
       background: #18314a;
       color: var(--text);
-      margin: 0 8px 8px 0;
       font-size: 12px;
       font-weight: 700;
     }
-    .status-buffered { background: rgba(245, 185, 66, 0.12); border-color: rgba(245, 185, 66, 0.42); color: #ffd88a; }
-    .status-staged { background: rgba(36, 214, 123, 0.12); border-color: rgba(36, 214, 123, 0.42); color: #86f1b7; }
-    .status-new { background: rgba(100, 196, 255, 0.12); border-color: rgba(100, 196, 255, 0.42); color: #9fdcff; }
-    .status-matched { background: rgba(36, 214, 123, 0.12); border-color: rgba(36, 214, 123, 0.42); color: #86f1b7; }
-    .status-conflict { background: rgba(245, 185, 66, 0.12); border-color: rgba(245, 185, 66, 0.42); color: #ffd88a; }
-    .status-published { background: rgba(122, 110, 255, 0.16); border-color: rgba(122, 110, 255, 0.44); color: #c9c1ff; }
-    .muted { color: var(--muted); }
+    .pill.ok {
+      background: rgba(36, 214, 123, 0.12);
+      border-color: rgba(36, 214, 123, 0.42);
+      color: #86f1b7;
+    }
+    .pill.warn {
+      background: rgba(245, 185, 66, 0.12);
+      border-color: rgba(245, 185, 66, 0.42);
+      color: #ffd88a;
+    }
+    .hero-meta {
+      display: grid;
+      gap: 8px;
+    }
+    .hero-links {
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+    .hero-links a {
+      color: var(--accent);
+      text-decoration: none;
+      font-weight: 700;
+    }
+    .resume-form {
+      display: grid;
+      grid-template-columns: minmax(0, 2fr) minmax(180px, 220px) auto auto;
+      gap: 12px;
+      align-items: end;
+    }
+    .resume-field {
+      display: grid;
+      gap: 6px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .resume-field input {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #081320;
+      color: var(--text);
+      padding: 11px 12px;
+      font: inherit;
+    }
+    .action {
+      border: 1px solid rgba(100, 196, 255, 0.4);
+      border-radius: 12px;
+      background: rgba(100, 196, 255, 0.12);
+      color: #cfeeff;
+      padding: 11px 14px;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .action.secondary {
+      border-color: rgba(158, 182, 206, 0.26);
+      background: rgba(158, 182, 206, 0.08);
+      color: var(--text);
+    }
+    .resume-command {
+      margin: 0;
+      padding: 12px 14px;
+      border-radius: 14px;
+      background: #081320;
+      border: 1px solid var(--line);
+      color: #d9ecff;
+      font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+      font-size: 13px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .error-box {
+      padding: 14px 16px;
+      border-radius: 16px;
+      background: rgba(255, 107, 107, 0.12);
+      border: 1px solid rgba(255, 107, 107, 0.4);
+      color: #ffc2c2;
+      font-weight: 700;
+      display: none;
+    }
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 2fr) minmax(320px, 1fr);
+      gap: 16px;
+    }
     .products {
       display: grid;
       gap: 14px;
@@ -521,7 +637,7 @@ function Write-DashboardHtml {
       flex-wrap: wrap;
       font-size: 13px;
     }
-    .product-footer a, .review-link {
+    .product-footer a {
       color: var(--accent);
       text-decoration: none;
       font-weight: 700;
@@ -541,15 +657,6 @@ function Write-DashboardHtml {
       background: var(--panel-2);
       border: 1px solid var(--line);
     }
-    .error-box {
-      margin-top: 12px;
-      padding: 14px 16px;
-      border-radius: 16px;
-      background: rgba(255, 107, 107, 0.12);
-      border: 1px solid rgba(255, 107, 107, 0.4);
-      color: #ffc2c2;
-      font-weight: 700;
-    }
     .empty {
       padding: 24px;
       border-radius: 18px;
@@ -557,71 +664,419 @@ function Write-DashboardHtml {
       color: var(--muted);
       text-align: center;
     }
-    @media (max-width: 980px) {
-      body { padding: 16px; }
-      .two-col { grid-template-columns: 1fr; }
-      .product-card { grid-template-columns: 1fr; }
+    @media (max-width: 1080px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+      .resume-form {
+        grid-template-columns: 1fr;
+      }
+      .product-card {
+        grid-template-columns: 1fr;
+      }
     }
   </style>
 </head>
 <body>
   <div class="wrap">
-    <section class="hero">
-      <h1>Scrapper Carrefour en vivo</h1>
-      <p>Extraccion local en Rust, imagenes localizadas en media.zap.com.ar y comparacion contra la base colaborativa de kiosco24.</p>
+    <section class="panel hero">
+      <div class="hero-top">
+        <div>
+          <h1>Scrapper Carrefour en vivo</h1>
+          <div class="muted">
+            Shell interactiva con AJAX sobre el estado del scan. La UI queda viva y los campos manuales no se resetean en cada refresh.
+          </div>
+        </div>
+        <div class="toolbar">
+          <span class="badge" id="connectionBadge">Conectando visor...</span>
+          <button type="button" class="action secondary" id="refreshViewer">Refrescar ahora</button>
+        </div>
+      </div>
+
       <div class="stats">
         <div class="stat">
           <div class="label">Fase</div>
-          <div class="value">$($enc::HtmlEncode($state.Phase))</div>
+          <div class="value" id="phaseValue">Preparando</div>
         </div>
         <div class="stat">
           <div class="label">Run</div>
-          <div class="value" style="font-size:16px; line-height:1.4;">$($enc::HtmlEncode($runValue))</div>
+          <div class="value compact" id="runValue">Todavia sin run id</div>
         </div>
         <div class="stat">
           <div class="label">Productos detectados</div>
-          <div class="value">$($state.ExtractedCount)</div>
+          <div class="value" id="extractedValue">0</div>
         </div>
         <div class="stat">
           <div class="label">Pagina actual</div>
-          <div class="value">$($enc::HtmlEncode([string]$pageValue))</div>
+          <div class="value" id="pageValue">-</div>
         </div>
       </div>
-      <div style="margin-top:16px;">
-        $progressChips
+
+      <div class="chips" id="progressChips"></div>
+      <div class="chips" id="statusChips"></div>
+
+      <div class="hero-meta">
+        <div class="muted" id="categoryValue">Categoria actual: esperando datos...</div>
+        <div class="muted" id="timestampsValue">Ultima actualizacion: sin datos</div>
+        <div class="hero-links" id="heroLinks"></div>
       </div>
-      <div style="margin-top:8px;">
-        <span class="pill">Categorias: $($state.CurrentCategoryIndex) / $($state.CategoriesTotal)</span>
-        $statusChips
+
+      <div class="resume-form">
+        <label class="resume-field">
+          <span>Categoria URL</span>
+          <input id="resumeCategoryUrl" type="text" />
+        </label>
+        <label class="resume-field">
+          <span>Pagina inicial</span>
+          <input id="resumePageNumber" type="number" min="1" />
+        </label>
+        <button type="button" class="action" id="copyResumeCommand">Copiar comando</button>
+        <button type="button" class="action secondary" id="resetResumeDefaults">Usar sugerencia actual</button>
       </div>
-      <div style="margin-top:12px;" class="muted">Categoria actual: $($enc::HtmlEncode($categoryValue))</div>
-      <div class="muted" style="margin-top:6px;">Ultima actualizacion: $($state.LastUpdated.ToString("dd/MM/yyyy HH:mm:ss"))</div>
-      <div style="margin-top:14px;">$reviewHtml</div>
-      $errorHtml
+
+      <pre class="resume-command" id="resumeCommandPreview"></pre>
+      <div class="error-box" id="errorBox"></div>
     </section>
 
-    <section class="two-col">
+    <section class="layout">
       <section class="panel">
         <h2 style="margin-top:0;">Productos recientes</h2>
-        <p class="muted">Se actualiza solo cada 2 segundos. El scan bufferiza primero y despues confirma el estado cuando cada lote de hasta 50 productos entra en staging.</p>
-        <div class="products">
-          $productsHtml
+        <p class="muted">Se refresca cada 2 segundos con lo ultimo del buffer y del staging.</p>
+        <div class="products" id="productsList">
+          <div class="empty">Esperando productos...</div>
         </div>
       </section>
 
       <aside class="panel">
         <h2 style="margin-top:0;">Actividad reciente</h2>
-        <ul class="logs">
-          $logsHtml
+        <ul class="logs" id="logsList">
+          <li>Esperando actividad...</li>
         </ul>
       </aside>
     </section>
   </div>
+
+  <script>
+    (() => {
+      const stateUrl = "./state.json";
+      const storageKey = "carrefour-manual-resume";
+      const scriptPath = $resumeScriptPathJson;
+      const defaultResumeCategory = $defaultResumeCategoryJson;
+      const defaultResumePage = $defaultResumePageJson;
+      let suggestedResume = {
+        categoryUrl: defaultResumeCategory,
+        pageNumber: defaultResumePage,
+      };
+      let hasStoredResume = false;
+
+      const phaseValue = document.getElementById("phaseValue");
+      const runValue = document.getElementById("runValue");
+      const extractedValue = document.getElementById("extractedValue");
+      const pageValue = document.getElementById("pageValue");
+      const progressChips = document.getElementById("progressChips");
+      const statusChips = document.getElementById("statusChips");
+      const categoryValue = document.getElementById("categoryValue");
+      const timestampsValue = document.getElementById("timestampsValue");
+      const heroLinks = document.getElementById("heroLinks");
+      const productsList = document.getElementById("productsList");
+      const logsList = document.getElementById("logsList");
+      const errorBox = document.getElementById("errorBox");
+      const connectionBadge = document.getElementById("connectionBadge");
+      const categoryInput = document.getElementById("resumeCategoryUrl");
+      const pageInput = document.getElementById("resumePageNumber");
+      const preview = document.getElementById("resumeCommandPreview");
+      const copyButton = document.getElementById("copyResumeCommand");
+      const resetButton = document.getElementById("resetResumeDefaults");
+      const refreshButton = document.getElementById("refreshViewer");
+
+      try {
+        const stored = JSON.parse(localStorage.getItem(storageKey) || "null");
+        if (stored && typeof stored === "object") {
+          if (typeof stored.categoryUrl === "string" && stored.categoryUrl.trim()) {
+            categoryInput.value = stored.categoryUrl.trim();
+            hasStoredResume = true;
+          }
+          if (Number.isFinite(Number(stored.pageNumber)) && Number(stored.pageNumber) > 0) {
+            pageInput.value = String(Math.max(1, Number(stored.pageNumber)));
+            hasStoredResume = true;
+          }
+        }
+      } catch (_) {
+      }
+
+      function escapeHtml(value) {
+        return String(value ?? "")
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/\"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      }
+
+      function formatDate(value) {
+        if (!value) {
+          return "sin datos";
+        }
+        const parsed = new Date(value);
+        if (Number.isNaN(parsed.getTime())) {
+          return String(value);
+        }
+        return parsed.toLocaleString("es-AR", { hour12: false });
+      }
+
+      function buildResumeValues() {
+        const categoryUrl = (categoryInput.value || suggestedResume.categoryUrl || defaultResumeCategory).trim() || defaultResumeCategory;
+        const rawPage = Number.parseInt(pageInput.value || String(suggestedResume.pageNumber || defaultResumePage), 10);
+        const pageNumber = Math.max(1, Number.isFinite(rawPage) ? rawPage : defaultResumePage);
+        return { categoryUrl, pageNumber };
+      }
+
+      const updateResumeCommand = () => {
+        const values = buildResumeValues();
+        const command =
+          'powershell -ExecutionPolicy Bypass -File "' +
+          scriptPath +
+          '" -ResumeCategoryUrl "' +
+          values.categoryUrl +
+          '" -ResumePageNumber ' +
+          values.pageNumber;
+
+        preview.textContent = command;
+        try {
+          localStorage.setItem(
+            storageKey,
+            JSON.stringify(values),
+          );
+        } catch (_) {
+        }
+      };
+
+      function renderChips(container, chips) {
+        container.innerHTML = chips.join("");
+      }
+
+      function renderLinks(data) {
+        const links = [];
+        if (data.reviewUrl) {
+          links.push('<a href="' + escapeHtml(data.reviewUrl) + '" target="_blank" rel="noreferrer">Abrir review final</a>');
+        }
+        if (data.currentPageUrl) {
+          links.push('<a href="' + escapeHtml(data.currentPageUrl) + '" target="_blank" rel="noreferrer">Abrir pagina actual</a>');
+        }
+        if (data.bufferPath) {
+          links.push('<span class="muted">Buffer: ' + escapeHtml(data.bufferPath) + "</span>");
+        }
+        heroLinks.innerHTML = links.length ? links.join("") : '<span class="muted">Todavia no hay links disponibles.</span>';
+      }
+
+      function renderProducts(products) {
+        if (!Array.isArray(products) || !products.length) {
+          productsList.innerHTML = '<div class="empty">Todavia no hay productos listos para mostrar.</div>';
+          return;
+        }
+
+        productsList.innerHTML = products.map((product) => {
+          const imageHtml = product.image
+            ? '<img src="' + escapeHtml(product.image) + '" alt="preview" />'
+            : '<div class="image-placeholder">Sin imagen</div>';
+          const status = escapeHtml(product.syncStatus || "PENDING");
+          const category = escapeHtml(product.categoryName || "Sin categoria");
+          const presentation = escapeHtml(product.presentation || "Sin presentacion");
+          const barcode = escapeHtml(product.barcode || "(sin EAN)");
+          const sourceLink = product.sourceUrl
+            ? '<a href="' + escapeHtml(product.sourceUrl) + '" target="_blank" rel="noreferrer">Ver origen</a>'
+            : '<span class="muted">Sin origen</span>';
+
+          return ''
+            + '<article class="product-card">'
+            + '  <div class="product-image">' + imageHtml + '</div>'
+            + '  <div class="product-body">'
+            + '    <div class="product-top">'
+            + '      <div>'
+            + '        <h3>' + escapeHtml(product.name || "Sin nombre") + '</h3>'
+            + '        <p class="muted">' + barcode + '</p>'
+            + '      </div>'
+            + '      <span class="pill">' + status + '</span>'
+            + '    </div>'
+            + '    <p class="meta">' + category + ' | ' + presentation + '</p>'
+            + '    <div class="product-footer">'
+            + '      <span class="muted">ID: ' + escapeHtml(product.id || "-") + '</span>'
+            +        sourceLink
+            + '    </div>'
+            + '  </div>'
+            + '</article>';
+        }).join("");
+      }
+
+      function renderLogs(logs) {
+        if (!Array.isArray(logs) || !logs.length) {
+          logsList.innerHTML = "<li>Esperando actividad...</li>";
+          return;
+        }
+        logsList.innerHTML = logs.map((line) => "<li>" + escapeHtml(line) + "</li>").join("");
+      }
+
+      function renderDashboard(data) {
+        phaseValue.textContent = data.phase || "Preparando";
+        runValue.textContent = data.runId || "Todavia sin run id";
+        extractedValue.textContent = String(data.extractedCount || 0);
+        pageValue.textContent = data.currentPageNumber ? String(data.currentPageNumber) : "-";
+
+        const categoryLabel = data.currentCategoryUrl || "Esperando categoria";
+        categoryValue.textContent = "Categoria actual: " + categoryLabel;
+        timestampsValue.textContent = "Ultima actualizacion: " + formatDate(data.lastUpdated) + " | Inicio: " + formatDate(data.startedAt);
+
+        renderChips(progressChips, [
+          '<span class="pill warn">En buffer: ' + escapeHtml(data.bufferedCount || 0) + "</span>",
+          '<span class="pill ok">En staging: ' + escapeHtml(data.stagedCount || 0) + "</span>",
+          '<span class="pill">Pendientes: ' + escapeHtml(data.pendingCount || 0) + "</span>",
+          '<span class="pill">Categorias: ' + escapeHtml(data.currentCategoryIndex || 0) + " / " + escapeHtml(data.categoriesTotal || 0) + "</span>",
+        ]);
+
+        const statusEntries = Object.entries(data.statusCounts || {});
+        if (statusEntries.length) {
+          renderChips(statusChips, statusEntries.map(([key, value]) => {
+            return '<span class="pill">' + escapeHtml(key) + ": " + escapeHtml(value) + "</span>";
+          }));
+        } else {
+          renderChips(statusChips, ['<span class="pill">Sin resumen todavia</span>']);
+        }
+
+        renderLinks(data);
+        renderProducts(data.products || []);
+        renderLogs(data.logs || []);
+
+        if (data.error) {
+          errorBox.style.display = "block";
+          errorBox.textContent = data.error;
+        } else {
+          errorBox.style.display = "none";
+          errorBox.textContent = "";
+        }
+
+        if (data.suggestedResume && typeof data.suggestedResume === "object") {
+          suggestedResume = {
+            categoryUrl: (data.suggestedResume.categoryUrl || defaultResumeCategory),
+            pageNumber: Math.max(1, Number(data.suggestedResume.pageNumber || defaultResumePage)),
+          };
+          if (!hasStoredResume && !categoryInput.value) {
+            categoryInput.value = suggestedResume.categoryUrl;
+          }
+          if (!hasStoredResume && !pageInput.value) {
+            pageInput.value = String(suggestedResume.pageNumber);
+          }
+        }
+
+        updateResumeCommand();
+      }
+
+      async function loadDashboardState() {
+        try {
+          const response = await fetch(stateUrl + "?ts=" + Date.now(), { cache: "no-store" });
+          if (!response.ok) {
+            throw new Error("HTTP " + response.status);
+          }
+          const data = await response.json();
+          connectionBadge.textContent = "Visor conectado";
+          connectionBadge.classList.remove("offline");
+          renderDashboard(data || {});
+        } catch (error) {
+          connectionBadge.textContent = "Sin conexion con el visor local";
+          connectionBadge.classList.add("offline");
+          if (!productsList.children.length) {
+            productsList.innerHTML = '<div class="empty">No pude leer state.json todavia.</div>';
+          }
+        }
+      }
+
+      categoryInput.addEventListener("input", updateResumeCommand);
+      pageInput.addEventListener("input", updateResumeCommand);
+      refreshButton.addEventListener("click", loadDashboardState);
+      resetButton.addEventListener("click", () => {
+        hasStoredResume = false;
+        categoryInput.value = suggestedResume.categoryUrl || defaultResumeCategory;
+        pageInput.value = String(suggestedResume.pageNumber || defaultResumePage);
+        updateResumeCommand();
+      });
+      copyButton.addEventListener("click", async () => {
+        updateResumeCommand();
+        try {
+          await navigator.clipboard.writeText(preview.textContent);
+          const previous = copyButton.textContent;
+          copyButton.textContent = "Copiado";
+          setTimeout(() => {
+            copyButton.textContent = previous;
+          }, 1400);
+        } catch (_) {
+          copyButton.textContent = "Copialo manual";
+        }
+      });
+
+      updateResumeCommand();
+      loadDashboardState();
+      setInterval(loadDashboardState, 2000);
+    })();
+  </script>
 </body>
 </html>
 "@
 
     Set-Content -Path $dashboardPath -Value $html -Encoding UTF8
+}
+
+function Write-DashboardHtml {
+    Write-DashboardShellHtml
+
+    $reviewUrl = Get-FileUrl $state.ReviewPath
+    $resumeScriptPath = Join-Path $scraperRoot "scripts\run-carrefour-review.ps1"
+    $suggestedResumeCategory = if ($state.CurrentCategoryUrl) {
+        $state.CurrentCategoryUrl
+    } else {
+        "https://www.carrefour.com.ar/bebidas"
+    }
+    $suggestedResumePage = if ($state.CurrentPageNumber) {
+        [Math]::Max(([int]$state.CurrentPageNumber + 1), 1)
+    } else {
+        16
+    }
+
+    $products = @($state.Products)
+    [array]::Reverse($products)
+    $products = @($products | Select-Object -First 48)
+
+    $logs = @($state.Logs)
+    [array]::Reverse($logs)
+    $logs = @($logs | Select-Object -First 20)
+
+    $payload = [ordered]@{
+        phase = [string]$state.Phase
+        startedAt = if ($state.StartedAt) { $state.StartedAt.ToString("o") } else { $null }
+        lastUpdated = if ($state.LastUpdated) { $state.LastUpdated.ToString("o") } else { $null }
+        runId = [string]$state.RunId
+        bufferPath = [string]$state.BufferPath
+        categoriesTotal = [int]$state.CategoriesTotal
+        currentCategoryIndex = [int]$state.CurrentCategoryIndex
+        currentCategoryUrl = [string]$state.CurrentCategoryUrl
+        currentPageNumber = $state.CurrentPageNumber
+        currentPageUrl = [string]$state.CurrentPageUrl
+        extractedCount = [int]$state.ExtractedCount
+        bufferedCount = [int]$state.BufferedCount
+        stagedCount = [int]$state.StagedCount
+        pendingCount = [int]$state.PendingCount
+        statusCounts = $state.StatusCounts
+        products = $products
+        logs = $logs
+        reviewUrl = [string]$reviewUrl
+        error = [string]$state.Error
+        suggestedResume = [ordered]@{
+            scriptPath = $resumeScriptPath
+            categoryUrl = $suggestedResumeCategory
+            pageNumber = [int]$suggestedResumePage
+        }
+    }
+
+    $json = $payload | ConvertTo-Json -Depth 8
+    [System.IO.File]::WriteAllText($dashboardStatePath, $json, $utf8NoBom)
 }
 
 function Update-StateFromLine {
@@ -735,7 +1190,7 @@ function Update-StateFromLine {
 
 Write-DashboardHtml
 if (-not $NoOpen) {
-    Start-Process $dashboardPath
+    Start-Process (Get-DashboardBaseUrl)
 }
 
 $resumeRunId = $null
@@ -772,11 +1227,19 @@ if ($resumeRunId) {
     $scanArgs += @("--resume-run-id", $resumeRunId)
 }
 
+if ($PSBoundParameters.ContainsKey('ResumeCategoryUrl')) {
+    $scanArgs += @("--resume-category-url", $ResumeCategoryUrl.Trim())
+    $scanArgs += @("--resume-page-number", [Math]::Max($ResumePageNumber, 1))
+}
+
 if ($PSBoundParameters.ContainsKey('Limit')) {
     $scanArgs += @("--limit", $Limit)
 }
 
-if ($resumeRunId) {
+if ($resumeRunId -and $PSBoundParameters.ContainsKey('ResumeCategoryUrl')) {
+    Write-Host "Reanudando scan de Carrefour desde $ResumeCategoryUrl pagina $ResumePageNumber..." -ForegroundColor Cyan
+    Add-Log "Resume manual activo: $ResumeCategoryUrl pagina $ResumePageNumber."
+} elseif ($resumeRunId) {
     Write-Host "Reanudando scan de Carrefour desde el ultimo checkpoint..." -ForegroundColor Cyan
 } else {
     Write-Host "Iniciando scan de Carrefour..." -ForegroundColor Cyan

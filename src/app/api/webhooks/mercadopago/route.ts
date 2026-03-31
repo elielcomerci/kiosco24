@@ -9,6 +9,7 @@ import { SubscriptionStatus } from "@prisma/client";
 type MpWebhookPayload = {
   action?: string | null;
   type?: string | null;
+  topic?: string | null;
   user_id?: string | number | null;
   data?: {
     id?: string | number | null;
@@ -108,14 +109,18 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const action = String(body.action || body.type || "");
+    const webhookTopics = collectWebhookTopics(req, body);
 
-    if (action === "subscription_preapproval") {
+    if (webhookTopics.has("subscription_preapproval")) {
       await handleSubscriptionPreapproval(body);
-    } else if (action === "payment" || action.startsWith("payment")) {
+    } else if ([...webhookTopics].some((topic) => topic === "payment" || topic.startsWith("payment"))) {
       await handleIncomingPayment(body);
+    } else if (webhookTopics.has("subscription_authorized_payment")) {
+      console.log(
+        `[MP Webhook] subscription_authorized_payment recibido (${optionalString(body.data?.id) ?? "sin id"}).`,
+      );
     } else {
-      console.log(`[MP Webhook] Evento ignorado: ${action}`);
+      console.log(`[MP Webhook] Evento ignorado: ${[...webhookTopics].join(", ") || "sin tipo"}`);
     }
 
     return NextResponse.json({ received: true });
@@ -364,4 +369,20 @@ function optionalString(value: unknown) {
   }
 
   return null;
+}
+
+function collectWebhookTopics(req: NextRequest, body: MpWebhookPayload) {
+  const rawTopics = [
+    body.action,
+    body.type,
+    body.topic,
+    req.nextUrl.searchParams.get("type"),
+    req.nextUrl.searchParams.get("topic"),
+  ];
+
+  return new Set(
+    rawTopics
+      .map((value) => optionalString(value)?.toLowerCase())
+      .filter((value): value is string => Boolean(value)),
+  );
 }

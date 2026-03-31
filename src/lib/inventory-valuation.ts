@@ -56,8 +56,8 @@ function buildRowKey(productId: string, variantId: string | null) {
   return `${productId}:${variantId ?? "base"}`;
 }
 
-function buildPriceKey(branchId: string, productId: string) {
-  return `${branchId}:${productId}`;
+function buildPriceKey(branchId: string, productId: string, variantId?: string | null) {
+  return `${branchId}:${productId}:${variantId ?? "base"}`;
 }
 
 function roundMoney(value: number) {
@@ -341,7 +341,18 @@ export async function getInventoryValuation(input: {
 
   for (const inventory of inventoryRecords) {
     const safePrice = Number.isFinite(inventory.price) && inventory.price > 0 ? inventory.price : null;
-    priceByBranchProduct.set(buildPriceKey(inventory.branchId, inventory.productId), safePrice);
+    priceByBranchProduct.set(buildPriceKey(inventory.branchId, inventory.productId, null), safePrice);
+  }
+
+  for (const inventory of variantStocks) {
+    const safePrice =
+      typeof inventory.price === "number" && Number.isFinite(inventory.price) && inventory.price > 0
+        ? inventory.price
+        : null;
+    priceByBranchProduct.set(
+      buildPriceKey(inventory.branchId, inventory.variant.product.id, inventory.variantId),
+      safePrice,
+    );
   }
 
   for (const inventory of inventoryRecords) {
@@ -367,7 +378,8 @@ export async function getInventoryValuation(input: {
     row.actualStock += actualStock;
     branchSnapshot.actualStock += actualStock;
     branchSnapshot.sellableStock += Math.max(actualStock, 0);
-    branchSnapshot.currentPrice = priceByBranchProduct.get(buildPriceKey(inventory.branchId, inventory.productId)) ?? null;
+    branchSnapshot.currentPrice =
+      priceByBranchProduct.get(buildPriceKey(inventory.branchId, inventory.productId, null)) ?? null;
   }
 
   for (const inventory of variantStocks) {
@@ -394,7 +406,9 @@ export async function getInventoryValuation(input: {
     branchSnapshot.actualStock += actualStock;
     branchSnapshot.sellableStock += Math.max(actualStock, 0);
     branchSnapshot.currentPrice =
-      priceByBranchProduct.get(buildPriceKey(inventory.branchId, inventory.variant.product.id)) ?? null;
+      priceByBranchProduct.get(buildPriceKey(inventory.branchId, inventory.variant.product.id, inventory.variantId)) ??
+      priceByBranchProduct.get(buildPriceKey(inventory.branchId, inventory.variant.product.id, null)) ??
+      null;
   }
 
   for (const layer of layers) {
@@ -430,7 +444,9 @@ export async function getInventoryValuation(input: {
     branchSnapshot.valuedCapital += layer.remainingQuantity * layer.unitCost;
     branchSnapshot.layersCount += 1;
     branchSnapshot.currentPrice =
-      priceByBranchProduct.get(buildPriceKey(layer.branchId, layer.productId)) ?? branchSnapshot.currentPrice;
+      priceByBranchProduct.get(buildPriceKey(layer.branchId, layer.productId, layer.variantId ?? null)) ??
+      priceByBranchProduct.get(buildPriceKey(layer.branchId, layer.productId, null)) ??
+      branchSnapshot.currentPrice;
 
     if (!row.latestReceivedAt || layer.receivedAt > row.latestReceivedAt) {
       row.latestReceivedAt = layer.receivedAt;
@@ -457,7 +473,9 @@ export async function getInventoryValuation(input: {
     branchSnapshot.pendingUnits += item.quantity;
     branchSnapshot.pendingLines += 1;
     branchSnapshot.currentPrice =
-      priceByBranchProduct.get(buildPriceKey(item.restockEvent.branchId, item.productId)) ?? branchSnapshot.currentPrice;
+      priceByBranchProduct.get(buildPriceKey(item.restockEvent.branchId, item.productId, item.variantId ?? null)) ??
+      priceByBranchProduct.get(buildPriceKey(item.restockEvent.branchId, item.productId, null)) ??
+      branchSnapshot.currentPrice;
   }
 
   for (const reservation of negativeReservations) {
@@ -480,7 +498,9 @@ export async function getInventoryValuation(input: {
     branchSnapshot.negativePendingUnits += reservation.quantityPending;
     branchSnapshot.negativeReservations += 1;
     branchSnapshot.currentPrice =
-      priceByBranchProduct.get(buildPriceKey(reservation.branchId, reservation.productId)) ?? branchSnapshot.currentPrice;
+      priceByBranchProduct.get(buildPriceKey(reservation.branchId, reservation.productId, reservation.variantId ?? null)) ??
+      priceByBranchProduct.get(buildPriceKey(reservation.branchId, reservation.productId, null)) ??
+      branchSnapshot.currentPrice;
   }
 
   const products = [...rows.values()]

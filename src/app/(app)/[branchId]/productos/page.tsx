@@ -13,6 +13,7 @@ import {
 import BarcodeScanner from "@/components/caja/BarcodeScanner";
 import CategoryModal, { type CategoryRecord } from "@/components/config/CategoryModal";
 import CatalogSpreadsheetModal from "@/components/products/CatalogSpreadsheetModal";
+import BulkVariantGroupModal, { type BulkVariantGroupPayload } from "@/components/products/BulkVariantGroupModal";
 import InventoryValuationModal from "@/components/products/InventoryValuationModal";
 import ProductThumb from "@/components/products/ProductThumb";
 import ProductsActionsMenu from "@/components/products/ProductsActionsMenu";
@@ -32,9 +33,13 @@ interface Variant {
   id?: string;
   name: string;
   barcode: string | null;
+  internalCode?: string | null;
+  price?: number | null;
+  cost?: number | null;
   stock: number | null;
   availableStock?: number | null;
   minStock: number | null;
+  readyForSale?: boolean;
   isNegativeStock?: boolean;
   isOutOfStock?: boolean;
   isBelowMinStock?: boolean;
@@ -48,6 +53,9 @@ interface Product {
   id: string;
   name: string;
   price: number;
+  priceMin?: number;
+  priceMax?: number;
+  hasVariablePrices?: boolean;
   cost: number | null;
   emoji: string | null;
   barcode: string | null;
@@ -265,6 +273,10 @@ function getProductStockBadge(product: Product) {
 }
 
 function renderStockBadge(product: Product) {
+  if (!product.variants || product.variants.length === 0) {
+    return null;
+  }
+
   const badge = getProductStockBadge(product);
   if (!badge) {
     return null;
@@ -324,6 +336,8 @@ function renderProductStockSummary(product: Product) {
     return null;
   }
 
+  const isVariantProduct = Boolean(product.variants && product.variants.length > 0);
+
   const tone =
     typeof totalStock === "number" && totalStock < 0
       ? {
@@ -345,8 +359,20 @@ function renderProductStockSummary(product: Product) {
 
   const availableHint =
     typeof product.availableStock === "number" && product.availableStock !== product.stock
-      ? ` · Vendible ${product.availableStock}`
+      ? ` - Vendible ${product.availableStock}`
       : "";
+
+  const statusHint = !isVariantProduct
+    ? product.isNegativeStock
+      ? " - Negativo"
+      : product.isOutOfStock
+        ? " - Sin stock"
+        : product.isBelowMinStock
+          ? typeof product.minStock === "number" && product.minStock > 0
+            ? ` - Bajo min. ${product.minStock}`
+            : " - Bajo minimo"
+          : ""
+    : "";
 
   return (
     <div
@@ -368,6 +394,7 @@ function renderProductStockSummary(product: Product) {
       <span style={{ letterSpacing: ".02em", textTransform: "uppercase", opacity: 0.86 }}>Stock</span>
       <span style={{ fontVariantNumeric: "tabular-nums" }}>{totalStock}</span>
       {availableHint && <span style={{ fontWeight: 700, opacity: 0.92 }}>{availableHint}</span>}
+      {statusHint && <span style={{ fontWeight: 700, opacity: 0.92 }}>{statusHint}</span>}
     </div>
   );
 }
@@ -533,6 +560,16 @@ function ProductModal({
   const toNum = (v: string) => {
     const n = parseFloat(v);
     return isNaN(n) ? null : n;
+  };
+
+  const updateVariant = (index: number, changes: Partial<Variant>) => {
+    setVariants((prev) =>
+      prev.map((variant, variantIndex) =>
+        variantIndex === index
+          ? { ...variant, ...changes }
+          : variant,
+      ),
+    );
   };
 
   const findCategoryByName = (categoryName: string, sourceCategories: Category[] = categories) => {
@@ -820,6 +857,9 @@ function ProductModal({
         id: v.id,
         name: v.name.trim(),
         barcode: v.barcode?.trim() || null,
+        internalCode: v.internalCode?.trim() || null,
+        price: isInlineCreateOnly ? null : toNum(v.price?.toString() || ""),
+        cost: isInlineCreateOnly ? null : toNum(v.cost?.toString() || ""),
         stock: isInlineCreateOnly ? null : toNum(v.stock?.toString() || ""),
         minStock: toNum(v.minStock?.toString() || "")
       })).filter(v => v.name) : []
@@ -1623,18 +1663,24 @@ function ProductModal({
             <div>
               {isInlineCreateOnly
                 ? "Armá la ficha y volvés al ingreso para cargar cantidad, costo y precio sin salir del flujo."
-                : "Completa precio, costo y stock para venderlo."}
+                : hasVariants
+                  ? "Cada variante lleva su propio precio, costo, stock y codigo."
+                  : "Completa precio, costo y stock para venderlo."}
             </div>
             {!isInlineCreateOnly && (
               <div style={{ marginTop: "6px" }}>
-                {pricingMode === "SHARED"
-                  ? "Precio y costo: todas las sucursales."
-                  : "Precio y costo: solo esta sucursal."}
+                {hasVariants
+                  ? pricingMode === "SHARED"
+                    ? "Los precios y costos de variantes se comparten entre sucursales."
+                    : "Los precios y costos de variantes se manejan por sucursal."
+                  : pricingMode === "SHARED"
+                    ? "Precio y costo: todas las sucursales."
+                    : "Precio y costo: solo esta sucursal."}
               </div>
             )}
           </div>
 
-          {!isInlineCreateOnly && (
+          {!isInlineCreateOnly && !hasVariants && (
             <div style={{ display: "grid", gridTemplateColumns: isInlineCreateOnly ? "1fr" : "1fr 1fr", gap: "10px", marginBottom: "12px" }}>
               <div>
                 <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase" }}>Precio</label>
@@ -1703,11 +1749,7 @@ function ProductModal({
                      className="input" 
                      placeholder="Nombre variante (ej: Naranja) *" 
                      value={v.name} 
-                     onChange={(e) => {
-                       const newV = [...variants];
-                       newV[i].name = e.target.value;
-                       setVariants(newV);
-                     }} 
+                     onChange={(e) => updateVariant(i, { name: e.target.value })} 
                      style={{flex: 1}} 
                    />
                    <button 
@@ -1726,18 +1768,53 @@ function ProductModal({
                  </div>
                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
                     <div>
+                      <label style={{ fontSize: "10px", color: "var(--text-3)", textTransform: "uppercase", fontWeight: 600 }}>CODIGO INTERNO</label>
+                      <input
+                        className="input"
+                        placeholder="Interno..."
+                        value={v.internalCode || ""}
+                        onChange={(e) => updateVariant(i, { internalCode: e.target.value })}
+                      />
+                    </div>
+                    <div>
                       <label style={{ fontSize: "10px", color: "var(--text-3)", textTransform: "uppercase", fontWeight: 600 }}>CÓDIGO (OPCIONAL)</label>
                       <input 
                         className="input" 
                         placeholder="Código..." 
                         value={v.barcode || ""} 
-                        onChange={(e) => {
-                          const newV = [...variants];
-                          newV[i].barcode = e.target.value;
-                          setVariants(newV);
-                        }} 
+                        onChange={(e) => updateVariant(i, { barcode: e.target.value })} 
                       />
                     </div>
+                 </div>
+                 <div style={{ display: "grid", gridTemplateColumns: isInlineCreateOnly ? "1fr 1fr" : "1fr 1fr 1fr 1fr", gap: "8px", marginTop: "8px" }}>
+                    {!isInlineCreateOnly && (
+                      <>
+                        <div>
+                          <label style={{ fontSize: "10px", color: "var(--text-3)", textTransform: "uppercase", fontWeight: 600 }}>PRECIO</label>
+                          <input
+                            className="input"
+                            type="number"
+                            inputMode="decimal"
+                            placeholder="0"
+                            value={v.price?.toString() || ""}
+                            onChange={(e) => updateVariant(i, { price: e.target.value ? parseFloat(e.target.value) : null })}
+                            style={{ textAlign: "right" }}
+                          />
+                        </div>
+                        <div>
+                          <label style={{ fontSize: "10px", color: "var(--text-3)", textTransform: "uppercase", fontWeight: 600 }}>COSTO</label>
+                          <input
+                            className="input"
+                            type="number"
+                            inputMode="decimal"
+                            placeholder="0"
+                            value={v.cost?.toString() || ""}
+                            onChange={(e) => updateVariant(i, { cost: e.target.value ? parseFloat(e.target.value) : null })}
+                            style={{ textAlign: "right" }}
+                          />
+                        </div>
+                      </>
+                    )}
                     {!isInlineCreateOnly && (
                       <div>
                         <label style={{ fontSize: "10px", color: "var(--text-3)", textTransform: "uppercase", fontWeight: 600 }}>STOCK</label>
@@ -1746,15 +1823,22 @@ function ProductModal({
                           type="number" 
                           placeholder="Stock..." 
                           value={v.stock?.toString() || ""} 
-                          onChange={(e) => {
-                            const newV = [...variants];
-                            newV[i].stock = e.target.value ? parseInt(e.target.value) : null;
-                            setVariants(newV);
-                          }} 
+                          onChange={(e) => updateVariant(i, { stock: e.target.value ? parseInt(e.target.value, 10) : null })} 
                           disabled={Boolean(v.id && v.hasTrackedLots)}
                         />
                       </div>
                     )}
+                    <div>
+                      <label style={{ fontSize: "10px", color: "var(--text-3)", textTransform: "uppercase", fontWeight: 600 }}>MINIMO</label>
+                      <input
+                        className="input"
+                        type="number"
+                        placeholder="0"
+                        value={v.minStock?.toString() || ""}
+                        onChange={(e) => updateVariant(i, { minStock: e.target.value ? parseInt(e.target.value, 10) : null })}
+                        style={{ textAlign: "right" }}
+                      />
+                    </div>
                  </div>
                  {!isNew && !v.hasTrackedLots && currentVariantStock < 0 && (
                    <div
@@ -1810,7 +1894,20 @@ function ProductModal({
             <button 
               className="btn btn-sm btn-ghost" 
               style={{ border: "1px dashed var(--border)", padding: "8px" }}
-              onClick={() => setVariants([...variants, {name: "", barcode: null, stock: null, minStock: null}])}
+              onClick={() =>
+                setVariants([
+                  ...variants,
+                  {
+                    name: "",
+                    barcode: null,
+                    internalCode: null,
+                    price: toNum(price),
+                    cost: toNum(cost),
+                    stock: null,
+                    minStock: null,
+                  },
+                ])
+              }
             >
               + Agregar Variante
             </button>
@@ -3950,8 +4047,10 @@ export default function ProductosPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [showBulkCategoryModal, setShowBulkCategoryModal] = useState(false);
+  const [showBulkVariantGroupModal, setShowBulkVariantGroupModal] = useState(false);
   const [bulkCategoryId, setBulkCategoryId] = useState("");
   const [bulking, setBulking] = useState(false);
+  const [groupingVariants, setGroupingVariants] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -4060,6 +4159,13 @@ export default function ProductosPage() {
     return matchSearch && matchVisibility;
   });
 
+  const selectedProducts = useMemo(
+    () => products.filter((product) => selected.has(product.id)),
+    [products, selected],
+  );
+  const canGroupSelected =
+    selectedProducts.length >= 2 &&
+    selectedProducts.every((product) => (product.variants?.length ?? 0) === 0);
   const linkedPlatformProductsCount = products.filter((product) => Boolean(product.platformProductId)).length;
 
   const handleApplyUpdate = async () => {
@@ -4215,6 +4321,46 @@ export default function ProductosPage() {
     setSelectionMode(false);
     setSelected(new Set());
     fetchProducts();
+  };
+
+  const handleBulkGroupVariants = async (payload: BulkVariantGroupPayload) => {
+    if (selectedProducts.length < 2) {
+      return;
+    }
+
+    setGroupingVariants(true);
+    try {
+      const response = await fetch("/api/productos/group-variants", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-branch-id": branchId,
+        },
+        body: JSON.stringify({
+          productIds: selectedProducts.map((product) => product.id),
+          baseProductId: payload.baseProductId,
+          parentName: payload.parentName,
+          variants: payload.variants,
+        }),
+      });
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        alert(data?.error || "No se pudieron agrupar los productos.");
+        return;
+      }
+
+      setShowBulkVariantGroupModal(false);
+      setSelectionMode(false);
+      setSelected(new Set());
+      await fetchProducts();
+      alert(`Listo. Se creó "${data?.product?.name ?? payload.parentName}" con variantes.`);
+    } catch (error) {
+      console.error(error);
+      alert("No se pudieron agrupar los productos.");
+    } finally {
+      setGroupingVariants(false);
+    }
   };
 
   const handleProductModalSave = async (payload?: ProductModalSavePayload) => {
@@ -4494,7 +4640,9 @@ export default function ProductosPage() {
                       fontVariantNumeric: "tabular-nums",
                     }}
                   >
-                    {formatARS(p.price)}
+                    {p.hasVariablePrices && typeof p.priceMax === "number" && p.priceMax > p.price
+                      ? `${formatARS(p.price)} - ${formatARS(p.priceMax)}`
+                      : formatARS(p.price)}
                   </div>
                 </div>
               </button>
@@ -4622,7 +4770,7 @@ export default function ProductosPage() {
 
           {/* Bulk Actions — shown only when at least 1 is selected */}
           {selected.size > 0 && (
-            <div style={{ display: "flex", gap: "8px" }}>
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
               <button
                 className="btn btn-ghost"
                 style={{
@@ -4634,6 +4782,22 @@ export default function ProductosPage() {
                 onClick={() => setShowBulkCategoryModal(true)}
               >
                 🏷️ Asignar Categoría
+              </button>
+
+              <button
+                className="btn btn-ghost"
+                style={{
+                  border: "1px solid var(--border)",
+                  fontWeight: 700,
+                  flex: 1,
+                  fontSize: "14px",
+                  opacity: canGroupSelected ? 1 : 0.6,
+                }}
+                onClick={() => setShowBulkVariantGroupModal(true)}
+                disabled={!canGroupSelected}
+                title={canGroupSelected ? undefined : "Selecciona al menos 2 productos simples para agruparlos como variantes."}
+              >
+                Agrupar variantes
               </button>
 
               <button
@@ -4694,6 +4858,19 @@ export default function ProductosPage() {
             </div>
           </div>
         </ModalPortal>
+      )}
+
+      {showBulkVariantGroupModal && (
+        <BulkVariantGroupModal
+          products={selectedProducts}
+          loading={groupingVariants}
+          onClose={() => {
+            if (!groupingVariants) {
+              setShowBulkVariantGroupModal(false);
+            }
+          }}
+          onConfirm={(payload) => void handleBulkGroupVariants(payload)}
+        />
       )}
 
       {showPlatformSyncModal && (

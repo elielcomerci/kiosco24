@@ -145,7 +145,16 @@ async function buildSaleSnapshot(
         throw new RouteError("El producto de una variante del ticket ya no existe en esta sucursal.");
       }
 
-      if (!Number.isFinite(productInventory.price) || productInventory.price <= 0) {
+      const salePrice =
+        typeof variantInventory.price === "number" && Number.isFinite(variantInventory.price)
+          ? variantInventory.price
+          : productInventory.price;
+      const saleCost =
+        typeof variantInventory.cost === "number" && Number.isFinite(variantInventory.cost)
+          ? variantInventory.cost
+          : productInventory.cost;
+
+      if (!Number.isFinite(salePrice) || salePrice <= 0) {
         throw new RouteError(`${variantInventory.variant.product.name} todavia no tiene precio de venta.`);
       }
 
@@ -153,9 +162,9 @@ async function buildSaleSnapshot(
         productId: variantInventory.variant.productId,
         variantId: variantInventory.variant.id,
         name: `${variantInventory.variant.product.name} - ${variantInventory.variant.name}`,
-        price: roundMoney(productInventory.price),
+        price: roundMoney(salePrice),
         quantity,
-        cost: typeof productInventory.cost === "number" ? roundMoney(productInventory.cost) : null,
+        cost: typeof saleCost === "number" ? roundMoney(saleCost) : null,
       });
 
       const key = `variant:${variantInventory.id}`;

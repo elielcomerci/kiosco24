@@ -352,6 +352,7 @@ model Variant {
   id        String   @id @default(cuid())
   name      String
   barcode   String?
+  internalCode String?
   productId String
   product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
@@ -366,12 +367,15 @@ model Variant {
 
   @@index([productId])
   @@index([barcode])
+  @@index([internalCode])
 }
 
 model VariantInventory {
   id       String @id @default(cuid())
   stock    Int?
   minStock Int?
+  price    Float?
+  cost     Float?
 
   variantId String
   variant   Variant @relation(fields: [variantId], references: [id], onDelete: Cascade)

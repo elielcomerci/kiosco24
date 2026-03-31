@@ -184,31 +184,17 @@ export async function POST(req: Request) {
               variantId: item.variantId,
               branchId,
               stock: nextStock,
+              price: item.salePrice ?? null,
+              cost: item.unitCost ?? null,
             },
             update: {
               stock: nextStock,
+              ...(item.salePrice !== null ? { price: item.salePrice } : {}),
+              ...(item.unitCost !== null ? { cost: item.unitCost } : {}),
             },
           });
 
-          if (pricingPatch) {
-            await tx.inventoryRecord.upsert({
-              where: {
-                productId_branchId: {
-                  productId: item.productId,
-                  branchId,
-                },
-              },
-              create: {
-                productId: item.productId,
-                branchId,
-                price: item.salePrice ?? 0,
-                cost: item.unitCost ?? null,
-                stock: 0,
-                minStock: 0,
-                showInGrid: true,
-              },
-              update: pricingPatch,
-            });
+          if (pricingMode === "SHARED" && pricingPatch) {
             pricingChanges.set(item.productId, {
               ...(item.salePrice !== null ? { price: item.salePrice } : {}),
               ...(item.unitCost !== null ? { cost: item.unitCost } : {}),

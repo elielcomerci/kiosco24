@@ -34,6 +34,26 @@ export async function syncSharedPricingFromBranch(
   });
 
   if (sourceRecords.length === 0) {
+    // Continue: variants can still have pricing even if base records are empty.
+  }
+
+  const sourceVariantRecords = await tx.variantInventory.findMany({
+    where: {
+      branchId: input.sourceBranchId,
+      variant: {
+        ...(input.productIds && input.productIds.length > 0
+          ? { productId: { in: input.productIds } }
+          : {}),
+      },
+    },
+    select: {
+      variantId: true,
+      price: true,
+      cost: true,
+    },
+  });
+
+  if (sourceRecords.length === 0 && sourceVariantRecords.length === 0) {
     return;
   }
 
@@ -67,6 +87,29 @@ export async function syncSharedPricingFromBranch(
           stock: 0,
           minStock: 0,
           showInGrid: true,
+        },
+        update: {
+          price: record.price,
+          cost: record.cost,
+        },
+      });
+    }
+
+    for (const record of sourceVariantRecords) {
+      await tx.variantInventory.upsert({
+        where: {
+          variantId_branchId: {
+            variantId: record.variantId,
+            branchId,
+          },
+        },
+        create: {
+          variantId: record.variantId,
+          branchId,
+          stock: 0,
+          minStock: 0,
+          price: record.price,
+          cost: record.cost,
         },
         update: {
           price: record.price,

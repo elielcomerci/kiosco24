@@ -727,14 +727,26 @@ body {
   font-size: calc(16px * var(--device-font-scale));
 }
 
+html[data-text-scale],
+body[data-text-scale] {
+  --device-font-scale: 1;
+  font-size: calc(16px * var(--device-font-scale));
+}
+
+html[data-text-scale="compact"],
+body[data-text-scale="compact"],
 .app-layout[data-text-scale="compact"] {
   --device-font-scale: 0.94;
 }
 
+html[data-text-scale="default"],
+body[data-text-scale="default"],
 .app-layout[data-text-scale="default"] {
   --device-font-scale: 1;
 }
 
+html[data-text-scale="large"],
+body[data-text-scale="large"],
 .app-layout[data-text-scale="large"] {
   --device-font-scale: 1.1;
 }
@@ -805,6 +817,12 @@ body {
   font-size: 13px;
 }
 
+body[data-text-scale] .card,
+body[data-text-scale] .card-2,
+body[data-text-scale] .modal,
+body[data-text-scale] .status-bar,
+body[data-text-scale] .app-header,
+body[data-text-scale] .bottom-nav,
 .app-layout .card,
 .app-layout .card-2,
 .app-layout .modal,
@@ -814,55 +832,69 @@ body {
   font-size: calc(1rem * var(--device-font-scale));
 }
 
+body[data-text-scale] .btn,
 .app-layout .btn {
   font-size: calc(14px * var(--device-font-scale));
 }
 
+body[data-text-scale] .btn-lg,
 .app-layout .btn-lg {
   font-size: calc(16px * var(--device-font-scale));
 }
 
+body[data-text-scale] .btn-sm,
 .app-layout .btn-sm {
   font-size: calc(13px * var(--device-font-scale));
 }
 
+body[data-text-scale] .input,
 .app-layout .input {
   font-size: calc(15px * var(--device-font-scale));
 }
 
+body[data-text-scale] .section-title,
 .app-layout .section-title {
   font-size: calc(11px * var(--device-font-scale));
 }
 
+body[data-text-scale] .badge,
 .app-layout .badge {
   font-size: calc(12px * var(--device-font-scale));
 }
 
+body[data-text-scale] .amount,
 .app-layout .amount {
   font-size: calc(2.5rem * var(--device-font-scale));
 }
 
+body[data-text-scale] .amount-sm,
 .app-layout .amount-sm {
   font-size: calc(1.5rem * var(--device-font-scale));
 }
 
+body[data-text-scale] .bottom-nav-label,
 .app-layout .bottom-nav-label {
   font-size: calc(11px * var(--device-font-scale));
 }
 
+body[data-text-scale] .app-header-icon-link,
+body[data-text-scale] .app-header-icon-button,
 .app-layout .app-header-icon-link,
 .app-layout .app-header-icon-button {
   font-size: calc(18px * var(--device-font-scale));
 }
 
+body[data-text-scale] .app-header-logout-label,
 .app-layout .app-header-logout-label {
   font-size: calc(13px * var(--device-font-scale));
 }
 
+body[data-text-scale] .product-btn-name,
 .app-layout .product-btn-name {
   font-size: calc(12px * var(--device-font-scale));
 }
 
+body[data-text-scale] .product-btn-price,
 .app-layout .product-btn-price {
   font-size: calc(12px * var(--device-font-scale));
 }

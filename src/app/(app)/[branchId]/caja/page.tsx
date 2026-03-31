@@ -30,6 +30,9 @@ interface Variant {
   id: string;
   name: string;
   barcode?: string | null;
+  internalCode?: string | null;
+  price?: number | null;
+  cost?: number | null;
   stock: number;
   availableStock?: number | null;
   minStock: number;
@@ -1036,8 +1039,15 @@ export default function CajaPage() {
           productId: product.id,
           variantId: variant?.id,
           name: targetName,
-          price: product.price,
+          price:
+            variant && typeof variant.price === "number" && Number.isFinite(variant.price)
+              ? variant.price
+              : product.price,
           quantity: 1,
+          cost:
+            variant && typeof variant.cost === "number" && Number.isFinite(variant.cost)
+              ? variant.cost
+              : undefined,
           maxStock: allowNegativeStock ? undefined : targetStock
         },
       ];
@@ -2353,7 +2363,13 @@ export default function CajaPage() {
                           </div>
                         )}
                       </div>
-                      <div style={{ fontWeight: 700, color: "var(--primary)" }}>{formatARS(variantSelector.product.price)}</div>
+                      <div style={{ fontWeight: 700, color: "var(--primary)" }}>
+                        {formatARS(
+                          typeof v.price === "number" && Number.isFinite(v.price)
+                            ? v.price
+                            : variantSelector.product.price,
+                        )}
+                      </div>
                     </button>
                   );
                 })()

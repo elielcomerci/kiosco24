@@ -26,8 +26,11 @@ type VariantPayload = {
   id?: string;
   name: string;
   barcode: string | null;
+  internalCode: string | null;
   stock: number;
   minStock: number;
+  price: number | null;
+  cost: number | null;
 };
 
 type ProductInventoryPayload = Prisma.InventoryRecordGetPayload<{
@@ -68,6 +71,8 @@ function normalizeVariantPayload(variants: unknown): VariantPayload[] {
       name: normalizeCatalogTitle(variant?.name),
       barcode:
         normalizeCatalogBarcode(variant?.barcode),
+      internalCode:
+        typeof variant?.internalCode === "string" ? variant.internalCode.trim() || null : null,
       stock:
         typeof variant?.stock === "number"
           ? variant.stock
@@ -80,6 +85,18 @@ function normalizeVariantPayload(variants: unknown): VariantPayload[] {
           : Number.isFinite(Number(variant?.minStock))
             ? Number(variant?.minStock)
             : 0,
+      price:
+        typeof variant?.price === "number"
+          ? variant.price
+          : Number.isFinite(Number(variant?.price))
+            ? Number(variant?.price)
+            : null,
+      cost:
+        typeof variant?.cost === "number"
+          ? variant.cost
+          : Number.isFinite(Number(variant?.cost))
+            ? Number(variant?.cost)
+            : null,
     }))
     .filter((variant) => variant.name);
 }
@@ -219,12 +236,23 @@ export async function GET(
     const variantLots = lots.filter((lot) => lot.variantId === variant.id);
     const variantSummary = summarizeTrackedLots(variant.inventory[0]?.stock ?? 0, variantLots, expiryAlertDays);
     const availableStock = variantSummary.availableStock ?? (variant.inventory[0]?.stock ?? 0);
+    const variantPrice =
+      typeof variant.inventory[0]?.price === "number" && Number.isFinite(variant.inventory[0].price)
+        ? variant.inventory[0].price
+        : mappedInventory.price;
+    const variantCost =
+      typeof variant.inventory[0]?.cost === "number" && Number.isFinite(variant.inventory[0].cost)
+        ? variant.inventory[0].cost
+        : mappedInventory.cost;
     const variantFlags = getStockFlags(availableStock, variant.inventory[0]?.minStock ?? 0);
 
     return {
       id: variant.id,
       name: variant.name,
       barcode: variant.barcode,
+      internalCode: variant.internalCode,
+      price: variantPrice,
+      cost: variantCost,
       stock: variant.inventory[0]?.stock ?? 0,
       availableStock,
       minStock: variant.inventory[0]?.minStock ?? 0,
@@ -602,6 +630,7 @@ export async function PATCH(
             .map((variant) => ({
               name: variant.name,
               barcode: variant.barcode,
+              internalCode: variant.internalCode,
             })),
           update: normalizedVariants
             .filter((variant): variant is VariantPayload & { id: string } => Boolean(variant.id))
@@ -610,6 +639,7 @@ export async function PATCH(
               data: {
                 name: variant.name,
                 barcode: variant.barcode,
+                internalCode: variant.internalCode,
               },
             })),
         },
@@ -648,10 +678,14 @@ export async function PATCH(
             branchId,
             stock: variant.stock ?? 0,
             minStock: variant.minStock ?? 0,
+            price: variant.price,
+            cost: variant.cost,
           },
           update: {
             ...(variant.stock !== undefined && { stock: variant.stock }),
             ...(variant.minStock !== undefined && { minStock: variant.minStock }),
+            ...(variant.price !== undefined && { price: variant.price }),
+            ...(variant.cost !== undefined && { cost: variant.cost }),
           },
         });
 
@@ -700,7 +734,7 @@ export async function PATCH(
     });
   }
 
-  if (pricingMode === "SHARED" && (price !== undefined || cost !== undefined)) {
+  if (pricingMode === "SHARED" && (price !== undefined || cost !== undefined || variants !== undefined)) {
     await syncSharedPricingFromBranch(prisma, {
       kioscoId,
       sourceBranchId: branchId,

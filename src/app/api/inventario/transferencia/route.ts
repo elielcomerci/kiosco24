@@ -107,6 +107,9 @@ export async function POST(req: Request) {
               where: { variantId_branchId: { variantId: item.variantId, branchId } },
               select: {
                 stock: true,
+                minStock: true,
+                price: true,
+                cost: true,
               },
             });
 
@@ -169,7 +172,14 @@ export async function POST(req: Request) {
               });
             } else {
               await tx.variantInventory.create({
-                data: { variantId: item.variantId, branchId: targetBranchId, stock: item.quantity },
+                data: {
+                  variantId: item.variantId,
+                  branchId: targetBranchId,
+                  stock: item.quantity,
+                  minStock: originRecord?.minStock ?? 0,
+                  price: originRecord?.price ?? null,
+                  cost: originRecord?.cost ?? null,
+                },
               });
             }
 

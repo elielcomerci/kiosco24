@@ -25,8 +25,11 @@ type VariantPayload = {
   id?: string;
   name: string;
   barcode: string | null;
+  internalCode: string | null;
   stock: number;
   minStock: number;
+  price: number | null;
+  cost: number | null;
 };
 
 type ProductListInventory = Prisma.InventoryRecordGetPayload<{
@@ -72,6 +75,8 @@ function normalizeVariantPayload(variants: unknown): VariantPayload[] {
       name: normalizeCatalogTitle(variant?.name),
       barcode:
         normalizeCatalogBarcode(variant?.barcode),
+      internalCode:
+        typeof variant?.internalCode === "string" ? variant.internalCode.trim() || null : null,
       stock:
         typeof variant?.stock === "number"
           ? variant.stock
@@ -84,6 +89,18 @@ function normalizeVariantPayload(variants: unknown): VariantPayload[] {
           : Number.isFinite(Number(variant?.minStock))
             ? Number(variant?.minStock)
             : 0,
+      price:
+        typeof variant?.price === "number"
+          ? variant.price
+          : Number.isFinite(Number(variant?.price))
+            ? Number(variant?.price)
+            : null,
+      cost:
+        typeof variant?.cost === "number"
+          ? variant.cost
+          : Number.isFinite(Number(variant?.cost))
+            ? Number(variant?.cost)
+            : null,
     }))
     .filter((variant) => variant.name);
 }
@@ -235,15 +252,34 @@ export async function GET(req: Request) {
     const mappedVariants = record.product.variants.map((variant) => {
       const variantInventory = variant.inventory[0];
       const variantStock = variantInventory?.stock ?? 0;
+      const variantPrice =
+        typeof variantInventory?.price === "number" && Number.isFinite(variantInventory.price)
+          ? variantInventory.price
+          : record.price;
+      const variantCost =
+        typeof variantInventory?.cost === "number" && Number.isFinite(variantInventory.cost)
+          ? variantInventory.cost
+          : record.cost;
       const variantLots = lotsByKey.get(lotKey(record.product.id, variant.id)) ?? [];
       const variantSummary = summarizeTrackedLots(variantStock, variantLots, expiryAlertDays);
       const variantAvailableStock = variantSummary.availableStock ?? variantStock;
       const variantFlags = getStockFlags(variantAvailableStock, variantInventory?.minStock ?? 0);
+      const variantReadyForSale =
+        record.showInGrid &&
+        Number.isFinite(variantPrice) &&
+        variantPrice > 0 &&
+        typeof variantCost === "number" &&
+        variantCost > 0 &&
+        (allowNegativeStock || variantAvailableStock > 0) &&
+        (record.product.category?.showInGrid ?? true);
 
       return {
         id: variant.id,
         name: variant.name,
         barcode: variant.barcode,
+        internalCode: variant.internalCode,
+        price: variantPrice,
+        cost: variantCost,
         stock: variantStock,
         availableStock: variantAvailableStock,
         minStock: variantInventory?.minStock ?? 0,
@@ -251,22 +287,45 @@ export async function GET(req: Request) {
         expiringSoonQuantity: variantSummary.expiringSoonQuantity,
         nextExpiryOn: variantSummary.nextExpiryOn,
         hasTrackedLots: variantSummary.hasTrackedLots,
+        readyForSale: variantReadyForSale,
         ...variantFlags,
       };
     });
 
     const baseAvailableStock = baseSummary.availableStock ?? record.stock;
     const baseFlags = getStockFlags(baseAvailableStock, record.minStock);
+    const variantPrices = mappedVariants
+      .map((variant) => (typeof variant.price === "number" && variant.price > 0 ? variant.price : null))
+      .filter((price): price is number => price !== null);
+    const variantCosts = mappedVariants
+      .map((variant) => (typeof variant.cost === "number" && variant.cost > 0 ? variant.cost : null))
+      .filter((cost): cost is number => cost !== null);
     const hasVariantStock = mappedVariants.some((variant) => (variant.availableStock ?? 0) > 0);
     const hasBaseStock = (baseAvailableStock ?? 0) > 0;
     const hasStock = record.product.variants.length > 0 ? hasVariantStock : hasBaseStock;
+    const priceMin = variantPrices.length > 0 ? Math.min(...variantPrices) : record.price;
+    const priceMax = variantPrices.length > 0 ? Math.max(...variantPrices) : record.price;
+    const costMin =
+      variantCosts.length > 0
+        ? Math.min(...variantCosts)
+        : typeof record.cost === "number"
+          ? record.cost
+          : null;
+    const costMax =
+      variantCosts.length > 0
+        ? Math.max(...variantCosts)
+        : typeof record.cost === "number"
+          ? record.cost
+          : null;
     const readyForSale =
-      record.showInGrid &&
-      record.price > 0 &&
-      typeof record.cost === "number" &&
-      record.cost > 0 &&
-      (allowNegativeStock || hasStock) &&
-      (record.product.category?.showInGrid ?? true);
+      record.product.variants.length > 0
+        ? mappedVariants.some((variant) => variant.readyForSale)
+        : record.showInGrid &&
+          record.price > 0 &&
+          typeof record.cost === "number" &&
+          record.cost > 0 &&
+          (allowNegativeStock || hasStock) &&
+          (record.product.category?.showInGrid ?? true);
     const aggregateFlags = record.product.variants.length > 0
       ? {
           isNegativeStock: mappedVariants.some((variant) => variant.isNegativeStock),
@@ -313,8 +372,13 @@ export async function GET(req: Request) {
       platformSourceUpdatedAt: record.product.platformSourceUpdatedAt,
       platformUpdateAvailable,
       categoryId: record.product.categoryId,
-      price: record.price,
-      cost: record.cost,
+      price: priceMin,
+      cost: costMin,
+      priceMin,
+      priceMax,
+      costMin,
+      costMax,
+      hasVariablePrices: priceMin !== priceMax,
       stock: record.stock,
       availableStock: baseAvailableStock,
       minStock: record.minStock,
@@ -473,6 +537,7 @@ export async function POST(req: Request) {
               create: normalizedVariants.map((variant) => ({
                 name: variant.name,
                 barcode: variant.barcode || null,
+                internalCode: variant.internalCode,
               })),
             }
           : undefined,
@@ -519,6 +584,18 @@ export async function POST(req: Request) {
               branchId: branch.id,
               stock: branch.id === branchId ? requestedVariant?.stock ?? 0 : 0,
               minStock: branch.id === branchId ? requestedVariant?.minStock ?? 0 : 0,
+              price:
+                pricingMode === "SHARED"
+                  ? requestedVariant?.price ?? (typeof price === "number" ? price : null)
+                  : branch.id === branchId
+                    ? requestedVariant?.price ?? (typeof price === "number" ? price : null)
+                    : null,
+              cost:
+                pricingMode === "SHARED"
+                  ? requestedVariant?.cost ?? (typeof cost === "number" ? cost : null)
+                  : branch.id === branchId
+                    ? requestedVariant?.cost ?? (typeof cost === "number" ? cost : null)
+                    : null,
             });
           });
         });
@@ -590,6 +667,15 @@ export async function PATCH(req: Request) {
       where: { branchId, productId: { in: normalizedProductIds } },
       select: { id: true, price: true },
     });
+    const variantInventoriesToUpdate = await prisma.variantInventory.findMany({
+      where: {
+        branchId,
+        variant: {
+          productId: { in: normalizedProductIds },
+        },
+      },
+      select: { id: true, price: true },
+    });
 
     const transactions = inventoryToUpdate.map((inventory) =>
       prisma.inventoryRecord.update({
@@ -597,7 +683,15 @@ export async function PATCH(req: Request) {
         data: { price: Math.round(inventory.price * multiplier) },
       }),
     );
-    await prisma.$transaction(transactions);
+    const variantTransactions = variantInventoriesToUpdate
+      .filter((inventory) => typeof inventory.price === "number" && Number.isFinite(inventory.price))
+      .map((inventory) =>
+        prisma.variantInventory.update({
+          where: { id: inventory.id },
+          data: { price: Math.round((inventory.price ?? 0) * multiplier) },
+        }),
+      );
+    await prisma.$transaction([...transactions, ...variantTransactions]);
 
     if (pricingMode === "SHARED") {
       await syncSharedPricingFromBranch(prisma, {

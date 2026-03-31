@@ -32,6 +32,8 @@ const OPTIONS: Array<{
 ];
 
 function applyTextScale(scale: DeviceTextScale) {
+  document.documentElement.setAttribute("data-text-scale", scale);
+  document.body?.setAttribute("data-text-scale", scale);
   document
     .querySelectorAll<HTMLElement>(".branch-context")
     .forEach((element) => element.setAttribute("data-text-scale", scale));

@@ -20,6 +20,7 @@ export default auth((req: NextAuthRequest) => {
     isInternalEmployeeAccess ||
     nextUrl.pathname === "/sw.js" ||
     nextUrl.pathname === "/manifest.json" ||
+    nextUrl.pathname.startsWith("/icons/") ||
     nextUrl.pathname.startsWith("/api/auth");
 
   if (isPublic) {
@@ -45,5 +46,5 @@ export default auth((req: NextAuthRequest) => {
 });
 
 export const config = {
-  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|sw.js|manifest.json).*)"],
+  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|sw.js|manifest.json|icons/).*)"],
 };

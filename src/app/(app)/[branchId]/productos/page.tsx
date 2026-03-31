@@ -137,6 +137,7 @@ type StockModalPreset = {
 };
 
 type Category = CategoryRecord;
+type CollaborativeLookupState = "idle" | "loading" | "ready" | "error";
 const AUTO_SUGGESTED_CATEGORY_COLOR = "#64748b";
 
 const EMOJIS = ["🧃", "🥤", "🍫", "🍬", "🍭", "🥜", "🧀", "🍞", "🥛", "🧹", "🧴", "🪥", "📦", "💊", "🪙", "🎴"];
@@ -199,6 +200,105 @@ function matchesProductSearch(product: Product, rawQuery: string) {
 
   return searchableValues.some((value) =>
     typeof value === "string" && value.toLowerCase().includes(query),
+  );
+}
+
+function normalizeLookupCandidate(value?: string | null) {
+  const normalized = normalizeBarcodeCode(value ?? "");
+  return normalized || null;
+}
+
+function buildProductLookupCodeSet(product: Product) {
+  const codes = new Set<string>();
+
+  const productCode = normalizeLookupCandidate(product.barcode);
+  if (productCode) {
+    codes.add(productCode);
+  }
+
+  for (const variant of product.variants ?? []) {
+    const variantCode = normalizeLookupCandidate(variant.barcode);
+    if (variantCode) {
+      codes.add(variantCode);
+    }
+  }
+
+  return codes;
+}
+
+function buildSuggestionLookupCodeSet(suggestion: BarcodeSuggestion) {
+  const codes = new Set<string>();
+
+  const suggestionCode = normalizeLookupCandidate(suggestion.code);
+  if (suggestionCode) {
+    codes.add(suggestionCode);
+  }
+
+  for (const variant of suggestion.variants ?? []) {
+    const variantCode = normalizeLookupCandidate(variant.barcode);
+    if (variantCode) {
+      codes.add(variantCode);
+    }
+  }
+
+  return codes;
+}
+
+function buildCollaborativeSuggestionKey(suggestion: BarcodeSuggestion) {
+  const variantsKey = (suggestion.variants ?? [])
+    .map((variant) => `${variant.name}:${normalizeLookupCandidate(variant.barcode) ?? ""}`)
+    .join("|");
+
+  return [
+    suggestion.name.trim().toLocaleLowerCase("es-AR"),
+    normalizeLookupCandidate(suggestion.code) ?? "",
+    variantsKey,
+  ].join("::");
+}
+
+function findLocalProductForSuggestion(products: Product[], suggestion: BarcodeSuggestion) {
+  const suggestionCodes = buildSuggestionLookupCodeSet(suggestion);
+  if (suggestionCodes.size === 0) {
+    return null;
+  }
+
+  return (
+    products.find((product) => {
+      const productCodes = buildProductLookupCodeSet(product);
+      for (const code of productCodes) {
+        if (suggestionCodes.has(code)) {
+          return true;
+        }
+      }
+
+      return false;
+    }) ?? null
+  );
+}
+
+function mergeProductsById(primary: Product[], extra: Product[]) {
+  const merged = new Map<string, Product>();
+
+  for (const product of primary) {
+    merged.set(product.id, product);
+  }
+
+  for (const product of extra) {
+    if (!merged.has(product.id)) {
+      merged.set(product.id, product);
+    }
+  }
+
+  return Array.from(merged.values());
+}
+
+function findCategoryByNameInList(categoryName: string, sourceCategories: Category[]) {
+  const normalizedCategoryName = categoryName.trim().toLocaleLowerCase("es-AR");
+  return (
+    sourceCategories.find(
+      (category) =>
+        category.name.trim().toLocaleLowerCase("es-AR") === normalizedCategoryName,
+    ) ?? null
   );
 }
 
@@ -2303,12 +2403,21 @@ function StockLoadingModal({
   const [inlineNotice, setInlineNotice] = useState<string | null>(null);
   const [inlineCreateDraft, setInlineCreateDraft] = useState<ProductModalDraft | null>(null);
   const [inlineSpotlightProductId, setInlineSpotlightProductId] = useState<string | null>(spotlightProductId);
+  const [collaborativeSuggestions, setCollaborativeSuggestions] = useState<BarcodeSuggestion[]>([]);
+  const [collaborativeLookupState, setCollaborativeLookupState] = useState<CollaborativeLookupState>("idle");
+  const [collaborativeError, setCollaborativeError] = useState<string | null>(null);
+  const [creatingCollaborativeKey, setCreatingCollaborativeKey] = useState<string | null>(null);
   const [scannerOpen, setScannerOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(initialOperation !== "receive");
   const attachmentInputRef = useRef<HTMLInputElement>(null);
   const isReceiveFlow = initialOperation === "receive";
   const modalTitle = isReceiveFlow ? "📥 Recibir mercadería" : "🧮 Corregir inventario";
   const saveLabel = isReceiveFlow ? "Guardar ingreso" : "Guardar corrección";
+  const trimmedSearch = search.trim();
+  const normalizedSearchCode = normalizeBarcodeCode(trimmedSearch);
+  const shouldLookupCollaborative =
+    isReceiveFlow &&
+    (trimmedSearch.length >= 2 || canLookupBarcode(normalizedSearchCode));
 
   useEffect(() => {
     setSearch(initialSearch);
@@ -2325,6 +2434,10 @@ function StockLoadingModal({
     setSaveError(null);
     setInlineNotice(null);
     setInlineCreateDraft(null);
+    setCollaborativeSuggestions([]);
+    setCollaborativeLookupState("idle");
+    setCollaborativeError(null);
+    setCreatingCollaborativeKey(null);
     setScannerOpen(false);
     setDetailsOpen(initialOperation !== "receive");
   }, [initialOperation]);
@@ -2371,6 +2484,165 @@ function StockLoadingModal({
 
   const openInlineCreate = () => {
     setInlineCreateDraft(buildInlineProductDraft());
+  };
+
+  const refreshModalCategories = async () => {
+    const catRes = await fetch("/api/categorias", {
+      headers: { "x-branch-id": branchId },
+    });
+
+    if (!catRes.ok) {
+      throw new Error("No se pudieron actualizar las categorías.");
+    }
+
+    const catData = await catRes.json();
+    const nextCategories = Array.isArray(catData) ? (catData as Category[]) : [];
+    onCategoriesChange(nextCategories);
+    return nextCategories;
+  };
+
+  const ensureCollaborativeCategory = async (categoryName: string | null | undefined) => {
+    const trimmedCategoryName = categoryName?.trim() ?? "";
+    if (!trimmedCategoryName) {
+      return null;
+    }
+
+    const localCategory = findCategoryByNameInList(trimmedCategoryName, categories);
+    if (localCategory) {
+      return localCategory.id;
+    }
+
+    const refreshedCategories = await refreshModalCategories();
+    const refreshedCategory = findCategoryByNameInList(trimmedCategoryName, refreshedCategories);
+    if (refreshedCategory) {
+      return refreshedCategory.id;
+    }
+
+    const createResponse = await fetch("/api/categorias", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-branch-id": branchId },
+      body: JSON.stringify({
+        name: trimmedCategoryName,
+        color: AUTO_SUGGESTED_CATEGORY_COLOR,
+        showInGrid: true,
+      }),
+    });
+
+    if (!createResponse.ok) {
+      const data = await createResponse.json().catch(() => null);
+      throw new Error(data?.error || "No se pudo crear la categoría sugerida.");
+    }
+
+    const savedCategory = (await createResponse.json()) as Category;
+    const nextCategories = await refreshModalCategories();
+    return findCategoryByNameInList(trimmedCategoryName, nextCategories)?.id ?? savedCategory.id ?? null;
+  };
+
+  const fetchLatestProducts = async () => {
+    const response = await fetch("/api/productos", {
+      headers: { "x-branch-id": branchId },
+    });
+
+    if (!response.ok) {
+      throw new Error("No pudimos actualizar la lista local antes de crear el producto.");
+    }
+
+    const data = await response.json();
+    return Array.isArray(data) ? (data as Product[]) : [];
+  };
+
+  const handleCreateFromCollaborativeSuggestion = async (suggestion: BarcodeSuggestion) => {
+    const suggestionKey = buildCollaborativeSuggestionKey(suggestion);
+    setCollaborativeError(null);
+    setInlineNotice(null);
+    setCreatingCollaborativeKey(suggestionKey);
+
+    try {
+      let matchedProduct = findLocalProductForSuggestion(products, suggestion);
+
+      if (!matchedProduct) {
+        try {
+          const latestProducts = await fetchLatestProducts();
+          matchedProduct = findLocalProductForSuggestion(latestProducts, suggestion);
+        } catch (error) {
+          console.error(error);
+        }
+      }
+
+      if (matchedProduct) {
+        await onSaved();
+        setInlineSpotlightProductId(matchedProduct.id);
+        setInlineNotice(
+          "Este producto ya estaba disponible localmente. Ahora podés cargar cantidad, costo y precio.",
+        );
+        return;
+      }
+
+      const normalizedVariants = (suggestion.variants ?? [])
+        .map((variant) => ({
+          name: variant.name.trim(),
+          barcode: normalizeLookupCandidate(variant.barcode),
+        }))
+        .filter((variant) => variant.name);
+      const categoryId = await ensureCollaborativeCategory(suggestion.categoryName);
+      const primaryCode = normalizeLookupCandidate(suggestion.code);
+
+      const payload = {
+        name: suggestion.name.trim() || primaryCode || "Producto sin nombre",
+        barcode: normalizedVariants.length > 0 ? null : primaryCode,
+        brand: suggestion.brand?.trim() || null,
+        description: suggestion.description?.trim() || null,
+        presentation: suggestion.presentation?.trim() || null,
+        image: suggestion.image?.trim() || null,
+        supplierName: supplierName.trim() || null,
+        notes: null,
+        categoryId,
+        price: null,
+        cost: null,
+        stock: 0,
+        minStock: 0,
+        showInGrid: true,
+        variants: normalizedVariants.map((variant) => ({
+          name: variant.name,
+          barcode: variant.barcode,
+          internalCode: null,
+          price: null,
+          cost: null,
+          stock: 0,
+          minStock: 0,
+        })),
+        ...(isOwner ? { platformSyncMode: "MANUAL" as const } : {}),
+      };
+
+      const response = await fetch("/api/productos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-branch-id": branchId },
+        body: JSON.stringify(payload),
+      });
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(data?.error || "No se pudo crear el producto desde la base colaborativa.");
+      }
+
+      const createdProduct = data as Product;
+      await onSaved();
+      setInlineSpotlightProductId(createdProduct.id);
+      setInlineNotice(
+        normalizedVariants.length > 0
+          ? "Producto agregado desde la base colaborativa. Ahora podés cargar cantidades y costos por variante."
+          : "Producto agregado desde la base colaborativa. Ahora podés cargar cantidades y costos.",
+      );
+    } catch (error) {
+      console.error(error);
+      setCollaborativeError(
+        error instanceof Error
+          ? error.message
+          : "No se pudo crear el producto desde la base colaborativa.",
+      );
+    } finally {
+      setCreatingCollaborativeKey(null);
+    }
   };
 
   const handleInlineProductSave = async (payload?: ProductModalSavePayload) => {
@@ -2442,28 +2714,131 @@ function StockLoadingModal({
     setAttachments((prev) => prev.filter((item) => item.url !== url));
   };
 
+  useEffect(() => {
+    if (!shouldLookupCollaborative) {
+      setCollaborativeSuggestions([]);
+      setCollaborativeLookupState("idle");
+      setCollaborativeError(null);
+      return;
+    }
+
+    const isBarcodeLookup = canLookupBarcode(normalizedSearchCode);
+    const controller = new AbortController();
+    let cancelled = false;
+    const timeoutId = window.setTimeout(async () => {
+      setCollaborativeLookupState("loading");
+      setCollaborativeError(null);
+
+      try {
+        const params = new URLSearchParams();
+        if (isBarcodeLookup) {
+          params.set("code", normalizedSearchCode);
+        } else {
+          params.set("q", trimmedSearch);
+          params.set("limit", "8");
+        }
+
+        const response = await fetch(`/api/platform-products/lookup?${params.toString()}`, {
+          signal: controller.signal,
+        });
+        const data = (await response.json().catch(() => null)) as BarcodeLookupResponse | null;
+
+        if (cancelled) {
+          return;
+        }
+
+        if (!response.ok) {
+          throw new Error(data && "error" in data ? String(data.error) : "No pudimos consultar la base colaborativa.");
+        }
+
+        const rawSuggestions = Array.isArray(data?.suggestions)
+          ? data.suggestions
+          : data?.suggestion
+            ? [data.suggestion]
+            : [];
+        const dedupedSuggestions = Array.from(
+          new Map(
+            rawSuggestions.map((suggestion) => [
+              buildCollaborativeSuggestionKey(suggestion),
+              suggestion,
+            ]),
+          ).values(),
+        );
+
+        setCollaborativeSuggestions(dedupedSuggestions);
+        setCollaborativeLookupState(dedupedSuggestions.length > 0 ? "ready" : "idle");
+      } catch (error) {
+        if (cancelled || controller.signal.aborted) {
+          return;
+        }
+
+        console.error(error);
+        setCollaborativeSuggestions([]);
+        setCollaborativeLookupState("error");
+        setCollaborativeError(
+          "No pudimos consultar la base colaborativa. El filtro local sigue funcionando.",
+        );
+      }
+    }, isBarcodeLookup ? 220 : 320);
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+      window.clearTimeout(timeoutId);
+    };
+  }, [branchId, normalizedSearchCode, shouldLookupCollaborative, trimmedSearch]);
+
   const activeSpotlightId = inlineSpotlightProductId ?? spotlightProductId;
+
+  const localSearchMatches = useMemo(
+    () => products.filter((product) => matchesProductSearch(product, search)),
+    [products, search],
+  );
+
+  const collaborativeMatches = useMemo(
+    () =>
+      collaborativeSuggestions.map((suggestion) => ({
+        suggestion,
+        localProduct: findLocalProductForSuggestion(products, suggestion),
+      })),
+    [collaborativeSuggestions, products],
+  );
+
+  const collaborativeMatchedLocalProducts = useMemo(
+    () =>
+      collaborativeMatches.reduce<Product[]>((matches, item) => {
+        if (item.localProduct) {
+          matches.push(item.localProduct);
+        }
+
+        return matches;
+      }, []),
+    [collaborativeMatches],
+  );
+
+  const collaborativeVisibleSuggestions = useMemo(
+    () => collaborativeMatches.filter((item) => !item.localProduct).map((item) => item.suggestion),
+    [collaborativeMatches],
+  );
 
   const eligible = useMemo(
     () =>
-      products
-        .filter((product) => matchesProductSearch(product, search))
-        .sort((left, right) => {
-          if (!activeSpotlightId) {
-            return 0;
-          }
-
-          if (left.id === activeSpotlightId) {
-            return -1;
-          }
-
-          if (right.id === activeSpotlightId) {
-            return 1;
-          }
-
+      mergeProductsById(localSearchMatches, collaborativeMatchedLocalProducts).sort((left, right) => {
+        if (!activeSpotlightId) {
           return 0;
-        }),
-    [activeSpotlightId, products, search],
+        }
+
+        if (left.id === activeSpotlightId) {
+          return -1;
+        }
+
+        if (right.id === activeSpotlightId) {
+          return 1;
+        }
+
+        return 0;
+      }),
+    [activeSpotlightId, collaborativeMatchedLocalProducts, localSearchMatches],
   );
 
   const setQty = (
@@ -2834,7 +3209,7 @@ function StockLoadingModal({
 
   const visibleChangedCount = eligible.filter(productHasChanges).length;
   const helperCopy = isReceiveFlow
-    ? "Busca por nombre, marca, proveedor, descripcion, presentacion o codigo. Las variantes tambien entran en el filtro."
+    ? "Busca por nombre, marca, proveedor, descripción, presentación o código. Si no existe localmente, también consultamos la base colaborativa."
     : "Busca el producto correcto y carga el stock fisico final. El valor reemplaza el inventario actual.";
 
   const getStatusChipStyle = (tone: "negative" | "out" | "low") =>
@@ -2986,6 +3361,228 @@ function StockLoadingModal({
     );
   };
 
+  const renderLocalProductCard = (product: Product) => {
+    const stockBadge = getProductStockBadge(product);
+    const expiryBadge = formatExpiryBadge(product);
+    const headlineMeta = [product.brand, product.supplierName, product.presentation].filter(Boolean);
+
+    return (
+      <section
+        key={product.id}
+        className="restock-modal__product"
+        style={{
+          border: product.id === activeSpotlightId
+            ? "1px solid rgba(34,197,94,0.34)"
+            : productHasChanges(product)
+              ? "1px solid rgba(251,191,36,0.28)"
+              : undefined,
+          boxShadow: product.id === activeSpotlightId
+            ? "0 0 0 1px rgba(34,197,94,0.14) inset, 0 20px 44px rgba(2,6,23,0.22)"
+            : productHasChanges(product)
+              ? "0 0 0 1px rgba(251,191,36,0.1) inset, 0 20px 44px rgba(2,6,23,0.18)"
+              : undefined,
+        }}
+      >
+        <div className="restock-modal__product-head">
+          <ProductThumb image={product.image} emoji={product.emoji} name={product.name} size={56} radius={18} previewable />
+          <div className="restock-modal__product-copy">
+            <div className="restock-modal__product-title-row">
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="restock-modal__product-title">{product.name}</div>
+                {headlineMeta.length > 0 && (
+                  <div style={{ fontSize: "11px", color: "var(--text-3)" }}>{headlineMeta.join(" · ")}</div>
+                )}
+              </div>
+              <div className="restock-modal__product-tags">
+                {product.id === activeSpotlightId && (
+                  <span className="restock-modal__tag restock-modal__tag--spotlight">Nuevo</span>
+                )}
+                {productHasChanges(product) && (
+                  <span className="restock-modal__tag restock-modal__tag--changed">Pendiente</span>
+                )}
+              </div>
+            </div>
+
+            {[product.internalCode, product.barcode].filter(Boolean).length > 0 && (
+              <div className="restock-modal__product-meta">
+                {[product.internalCode, product.barcode].filter(Boolean).map((code) => (
+                  <span key={code} className="restock-modal__product-chip">
+                    {code}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            <div className="restock-modal__product-meta">
+              <span className="restock-modal__product-chip">Stock {getProductTotalStock(product) ?? 0}</span>
+              {product.variants && product.variants.length > 0 && (
+                <span className="restock-modal__product-chip">{product.variants.length} variantes</span>
+              )}
+              {!product.variants && typeof product.availableStock === "number" && product.availableStock !== product.stock && (
+                <span className="restock-modal__product-chip">Vendible {product.availableStock}</span>
+              )}
+              {stockBadge && (
+                <span className="restock-modal__product-chip" style={getStatusChipStyle(stockBadge.tone)}>
+                  {stockBadge.label}
+                </span>
+              )}
+              {expiryBadge && (
+                <span className="restock-modal__product-chip">{expiryBadge}</span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {!product.variants || product.variants.length === 0 ? (
+          <div style={{ marginTop: "10px" }}>
+            {renderQuantityEditor(product, product.stock)}
+          </div>
+        ) : (
+          <div style={{ marginTop: "12px", display: "flex", flexDirection: "column", gap: "12px" }}>
+            {product.variants.map((variant, index) => (
+              <div
+                key={variant.id ?? `${product.id}-variant-${index}`}
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "10px",
+                  padding: "12px",
+                  borderRadius: "16px",
+                  border: "1px solid rgba(148,163,184,0.18)",
+                  background: "rgba(15,23,42,0.22)",
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontSize: "13px", fontWeight: 700, color: "var(--text-1)" }}>{variant.name}</div>
+                    {[variant.internalCode, variant.barcode].filter(Boolean).length > 0 && (
+                      <div style={{ fontSize: "11px", color: "var(--text-3)" }}>
+                        {[variant.internalCode, variant.barcode].filter(Boolean).join(" · ")}
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                    <span className="restock-modal__product-chip">Stock {variant.stock ?? 0}</span>
+                    {typeof variant.availableStock === "number" && variant.availableStock !== variant.stock && (
+                      <span className="restock-modal__product-chip">Vendible {variant.availableStock}</span>
+                    )}
+                  </div>
+                </div>
+                {renderQuantityEditor(product, variant.stock, variant)}
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+    );
+  };
+
+  const renderCollaborativeSuggestionCard = (suggestion: BarcodeSuggestion) => {
+    const suggestionKey = buildCollaborativeSuggestionKey(suggestion);
+    const variantCount = suggestion.variants?.length ?? 0;
+    const visibleCodes = [normalizeLookupCandidate(suggestion.code), ...(suggestion.variants ?? []).map((variant) => normalizeLookupCandidate(variant.barcode))]
+      .filter((code, index, array): code is string => Boolean(code) && array.indexOf(code) === index)
+      .slice(0, 3);
+
+    return (
+      <section
+        key={suggestionKey}
+        className="restock-modal__product"
+        style={{
+          border: "1px dashed rgba(59,130,246,0.28)",
+          background: "linear-gradient(180deg, rgba(15,23,42,0.96) 0%, rgba(9,17,31,0.96) 100%)",
+        }}
+      >
+        <div className="restock-modal__product-head">
+          <ProductThumb image={suggestion.image} emoji={null} name={suggestion.name} size={56} radius={18} previewable />
+          <div className="restock-modal__product-copy">
+            <div className="restock-modal__product-title-row">
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="restock-modal__product-title">{suggestion.name}</div>
+                {[suggestion.brand, suggestion.presentation].filter(Boolean).length > 0 && (
+                  <div style={{ fontSize: "11px", color: "var(--text-3)" }}>
+                    {[suggestion.brand, suggestion.presentation].filter(Boolean).join(" · ")}
+                  </div>
+                )}
+              </div>
+              <div className="restock-modal__product-tags">
+                <span className="restock-modal__tag" style={{ color: "var(--primary)", borderColor: "rgba(59,130,246,0.28)" }}>
+                  Base colaborativa
+                </span>
+              </div>
+            </div>
+
+            <div className="restock-modal__product-meta">
+              {visibleCodes.map((code) => (
+                <span key={code} className="restock-modal__product-chip">
+                  {code}
+                </span>
+              ))}
+              {suggestion.categoryName && (
+                <span className="restock-modal__product-chip">{suggestion.categoryName}</span>
+              )}
+              {variantCount > 0 && (
+                <span className="restock-modal__product-chip">{variantCount} variantes</span>
+              )}
+            </div>
+
+            {variantCount > 0 && (
+              <div className="restock-modal__product-meta">
+                {suggestion.variants?.slice(0, 3).map((variant) => (
+                  <span key={`${suggestionKey}-${variant.name}`} className="restock-modal__product-chip">
+                    {variant.name}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {suggestion.description && (
+              <p style={{ margin: 0, fontSize: "12px", color: "var(--text-2)", lineHeight: 1.45 }}>
+                {suggestion.description}
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div
+          style={{
+            marginTop: "12px",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: "12px",
+            flexWrap: "wrap",
+          }}
+        >
+          <div style={{ fontSize: "12px", color: "var(--text-2)", maxWidth: "540px" }}>
+            {variantCount > 0
+              ? "Se va a crear localmente con sus variantes para que puedas cargar cantidades, costos y precios desde este mismo ingreso."
+              : "Se va a crear localmente y quedará listo para cargar cantidad, costo y precio sin salir del modal."}
+          </div>
+          <button
+            type="button"
+            className="btn btn-green"
+            onClick={() => void handleCreateFromCollaborativeSuggestion(suggestion)}
+            disabled={Boolean(creatingCollaborativeKey)}
+          >
+            {creatingCollaborativeKey === suggestionKey ? "Creando..." : "Crear y usar"}
+          </button>
+        </div>
+      </section>
+    );
+  };
+
+  const showCollaborativeLoadingState =
+    isReceiveFlow &&
+    shouldLookupCollaborative &&
+    collaborativeLookupState === "loading" &&
+    eligible.length === 0 &&
+    collaborativeVisibleSuggestions.length === 0;
+  const showEmptyResults =
+    !showCollaborativeLoadingState &&
+    eligible.length === 0 &&
+    collaborativeVisibleSuggestions.length === 0;
+
   return (
     <>
       <div
@@ -3022,6 +3619,16 @@ function StockLoadingModal({
             autoFocus
           />
           <div className="restock-modal__field-hint">{helperCopy}</div>
+          {isReceiveFlow && shouldLookupCollaborative && collaborativeLookupState === "loading" && (
+            <div style={{ fontSize: "11px", color: "var(--text-3)" }}>
+              Buscando también en la base colaborativa...
+            </div>
+          )}
+          {isReceiveFlow && collaborativeError && (
+            <div style={{ fontSize: "11px", color: "var(--amber)", fontWeight: 700 }}>
+              {collaborativeError}
+            </div>
+          )}
           {false && (
           <div className="restock-modal__quick-actions">
             <div style={{ fontSize: "11px", color: "var(--text-3)" }}>
@@ -3234,7 +3841,11 @@ function StockLoadingModal({
 
         {/* Product list */}
         <div className="restock-modal__list">
-          {eligible.length === 0 ? (
+          {showCollaborativeLoadingState ? (
+            <div className="restock-modal__empty">
+              <div>Buscando coincidencias en la base colaborativa...</div>
+            </div>
+          ) : showEmptyResults ? (
             <div className="restock-modal__empty">
               <div>Sin resultados para &quot;{search}&quot;</div>
               <button
@@ -3247,7 +3858,39 @@ function StockLoadingModal({
               </button>
             </div>
           ) : (
-            eligible.map((p) => (
+            <>
+              {eligible.map((product) => renderLocalProductCard(product))}
+              {isReceiveFlow && collaborativeVisibleSuggestions.length > 0 && (
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "10px",
+                    paddingTop: eligible.length > 0 ? "4px" : 0,
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      gap: "10px",
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <div style={{ fontSize: "12px", fontWeight: 800, color: "var(--primary)" }}>
+                      Base colaborativa
+                    </div>
+                    <div style={{ fontSize: "11px", color: "var(--text-3)" }}>
+                      Crea el producto local y seguí cargando sin salir del ingreso.
+                    </div>
+                  </div>
+                  {collaborativeVisibleSuggestions.map((suggestion) =>
+                    renderCollaborativeSuggestionCard(suggestion),
+                  )}
+                </div>
+              )}
+              {false && eligible.map((p) => (
               <section
                 key={p.id}
                 className="restock-modal__product"
@@ -3431,7 +4074,8 @@ function StockLoadingModal({
                   </div>
                 )}
               </section>
-            ))
+            ))}
+            </>
           )}
         </div>
 

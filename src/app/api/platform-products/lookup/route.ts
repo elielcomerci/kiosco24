@@ -41,7 +41,7 @@ export async function GET(req: Request) {
     return NextResponse.json(response);
   }
 
-  if (query.length >= 3) {
+  if (query.length >= 2) {
     const matches = await searchApprovedPlatformProductsByName(query, limit ?? 6);
     const response: BarcodeLookupResponse = {
       found: matches.length > 0,

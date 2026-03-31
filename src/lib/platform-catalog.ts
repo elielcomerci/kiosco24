@@ -161,7 +161,7 @@ export async function searchApprovedPlatformProductsByName(query: string, limit 
   await ensurePlatformCatalogSeeded();
 
   const normalizedQuery = query.trim();
-  if (normalizedQuery.length < 3) {
+  if (normalizedQuery.length < 2) {
     return [];
   }
 

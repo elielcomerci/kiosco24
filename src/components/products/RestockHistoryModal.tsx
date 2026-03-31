@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { formatARS } from "@/lib/utils";
 
@@ -146,7 +146,7 @@ export default function RestockHistoryModal({
   const [statusFilter, setStatusFilter] = useState<"pending" | "completed" | "all">("pending");
   const [draft, setDraft] = useState<DraftState>(buildDraft(null));
 
-  const loadEvents = async (preferredId?: string | null) => {
+  const loadEvents = useCallback(async (preferredId?: string | null) => {
     setLoading(true);
     setError(null);
 
@@ -177,11 +177,11 @@ export default function RestockHistoryModal({
     } finally {
       setLoading(false);
     }
-  };
+  }, [branchId]);
 
   useEffect(() => {
     void loadEvents();
-  }, [branchId]);
+  }, [loadEvents]);
 
   const filteredEvents = useMemo(() => {
     if (statusFilter === "all") {
@@ -209,7 +209,7 @@ export default function RestockHistoryModal({
   useEffect(() => {
     setDraft(buildDraft(selectedEvent));
     setError(null);
-  }, [selectedEvent?.id]);
+  }, [selectedEvent]);
 
   const pendingCount = events.filter((event) => event.valuationStatus !== "COMPLETED").length;
   const completedCount = events.filter((event) => event.valuationStatus === "COMPLETED").length;

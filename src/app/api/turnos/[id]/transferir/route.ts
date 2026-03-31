@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 
 import { auth } from "@/lib/auth";
@@ -53,12 +54,14 @@ export async function POST(
   let nextEmployeeName = "Dueño";
 
   if (typeof employeeId === "string" && employeeId) {
+    const employeeWhere: Prisma.EmployeeWhereInput = {
+      id: employeeId,
+      branches: { some: { id: branchId } },
+      active: true,
+    };
+
     const employee = await prisma.employee.findFirst({
-        where: {
-          id: employeeId,
-          branches: { some: { id: { equals: branchId } } },
-          active: true,
-        } as any,
+      where: employeeWhere,
       select: {
         id: true,
         name: true,

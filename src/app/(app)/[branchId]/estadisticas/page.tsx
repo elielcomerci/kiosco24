@@ -310,14 +310,14 @@ export default function EstadisticasPage() {
     load(periodo, currentDate);
   }, [periodo, currentDate, load]);
 
-  const handlePeriodoChange = (p: Periodo) => {
+  const handlePeriodoChange = useCallback((p: Periodo) => {
     setPeriodo(p);
     setCurrentDate(today); // Reset to today when switching periods to avoid confusion
-  };
+  }, [today]);
 
-  const handleNav = (dir: 1 | -1) => {
+  const handleNav = useCallback((dir: 1 | -1) => {
     setCurrentDate((prev) => offsetDate(prev, periodo, dir));
-  };
+  }, [periodo]);
 
   // Build period date range for TurnosHistorial
   const { from, to } = getPeriodRange(periodo, currentDate);

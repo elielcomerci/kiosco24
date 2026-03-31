@@ -397,6 +397,7 @@ function InvoicePdfDocument({
 
         <View style={styles.qrWrap}>
           <Text style={styles.strong}>Comprobante electronico autorizado</Text>
+          {/* eslint-disable-next-line jsx-a11y/alt-text */}
           <Image src={qrDataUrl} style={[styles.qrImage, { width: qrSize, height: qrSize }]} />
           <Text style={styles.legalText}>Escanea para verificar el comprobante en ARCA</Text>
         </View>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import ModalPortal from "@/components/ui/ModalPortal";
 import { formatARS } from "@/lib/utils";
@@ -81,21 +81,23 @@ function suggestVariantName(productName: string, parentName: string) {
   return remainder || trimmedProduct;
 }
 
-export default function BulkVariantGroupModal({ products, loading = false, onClose, onConfirm }: Props) {
-  const [baseProductId, setBaseProductId] = useState("");
-  const [parentName, setParentName] = useState("");
-  const [variantNames, setVariantNames] = useState<Record<string, string>>({});
+function buildInitialState(products: GroupCandidate[]) {
+  const suggestedParent = suggestParentName(products);
 
-  useEffect(() => {
-    const suggestedParent = suggestParentName(products);
-    setBaseProductId(products[0]?.id ?? "");
-    setParentName(suggestedParent);
-    setVariantNames(
-      Object.fromEntries(
-        products.map((product) => [product.id, suggestVariantName(product.name, suggestedParent)]),
-      ),
-    );
-  }, [products]);
+  return {
+    baseProductId: products[0]?.id ?? "",
+    parentName: suggestedParent,
+    variantNames: Object.fromEntries(
+      products.map((product) => [product.id, suggestVariantName(product.name, suggestedParent)]),
+    ) as Record<string, string>,
+  };
+}
+
+export default function BulkVariantGroupModal({ products, loading = false, onClose, onConfirm }: Props) {
+  const initialState = useMemo(() => buildInitialState(products), [products]);
+  const [baseProductId, setBaseProductId] = useState(() => initialState.baseProductId);
+  const [parentName, setParentName] = useState(() => initialState.parentName);
+  const [variantNames, setVariantNames] = useState<Record<string, string>>(() => initialState.variantNames);
 
   const hasNestedVariants = useMemo(
     () => products.some((product) => (product.variants?.length ?? 0) > 0),

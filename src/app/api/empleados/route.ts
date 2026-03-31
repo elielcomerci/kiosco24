@@ -1,9 +1,16 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { EmployeeRole } from "@prisma/client";
+import { EmployeeRole, Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { getBranchContext } from "@/lib/branch";
 import { InvalidEmployeePinError, isEmployeePinHash, prepareEmployeePinForStorage } from "@/lib/employee-pin";
+
+type CreateEmployeeRequestBody = {
+  name?: string;
+  pin?: string | null;
+  role?: EmployeeRole;
+  branchIds?: string[];
+};
 
 // GET /api/empleados — list employees for the current branch
 export async function GET(req: Request) {
@@ -94,7 +101,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "No kiosco found" }, { status: 404 });
 
   try {
-    const { name, pin, role, branchIds } = await req.json();
+    const { name, pin, role, branchIds } = (await req.json()) as CreateEmployeeRequestBody;
 
     if (!name?.trim())
       return NextResponse.json({ error: "Name required" }, { status: 400 });
@@ -103,18 +110,20 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "At least one branch is required" }, { status: 400 });
     }
 
+    const employeeData: Prisma.EmployeeCreateInput = {
+      name: name.trim(),
+      pin: await prepareEmployeePinForStorage(pin),
+      role: role ?? EmployeeRole.CASHIER,
+      kiosco: {
+        connect: { id: kioscoId },
+      },
+      branches: {
+        connect: branchIds.map((id) => ({ id })),
+      },
+    };
+
     const employee = await prisma.employee.create({
-      data: {
-        name: name.trim(),
-        pin: await prepareEmployeePinForStorage(pin),
-        role: (role as EmployeeRole) || EmployeeRole.CASHIER,
-        kiosco: {
-          connect: { id: kioscoId },
-        },
-        branches: {
-          connect: branchIds.map((id: string) => ({ id })),
-        },
-      } as any,
+      data: employeeData,
       include: {
         branches: { select: { id: true, name: true } }
       },

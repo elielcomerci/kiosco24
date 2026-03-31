@@ -1,7 +1,7 @@
 "use client";
 
 import { signIn } from "next-auth/react";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import {
   SUBSCRIPTION_CANCEL_LABEL,
   SUBSCRIPTION_PROMO_LABEL,
@@ -182,7 +182,7 @@ export default function LoginExperience({
     }
   };
 
-  const handleValidateKey = async (rawKey?: string) => {
+  const handleValidateKey = useCallback(async (rawKey?: string) => {
     const normalizedKey = normalizeAccessKey(rawKey ?? branchKey);
     if (!normalizedKey) {
       return;
@@ -221,7 +221,7 @@ export default function LoginExperience({
     } finally {
       setLoading(false);
     }
-  };
+  }, [branchKey]);
 
   useEffect(() => {
     const normalizedInitialKey = normalizeAccessKey(initialAccessKey);
@@ -240,7 +240,7 @@ export default function LoginExperience({
     resetEmployeeFlow(true);
     setBranchKey(normalizedInitialKey);
     void handleValidateKey(normalizedInitialKey);
-  }, [initialAccessKey]);
+  }, [handleValidateKey, initialAccessKey]);
 
   const completeEmployeeLogin = async (employee: EmployeeOption, pinValue: string) => {
     try {

@@ -1,9 +1,13 @@
-// @ts-nocheck
 import { auth } from "@/lib/auth";
 import { getBranchContext } from "@/lib/branch";
 import { InvalidEmployeePinError, verifyEmployeePinValue } from "@/lib/employee-pin";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
+
+type VerifyEmployeePinRequestBody = {
+  employeeId?: string;
+  pin?: string;
+};
 
 // POST /api/empleados/verificar-pin
 // Body: { employeeId: string, pin: string }
@@ -16,7 +20,7 @@ export async function POST(req: Request) {
 
   try {
     const { branchId } = await getBranchContext(req, session.user.id);
-    const { employeeId, pin } = await req.json();
+    const { employeeId, pin } = (await req.json()) as VerifyEmployeePinRequestBody;
 
     if (!branchId) {
       return NextResponse.json({ ok: false, error: "Sucursal no encontrada" }, { status: 404 });
@@ -36,7 +40,7 @@ export async function POST(req: Request) {
           { suspendedUntil: null },
           { suspendedUntil: { lte: new Date() } },
         ],
-      } as any,
+      },
       select: { id: true, pin: true },
     });
 

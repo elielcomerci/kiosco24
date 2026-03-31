@@ -87,11 +87,6 @@ type ImportableProduct = Prisma.ProductGetPayload<{
   };
 }>;
 
-type ImportableBranch = {
-  id: string;
-  name: string;
-};
-
 type ImportableCategory = {
   id: string;
   name: string;

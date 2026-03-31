@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import InvoicePreview from "@/components/fiscal/InvoicePreview";
 import ModalPortal from "@/components/ui/ModalPortal";
@@ -56,6 +56,11 @@ export default function InvoiceModal({
   const [loading, setLoading] = useState(mode === "view");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const onResolvedRef = useRef(onResolved);
+
+  useEffect(() => {
+    onResolvedRef.current = onResolved;
+  }, [onResolved]);
 
   useEffect(() => {
     if (mode !== "view" || !saleId) return;
@@ -82,7 +87,7 @@ export default function InvoiceModal({
             receiverName: data.receiverName || "",
             receiverIvaConditionId: data.receiverIvaConditionId,
           });
-          onResolved?.(data);
+          onResolvedRef.current?.(data);
         }
       } catch (err) {
         if (active) {
@@ -133,7 +138,7 @@ export default function InvoiceModal({
       }
 
       setInvoice(data);
-      onResolved?.(data);
+      onResolvedRef.current?.(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo liberar la emision pendiente.");
     } finally {
@@ -178,7 +183,7 @@ export default function InvoiceModal({
 
       if (data?.invoice) {
         setInvoice(data.invoice);
-        onResolved?.(data.invoice);
+        onResolvedRef.current?.(data.invoice);
       }
 
       if (data?.error) {

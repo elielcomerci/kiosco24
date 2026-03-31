@@ -145,21 +145,6 @@ function BarcodeActionIcon() {
   );
 }
 
-function AddStockActionIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
-      <path
-        d="M3 6.5 9 3l6 3.5v5L9 15l-6-3.5v-5Z"
-        stroke="currentColor"
-        strokeWidth="1.4"
-        strokeLinejoin="round"
-      />
-      <path d="M9 3v12M3 6.5l6 3.5 6-3.5" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
-      <path d="M13.5 1.8v4M11.5 3.8h4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-    </svg>
-  );
-}
-
 function getVariantStockBadge(variant: Variant) {
   if (variant.isNegativeStock) {
     return {
@@ -340,6 +325,7 @@ export default function CajaPage() {
   const allowNegativeStock = products[0]?.allowNegativeStock ?? false;
   const total = ticket.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const cashSuggestions = getCashSuggestions(total);
+  const activeShiftId = activeShift?.id ?? null;
   const shiftResponsibleName = activeShift?.employee?.name || activeShift?.employeeName || "Dueño";
   const canOperateCurrentShift = useMemo(() => {
     if (!activeShift) return false;
@@ -355,7 +341,7 @@ export default function CajaPage() {
     if (userRole === "OWNER") return true;
     if (userRole === "EMPLOYEE") {
       // El responsable O un encargado pueden gestionar el turno (cerrar/transferir)
-      if (session?.user?.employeeRole === "MANAGER") return true;
+      if (employeeRole === "MANAGER") return true;
       return Boolean(employeeId && activeShift.employeeId && activeShift.employeeId === employeeId);
     }
     return false;
@@ -371,7 +357,7 @@ export default function CajaPage() {
   const shiftLockMessage = useMemo(() => {
     if (!activeShift || !shiftLocked) return null;
     
-    if (session?.user?.employeeRole === "MANAGER") {
+    if (employeeRole === "MANAGER") {
       return `La caja esta a nombre de ${shiftResponsibleName}. Sos Encargado, podés cerrar o transferir este turno si es necesario.`;
     }
     
@@ -380,7 +366,7 @@ export default function CajaPage() {
     }
     
     return `La caja esta a nombre de ${shiftResponsibleName}. Transferí o cerrá el turno para operar desde esta sesión.`;
-  }, [activeShift, shiftLocked, session?.user?.employeeRole, userRole, shiftResponsibleName]);
+  }, [activeShift, employeeRole, shiftLocked, userRole, shiftResponsibleName]);
 
   // ─── WakeLock Logic ───────────────────────────────────────────────────────
   const wakeLockRef = useRef<WakeLockSentinelLike | null>(null);
@@ -403,6 +389,20 @@ export default function CajaPage() {
   }, [activeShift]);
 
   // ─── Keyboard Shortcuts ───────────────────────────────────────────────────
+  const resetKeyboardScannerState = useCallback(() => {
+    keyboardScanBufferRef.current = "";
+    keyboardScanStartedAtRef.current = 0;
+    keyboardScanLastKeyAtRef.current = 0;
+  }, []);
+
+  const clearPendingManualSearch = useCallback(() => {
+    pendingManualSearchRef.current = "";
+    if (manualSearchTimerRef.current) {
+      window.clearTimeout(manualSearchTimerRef.current);
+      manualSearchTimerRef.current = null;
+    }
+  }, []);
+
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
       const overlayOpen =
@@ -509,26 +509,14 @@ export default function CajaPage() {
       window.removeEventListener("keydown", handleGlobalKeyDown);
     };
   }, [
+    clearPendingManualSearch,
+    resetKeyboardScannerState,
     showGasto, showOtro, showRetiro, showCredit, showOpenShift, showCloseShift,
     showTransferShift, showScanner, showReminderComposer, pendingReminder, variantSelector,
     showCashNumpad, confirmedSale, showInvoiceDraftModal, invoiceSaleId
   ]);
 
   // ─── Startup Logic: Onboarding & Shift ──────────────────────────────────
-  useEffect(() => {
-    if (status === "loading") return;
-    loadCajaData();
-  }, [status, branchId]);
-
-  const loadCajaData = async () => {
-    try {
-      await fetchProducts();
-      await fetchStats();
-      await fetchActiveShift();
-    } catch {
-    }
-  };
-
   const promptSubscriptionActivation = useCallback((message: string) => {
     const shouldOpen = window.confirm(
       `${message}\n\nActiva la suscripcion para empezar a vender, cobrar y registrar movimientos.\n\n¿Quieres ir a Suscripcion ahora?`,
@@ -539,23 +527,9 @@ export default function CajaPage() {
     }
   }, [router]);
 
-  const explainShiftLock = () => {
+  const explainShiftLock = useCallback(() => {
     alert(`La caja está a nombre de ${shiftResponsibleName}. Transferí o cerrá el turno para operar con este usuario.`);
-  };
-
-  const resetKeyboardScannerState = useCallback(() => {
-    keyboardScanBufferRef.current = "";
-    keyboardScanStartedAtRef.current = 0;
-    keyboardScanLastKeyAtRef.current = 0;
-  }, []);
-
-  const clearPendingManualSearch = useCallback(() => {
-    pendingManualSearchRef.current = "";
-    if (manualSearchTimerRef.current) {
-      window.clearTimeout(manualSearchTimerRef.current);
-      manualSearchTimerRef.current = null;
-    }
-  }, []);
+  }, [shiftResponsibleName]);
 
   const clearReminderTimer = useCallback(() => {
     if (reminderTimeoutRef.current) {
@@ -694,7 +668,7 @@ export default function CajaPage() {
     }
   }, [branchId]);
 
-  const fetchStats = async () => {
+  const fetchStats = useCallback(async () => {
     try {
       const res = await fetch(`/api/stats/hoy`, {
         headers: { "x-branch-id": branchId }
@@ -705,7 +679,7 @@ export default function CajaPage() {
       const data = await res.json();
       setCajaStats(data);
     } catch {}
-  };
+  }, [branchId]);
 
   const fetchActiveShift = useCallback(async () => {
     try {
@@ -729,6 +703,19 @@ export default function CajaPage() {
       }
     } catch {}
   }, [branchId]);
+
+  const loadCajaData = useCallback(async () => {
+    try {
+      await fetchProducts();
+      await fetchStats();
+      await fetchActiveShift();
+    } catch {}
+  }, [fetchActiveShift, fetchProducts, fetchStats]);
+
+  useEffect(() => {
+    if (status === "loading") return;
+    void loadCajaData();
+  }, [loadCajaData, status]);
 
   useEffect(() => {
     if (status !== "authenticated") return;
@@ -835,17 +822,17 @@ export default function CajaPage() {
   }, [activeShift, branchId, clearReminderTimer, pendingReminder, scheduleReminderLocally]);
 
   useEffect(() => {
-    if (!activeShift) {
+    if (!activeShiftId) {
       clearReminderTimer();
       setPendingReminder(null);
       return;
     }
 
     void fetchPendingReminder();
-  }, [activeShift?.id, clearReminderTimer, fetchPendingReminder]);
+  }, [activeShiftId, clearReminderTimer, fetchPendingReminder]);
 
   useEffect(() => {
-    if (!activeShift) {
+    if (!activeShiftId) {
       return;
     }
 
@@ -866,7 +853,7 @@ export default function CajaPage() {
       window.removeEventListener("focus", refreshReminder);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [activeShift?.id, fetchPendingReminder]);
+  }, [activeShiftId, fetchPendingReminder]);
 
   useEffect(() => {
     return () => {
@@ -936,7 +923,7 @@ export default function CajaPage() {
   };
 
   // ─── Product tap ─────────────────────────────────────────────────────────
-  const ensureCanOperateCurrentShift = () => {
+  const ensureCanOperateCurrentShift = useCallback(() => {
     if (!activeShift) {
       alert("Abrí un turno para operar.");
       return false;
@@ -948,7 +935,7 @@ export default function CajaPage() {
     }
 
     return true;
-  };
+  }, [activeShift, canOperateCurrentShift, explainShiftLock]);
 
   const getSelectionAvailableStock = (product: Product, variant?: Variant) =>
     variant
@@ -967,11 +954,11 @@ export default function CajaPage() {
     return product.availableStock ?? product.stock ?? 0;
   };
 
-  const shouldWarnNegativeStock = (availableStock: number, previousQuantity: number, nextQuantity: number) => {
+  const shouldWarnNegativeStock = useCallback((availableStock: number, previousQuantity: number, nextQuantity: number) => {
     if (!allowNegativeStock || nextQuantity <= previousQuantity) return false;
     if (availableStock <= 0) return previousQuantity === 0 && nextQuantity > 0;
     return previousQuantity <= availableStock && nextQuantity > availableStock;
-  };
+  }, [allowNegativeStock]);
 
   const confirmNegativeStock = (itemName: string, availableStock: number, nextQuantity: number) => {
     const projectedStock = availableStock - nextQuantity;
@@ -1054,7 +1041,7 @@ export default function CajaPage() {
     });
 
     if (variant) setVariantSelector(null);
-  }, [activeShift, allowNegativeStock, canOperateCurrentShift, ticket]);
+  }, [allowNegativeStock, ensureCanOperateCurrentShift, shouldWarnNegativeStock, ticket]);
 
   // Long press = -1
   const longPressTimer = useRef<NodeJS.Timeout | null>(null);

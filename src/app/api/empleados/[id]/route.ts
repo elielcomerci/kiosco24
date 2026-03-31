@@ -1,10 +1,19 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { EmployeeRole } from "@prisma/client";
+import { EmployeeRole, Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 
 import { getBranchContext } from "@/lib/branch";
 import { InvalidEmployeePinError, prepareEmployeePinForStorage } from "@/lib/employee-pin";
+
+type UpdateEmployeeRequestBody = {
+  name?: string;
+  pin?: string | null;
+  active?: boolean;
+  suspendedUntil?: string | null;
+  role?: EmployeeRole;
+  branchIds?: string[];
+};
 
 // PATCH /api/empleados/[id] - update employee
 export async function PATCH(
@@ -31,7 +40,8 @@ export async function PATCH(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  const { name, pin, active, suspendedUntil, role, branchIds } = await req.json();
+  const { name, pin, active, suspendedUntil, role, branchIds } =
+    (await req.json()) as UpdateEmployeeRequestBody;
   const parsedSuspendedUntil =
     suspendedUntil === undefined
       ? undefined
@@ -61,24 +71,41 @@ export async function PATCH(
     active === false ||
     (parsedSuspendedUntil instanceof Date && parsedSuspendedUntil > new Date());
 
+  const employeeData: Prisma.EmployeeUpdateInput = {};
+
+  if (name !== undefined) {
+    employeeData.name = name.trim();
+  }
+
+  if (hashedPin !== undefined) {
+    employeeData.pin = hashedPin;
+  }
+
+  if (active !== undefined) {
+    employeeData.active = active;
+  }
+
+  if (parsedSuspendedUntil !== undefined) {
+    employeeData.suspendedUntil = parsedSuspendedUntil;
+  }
+
+  if (role !== undefined) {
+    employeeData.role = role;
+  }
+
+  if (branchIds !== undefined && Array.isArray(branchIds)) {
+    employeeData.branches = {
+      set: branchIds.map((branchId) => ({ id: branchId })),
+    };
+  }
+
   const updated = await prisma.$transaction(async (tx) => {
     const nextEmployee = await tx.employee.update({
       where: { id },
       include: {
         branches: { select: { id: true, name: true } }
       },
-      data: {
-        ...(name !== undefined && { name: name.trim() }),
-        ...(hashedPin !== undefined && { pin: hashedPin }),
-        ...(active !== undefined && { active }),
-        ...(parsedSuspendedUntil !== undefined && { suspendedUntil: parsedSuspendedUntil }),
-        ...(role !== undefined && { role: role as EmployeeRole }),
-        ...(branchIds !== undefined && Array.isArray(branchIds) && {
-          branches: {
-            set: branchIds.map((bid: string) => ({ id: bid }))
-          }
-        }),
-      } as any,
+      data: employeeData,
     });
 
     if (shouldSuspendNow) {

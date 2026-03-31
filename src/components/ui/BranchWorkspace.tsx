@@ -288,7 +288,7 @@ export function BranchWorkspaceProvider({
     }
 
     return shortcuts;
-  }, [branch.id, isEmployee, router]);
+  }, [branch.id, isEmployee, requestPrint, router]);
 
   const pageShortcuts = useMemo(
     () => Object.values(pageShortcutMap).flat(),

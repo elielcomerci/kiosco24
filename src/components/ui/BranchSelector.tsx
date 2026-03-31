@@ -48,12 +48,13 @@ export default function BranchSelector({
 
   if (branches.length <= 1) {
     // Si solo hay 1 sucursal, mostramos el texto estático como antes para no confundir
-    return (
-      <div style={{ display: "flex", alignItems: "center", gap: "12px", minWidth: 0 }}>
-        {currentBranch?.logoUrl ? (
-          <img 
-            src={currentBranch.logoUrl} 
-            alt={currentBranch?.name} 
+      return (
+        <div style={{ display: "flex", alignItems: "center", gap: "12px", minWidth: 0 }}>
+          {currentBranch?.logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img 
+              src={currentBranch.logoUrl} 
+              alt={currentBranch?.name} 
             style={{ width: "38px", height: "38px", borderRadius: "10px", objectFit: "cover", flexShrink: 0 }} 
           />
         ) : (
@@ -93,6 +94,7 @@ export default function BranchSelector({
         className="hover-trigger"
       >
         {currentBranch?.logoUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
           <img 
             src={currentBranch.logoUrl} 
             alt={currentBranch?.name} 

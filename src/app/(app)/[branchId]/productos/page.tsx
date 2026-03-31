@@ -5786,6 +5786,7 @@ export default function ProductosPage() {
 
       {showBulkVariantGroupModal && (
         <BulkVariantGroupModal
+          key={selectedProducts.map((product) => product.id).join(":")}
           products={selectedProducts}
           loading={groupingVariants}
           onClose={() => {

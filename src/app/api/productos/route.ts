@@ -176,7 +176,7 @@ export async function GET(req: Request) {
     return NextResponse.json([], { status: 401 });
   }
 
-  const { branchId, kioscoId } = await getBranchContext(req, session.user.id);
+  const { branchId } = await getBranchContext(req, session.user.id);
   if (!branchId) {
     return NextResponse.json([], { status: 200 });
   }

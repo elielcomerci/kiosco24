@@ -6,6 +6,7 @@ import {
   normalizeSubscriptionPriceOverrideEmail,
   parseSubscriptionPriceOverrideAmount,
 } from "@/lib/subscription-price-overrides";
+import { syncSubscriptionFromMercadoPago } from "@/lib/subscription";
 import { SUBSCRIPTION_PRICE_ARS, formatSubscriptionPrice } from "@/lib/subscription-plan";
 import { revalidatePath } from "next/cache";
 import Link from "next/link";
@@ -154,6 +155,30 @@ async function deleteSubscriptionPriceOverride(formData: FormData) {
   await prisma.subscriptionPriceOverride.delete({
     where: { id: overrideId },
   });
+
+  revalidatePath("/admin");
+  revalidatePath("/suscripcion");
+}
+
+async function syncKioscoSubscription(formData: FormData) {
+  "use server";
+
+  await ensurePlatformAdmin();
+  const kioscoId = String(formData.get("kioscoId") ?? "");
+  if (!kioscoId) {
+    return;
+  }
+
+  const subscription = await prisma.subscription.findUnique({
+    where: { kioscoId },
+    select: { id: true },
+  });
+
+  if (!subscription?.id) {
+    return;
+  }
+
+  await syncSubscriptionFromMercadoPago(subscription.id);
 
   revalidatePath("/admin");
   revalidatePath("/suscripcion");
@@ -475,6 +500,26 @@ export default async function AdminPage() {
                       Ultimo cambio: {kiosco.subscription?.updatedAt ? formatDate(kiosco.subscription.updatedAt) : "Nunca"}
                     </span>
                   </div>
+                </div>
+
+                <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
+                  <form action={syncKioscoSubscription}>
+                    <input type="hidden" name="kioscoId" value={kiosco.id} />
+                    <button type="submit" className="btn btn-secondary">
+                      Sincronizar suscripcion con Mercado Pago
+                    </button>
+                  </form>
+                  {kiosco.subscription?.managementUrl && (
+                    <a
+                      href={kiosco.subscription.managementUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="btn btn-ghost"
+                      style={{ textDecoration: "none" }}
+                    >
+                      Abrir en Mercado Pago
+                    </a>
+                  )}
                 </div>
 
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "12px" }}>

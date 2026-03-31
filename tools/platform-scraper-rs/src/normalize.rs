@@ -50,6 +50,29 @@ pub fn squeeze_spaces(value: &str) -> String {
         .to_string()
 }
 
+pub fn normalize_source_url(value: Option<&str>) -> Option<String> {
+    let Some(value) = value else {
+        return None;
+    };
+
+    let normalized = value
+        .trim()
+        .split('#')
+        .next()
+        .unwrap_or(value)
+        .split('?')
+        .next()
+        .unwrap_or(value)
+        .trim_end_matches('/')
+        .trim();
+
+    if normalized.is_empty() {
+        None
+    } else {
+        Some(normalized.to_string())
+    }
+}
+
 pub fn slugify(value: &str, fallback: &str) -> String {
     let base = if value.trim().is_empty() { fallback } else { value };
     let lowered = base.to_lowercase();
@@ -83,7 +106,7 @@ pub fn build_content_hash(product: &ScrapedProductInput) -> String {
         "presentation": normalize_optional_title(product.presentation.as_deref()),
         "description": normalize_description(product.description.as_deref()),
         "imageSourceUrl": product.image_source_url.as_deref().map(str::trim).filter(|value| !value.is_empty()),
-        "sourceUrl": product.source_url.as_deref().map(str::trim).filter(|value| !value.is_empty()),
+        "sourceUrl": normalize_source_url(product.source_url.as_deref()),
     });
 
     let mut hasher = Sha256::new();
@@ -112,12 +135,7 @@ pub fn normalize_scraped_product(product: &ScrapedProductInput) -> ScrapedProduc
             .map(str::trim)
             .filter(|value| !value.is_empty())
             .map(str::to_string),
-        source_url: product
-            .source_url
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .map(str::to_string),
+        source_url: normalize_source_url(product.source_url.as_deref()),
     }
 }
 

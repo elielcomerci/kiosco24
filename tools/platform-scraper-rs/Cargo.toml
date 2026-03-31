@@ -20,5 +20,5 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 sha2 = "0.10"
 sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio-rustls", "postgres", "chrono", "json", "uuid", "macros"] }
-tokio = { version = "1.48", features = ["macros", "rt-multi-thread", "time", "fs"] }
+tokio = { version = "1.48", features = ["macros", "rt-multi-thread", "time", "fs", "sync"] }
 uuid = { version = "1.18", features = ["v4", "serde"] }

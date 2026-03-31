@@ -17,6 +17,14 @@ impl ScraperSource {
             Self::Coto => "COTO",
         }
     }
+
+    pub fn from_db_value(value: &str) -> Option<Self> {
+        match value {
+            "CARREFOUR" => Some(Self::Carrefour),
+            "COTO" => Some(Self::Coto),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -93,7 +101,9 @@ pub enum Commands {
     Scan(ScanArgs),
     Compare(CompareArgs),
     Publish(PublishArgs),
+    ResolveSafe(ResolveSafeArgs),
     Review(ReviewArgs),
+    Flush(FlushArgs),
 }
 
 #[derive(Debug, Clone, Parser)]
@@ -103,6 +113,8 @@ pub struct ScanArgs {
     #[arg(long)]
     pub url: String,
     #[arg(long)]
+    pub resume_run_id: Option<String>,
+    #[arg(long)]
     pub root_url: Option<String>,
     #[arg(long)]
     pub limit: Option<usize>,
@@ -110,6 +122,27 @@ pub struct ScanArgs {
     pub discover_categories: bool,
     #[arg(long)]
     pub max_categories: Option<usize>,
+    #[arg(long, default_value_t = 50)]
+    pub stage_batch_size: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct ScanResumePosition {
+    pub category_url: String,
+    pub next_page_number: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct ScanPageProgress {
+    pub category_url: String,
+    pub page_url: String,
+    pub page_number: usize,
+}
+
+#[derive(Debug, Clone)]
+pub enum ScanStreamMessage {
+    Product(ScrapedProductInput),
+    PageCompleted(ScanPageProgress),
 }
 
 #[derive(Debug, Clone, Parser)]
@@ -129,6 +162,12 @@ pub struct PublishArgs {
 }
 
 #[derive(Debug, Clone, Parser)]
+pub struct ResolveSafeArgs {
+    #[arg(long)]
+    pub run_id: String,
+}
+
+#[derive(Debug, Clone, Parser)]
 pub struct ReviewArgs {
     #[arg(long)]
     pub run_id: String,
@@ -138,6 +177,16 @@ pub struct ReviewArgs {
     pub open_html: bool,
     #[arg(long, default_value_t = false)]
     pub only_conflicts: bool,
+}
+
+#[derive(Debug, Clone, Parser)]
+pub struct FlushArgs {
+    #[arg(long)]
+    pub buffer_path: Option<String>,
+    #[arg(long, default_value_t = 50)]
+    pub batch_size: usize,
+    #[arg(long, default_value_t = false)]
+    pub cleanup: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -187,6 +236,7 @@ pub struct CompareOutcome {
 
 #[derive(Debug, Clone)]
 pub struct StageProductRecord {
+    pub id: String,
     pub run_id: String,
     pub source: ScraperSource,
     pub barcode: Option<String>,

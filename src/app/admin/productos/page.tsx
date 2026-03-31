@@ -609,6 +609,9 @@ export default async function AdminProductsPage() {
             <Link href="/admin" className="btn btn-ghost">
               Volver a admin
             </Link>
+            <Link href="/admin/productos/scraper" className="btn btn-ghost">
+              Pendientes scraper
+            </Link>
             <form action={ensureDefaultCatalogAction}>
               <button type="submit" className="btn btn-secondary">
                 Reaplicar catalogo base

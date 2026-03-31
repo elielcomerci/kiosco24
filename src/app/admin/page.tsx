@@ -180,6 +180,9 @@ export default async function AdminPage() {
             <Link href="/admin/productos" className="btn btn-secondary">
               Catalogo global
             </Link>
+            <Link href="/admin/productos/scraper" className="btn btn-secondary">
+              Pendientes scraper
+            </Link>
             <form
               action={async () => {
                 "use server";

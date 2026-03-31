@@ -175,6 +175,33 @@ function serializeLotRows(rows: LotDraft[] | undefined, includeExisting: boolean
   );
 }
 
+function matchesProductSearch(product: Product, rawQuery: string) {
+  const query = rawQuery.trim().toLowerCase();
+  if (!query) {
+    return true;
+  }
+
+  const searchableValues = [
+    product.name,
+    product.barcode,
+    product.internalCode,
+    product.brand,
+    product.supplierName,
+    product.description,
+    product.presentation,
+    product.notes,
+    ...(product.variants?.flatMap((variant) => [
+      variant.name,
+      variant.barcode,
+      variant.internalCode,
+    ]) ?? []),
+  ];
+
+  return searchableValues.some((value) =>
+    typeof value === "string" && value.toLowerCase().includes(query),
+  );
+}
+
 function formatExpiryBadge(product: Product) {
   if ((product.expiredQuantity ?? 0) > 0) {
     return `${product.expiredQuantity} vencido${product.expiredQuantity === 1 ? "" : "s"}`;
@@ -2277,6 +2304,7 @@ function StockLoadingModal({
   const [inlineCreateDraft, setInlineCreateDraft] = useState<ProductModalDraft | null>(null);
   const [inlineSpotlightProductId, setInlineSpotlightProductId] = useState<string | null>(spotlightProductId);
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(initialOperation !== "receive");
   const attachmentInputRef = useRef<HTMLInputElement>(null);
   const isReceiveFlow = initialOperation === "receive";
   const modalTitle = isReceiveFlow ? "📥 Recibir mercadería" : "🧮 Corregir inventario";
@@ -2298,11 +2326,18 @@ function StockLoadingModal({
     setInlineNotice(null);
     setInlineCreateDraft(null);
     setScannerOpen(false);
+    setDetailsOpen(initialOperation !== "receive");
   }, [initialOperation]);
 
   useEffect(() => {
     setInlineSpotlightProductId(spotlightProductId);
   }, [spotlightProductId]);
+
+  useEffect(() => {
+    if (supplierName.trim() || restockNote.trim() || attachments.length > 0 || !trackCosts) {
+      setDetailsOpen(true);
+    }
+  }, [attachments.length, restockNote, supplierName, trackCosts]);
 
   useEffect(() => {
     if (!inlineNotice) {
@@ -2407,34 +2442,29 @@ function StockLoadingModal({
     setAttachments((prev) => prev.filter((item) => item.url !== url));
   };
 
-  const eligible = products
-    .filter((p) => {
-      const q = search.toLowerCase();
-      if (!q) return true;
-      return (
-        p.name.toLowerCase().includes(q) ||
-        (p.barcode || "").includes(q) ||
-        (p.internalCode || "").includes(q) ||
-        (p.brand || "").toLowerCase().includes(q) ||
-        (p.supplierName || "").toLowerCase().includes(q)
-      );
-    })
-    .sort((left, right) => {
-      const activeSpotlightId = inlineSpotlightProductId ?? spotlightProductId;
-      if (!activeSpotlightId) {
-        return 0;
-      }
+  const activeSpotlightId = inlineSpotlightProductId ?? spotlightProductId;
 
-      if (left.id === activeSpotlightId) {
-        return -1;
-      }
+  const eligible = useMemo(
+    () =>
+      products
+        .filter((product) => matchesProductSearch(product, search))
+        .sort((left, right) => {
+          if (!activeSpotlightId) {
+            return 0;
+          }
 
-      if (right.id === activeSpotlightId) {
-        return 1;
-      }
+          if (left.id === activeSpotlightId) {
+            return -1;
+          }
 
-      return 0;
-    });
+          if (right.id === activeSpotlightId) {
+            return 1;
+          }
+
+          return 0;
+        }),
+    [activeSpotlightId, products, search],
+  );
 
   const setQty = (
     key: string,
@@ -2797,35 +2827,203 @@ function StockLoadingModal({
     );
   };
 
+  const productHasChanges = (product: Product) =>
+    product.variants && product.variants.length > 0
+      ? product.variants.some((variant) => Boolean(variant.id) && hasRowChanges(variant.stock, product.id, variant.id))
+      : hasRowChanges(product.stock, product.id);
+
+  const visibleChangedCount = eligible.filter(productHasChanges).length;
+  const helperCopy = isReceiveFlow
+    ? "Busca por nombre, marca, proveedor, descripcion, presentacion o codigo. Las variantes tambien entran en el filtro."
+    : "Busca el producto correcto y carga el stock fisico final. El valor reemplaza el inventario actual.";
+
+  const getStatusChipStyle = (tone: "negative" | "out" | "low") =>
+    tone === "negative"
+      ? {
+          color: "var(--red)",
+          background: "rgba(239,68,68,0.14)",
+          border: "1px solid rgba(239,68,68,0.24)",
+        }
+      : tone === "out"
+        ? {
+            color: "var(--text-2)",
+            background: "rgba(148,163,184,0.14)",
+            border: "1px solid rgba(148,163,184,0.22)",
+          }
+        : {
+            color: "var(--amber)",
+            background: "rgba(245,158,11,0.14)",
+            border: "1px solid rgba(245,158,11,0.24)",
+          };
+
+  const renderQuantityEditor = (product: Product, currentStock: number | null, variant?: Variant) => {
+    const variantId = variant?.id ?? null;
+    const isVariant = Boolean(variant);
+    const canEdit = !isVariant || Boolean(variantId);
+    const value = isVariant ? (variantId ? (variantInputs[variantId] ?? "") : "") : (inputs[product.id] ?? "");
+    const result = canEdit ? computeTargetStock(currentStock, product.id, variantId) : null;
+    const pricingKey = getPricingKey(product.id, variantId);
+    const lotKey = lotOwnerKey(product.id, variantId);
+    const lotRows = getRows(product.id, variantId);
+    const manualLotRows = mode === "sumar" ? lotRows.filter((row) => !row.existing) : lotRows;
+    const rowError = canEdit ? getRowError(currentStock, product.id, variantId) : "Esta variante todavia no se puede editar.";
+    const hasPendingChanges = canEdit ? hasRowChanges(currentStock, product.id, variantId) : false;
+    const availableStock = variant?.availableStock ?? (!isVariant ? product.availableStock : null);
+
+    const handleQuantityChange = (nextValue: string) => {
+      if (!canEdit) {
+        return;
+      }
+
+      if (isVariant && variantId) {
+        setQty(variantId, nextValue, setVariantInputs);
+        return;
+      }
+
+      setQty(product.id, nextValue, setInputs);
+    };
+
+    return (
+      <div className="restock-modal__editor">
+        <div className="restock-modal__stock-line">
+          <span className="restock-modal__stock-pill">
+            Actual <strong>{currentStock ?? 0}</strong>
+          </span>
+          {typeof availableStock === "number" && availableStock !== currentStock && (
+            <span className="restock-modal__stock-pill">
+              Vendible <strong>{availableStock}</strong>
+            </span>
+          )}
+          {manualLotRows.length > 0 && (
+            <span className="restock-modal__stock-pill">
+              Lotes <strong>{manualLotRows.length}</strong>
+            </span>
+          )}
+          {rowError && (
+            <span className="restock-modal__stock-pill restock-modal__stock-pill--error">
+              {rowError}
+            </span>
+          )}
+        </div>
+
+        <div className="restock-modal__editor-grid">
+          <label className="restock-modal__field-card">
+            <span className="restock-modal__field-label">{mode === "sumar" ? "Unidades que entran" : "Stock final"}</span>
+            <input
+              className="input restock-modal__qty-input"
+              type="number"
+              inputMode="numeric"
+              placeholder={mode === "sumar" ? "0" : "Ej. 24"}
+              value={value}
+              onChange={(e) => handleQuantityChange(e.target.value)}
+              disabled={!canEdit}
+            />
+            <span className="restock-modal__field-hint">
+              {mode === "sumar"
+                ? "Usa lotes solo para las unidades con vencimiento."
+                : "Si completas lotes, se descuentan del stock final total."}
+            </span>
+          </label>
+
+          <div className={`restock-modal__target-card${hasPendingChanges || result !== null ? " restock-modal__target-card--active" : ""}`}>
+            <span className="restock-modal__field-label">{mode === "sumar" ? "Stock despues del ingreso" : "Stock que se guardara"}</span>
+            <strong>{result !== null ? result : "--"}</strong>
+            <span>
+              {mode === "sumar"
+                ? "Se suma arriba del stock actual."
+                : "Representa el stock fisico final del producto."}
+            </span>
+          </div>
+
+          <button
+            type="button"
+            className="btn btn-sm btn-ghost restock-modal__lot-button"
+            onClick={() => void loadLots(product.id, variantId)}
+            disabled={!canEdit}
+          >
+            {lotLoading[lotKey]
+              ? "Cargando..."
+              : openLotPanels[lotKey]
+                ? "Ocultar lotes"
+                : manualLotRows.length > 0
+                  ? `Lotes (${manualLotRows.length})`
+                  : "Cargar lotes"}
+          </button>
+        </div>
+
+        {isReceiveFlow && (
+          <div className="restock-modal__money-grid">
+            <label className="restock-modal__field-card">
+              <span className="restock-modal__field-label">Costo unitario</span>
+              <input
+                className="input"
+                type="number"
+                inputMode="decimal"
+                placeholder="Opcional"
+                value={costInputs[pricingKey] ?? ""}
+                onChange={(e) => setQty(pricingKey, e.target.value, setCostInputs)}
+                disabled={!canEdit}
+              />
+            </label>
+
+            <label className="restock-modal__field-card">
+              <span className="restock-modal__field-label">Precio de venta</span>
+              <input
+                className="input"
+                type="number"
+                inputMode="decimal"
+                placeholder="Opcional"
+                value={priceInputs[pricingKey] ?? ""}
+                onChange={(e) => setQty(pricingKey, e.target.value, setPriceInputs)}
+                disabled={!canEdit}
+              />
+            </label>
+          </div>
+        )}
+
+        {canEdit && openLotPanels[lotKey] && renderLotsPanel(product, currentStock, variant)}
+      </div>
+    );
+  };
+
   return (
     <>
-    <div
+      <div
       className="modal-overlay animate-fade-in"
       onClick={onClose}
       style={{ zIndex: 9999, alignItems: "flex-end", padding: "16px", paddingBottom: "max(16px, env(safe-area-inset-bottom))" }}
     >
       <div
-        className="modal animate-slide-up"
+        className="modal animate-slide-up restock-modal"
         onClick={(e) => e.stopPropagation()}
-        style={{ maxHeight: "92dvh", width: "100%", maxWidth: "520px", display: "flex", flexDirection: "column", gap: "0", padding: "0", overflow: "hidden" }}
+        style={{ width: "100%", display: "flex", flexDirection: "column" }}
       >
-        {/* Header */}
-        <div style={{ padding: "16px 20px 12px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--border)" }}>
-          <h2 style={{ fontSize: "18px", fontWeight: 800 }}>{modalTitle}</h2>
+        <div className="restock-modal__header">
+          <div className="restock-modal__title-wrap">
+            <span className="restock-modal__eyebrow">{isReceiveFlow ? "Ingreso rapido" : "Ajuste manual"}</span>
+            <h2 className="restock-modal__title">{modalTitle}</h2>
+            <p className="restock-modal__subtitle">
+              {isReceiveFlow
+                ? "Carga cantidades, deja notas opcionales y guarda todo sin perder de vista la lista."
+                : "Corrige el inventario real con una lectura mas clara del stock actual y del resultado final."}
+            </p>
+          </div>
           <button className="btn btn-sm btn-ghost" onClick={onClose}>✕</button>
         </div>
 
         {/* Filter + metadata */}
-        <div style={{ padding: "12px 20px", display: "flex", flexDirection: "column", gap: "8px", borderBottom: "1px solid var(--border)" }}>
+        <div className="restock-modal__toolbar">
+          <div className="restock-modal__field-label">Buscar producto</div>
           <input
-            className="input"
+            className="input restock-modal__search-input"
             placeholder="🔍 Filtrar por nombre, marca, código, proveedor..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             autoFocus
           />
+          <div className="restock-modal__field-hint">{helperCopy}</div>
           {false && (
-          <div style={{ display: "flex", gap: "8px", alignItems: "center", justifyContent: "space-between" }}>
+          <div className="restock-modal__quick-actions">
             <div style={{ fontSize: "11px", color: "var(--text-3)" }}>
               EscaneÃ¡ o filtra y, si falta el producto, podÃ©s darlo de alta acÃ¡ mismo.
             </div>
@@ -2850,11 +3048,11 @@ function StockLoadingModal({
             </div>
           </div>
           )}
-          <div style={{ display: "flex", gap: "8px", alignItems: "center", justifyContent: "space-between" }}>
-            <div style={{ fontSize: "11px", color: "var(--text-3)" }}>
-              Escanea o filtra y, si falta el producto, podes darlo de alta aca mismo.
+          <div className="restock-modal__search-row">
+            <div style={{ display: "none" }}>
+              {helperCopy}
             </div>
-            <div style={{ display: "flex", gap: "8px", alignItems: "center", flexShrink: 0 }}>
+            <div className="restock-modal__quick-actions">
               <button
                 type="button"
                 className="btn btn-ghost"
@@ -2862,7 +3060,7 @@ function StockLoadingModal({
                 onClick={() => setScannerOpen(true)}
                 title="Escanear para buscar"
               >
-                Scan
+                Escanear
               </button>
               <button
                 type="button"
@@ -2870,7 +3068,15 @@ function StockLoadingModal({
                 style={{ border: "1px solid var(--border)", fontWeight: 700 }}
                 onClick={openInlineCreate}
               >
-                + Nuevo
+                Crear producto
+              </button>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                style={{ border: "1px solid var(--border)", fontWeight: 700 }}
+                onClick={() => setDetailsOpen((prev) => !prev)}
+              >
+                {detailsOpen ? "Ocultar detalles" : isReceiveFlow ? "Detalles del ingreso" : "Motivo del ajuste"}
               </button>
             </div>
           </div>
@@ -2884,6 +3090,8 @@ function StockLoadingModal({
               {entryNote}
             </div>
           )}
+          {detailsOpen && (
+            <>
           <div
             style={{
               fontSize: "11px",
@@ -3020,22 +3228,14 @@ function StockLoadingModal({
               style={{ resize: "vertical", minHeight: "78px" }}
             />
           )}
+            </>
+          )}
         </div>
 
         {/* Product list */}
-        <div style={{ flex: 1, overflowY: "auto", padding: "8px 20px", display: "flex", flexDirection: "column", gap: "6px" }}>
+        <div className="restock-modal__list">
           {eligible.length === 0 ? (
-            <div
-              style={{
-                textAlign: "center",
-                padding: "32px",
-                color: "var(--text-3)",
-                display: "flex",
-                flexDirection: "column",
-                gap: "12px",
-                alignItems: "center",
-              }}
-            >
+            <div className="restock-modal__empty">
               <div>Sin resultados para &quot;{search}&quot;</div>
               <button
                 type="button"
@@ -3048,22 +3248,69 @@ function StockLoadingModal({
             </div>
           ) : (
             eligible.map((p) => (
-              <div
+              <section
                 key={p.id}
+                className="restock-modal__product"
                 style={{
-                  border: "1px solid var(--border)",
-                  borderRadius: "var(--radius)",
-                  padding: "10px 14px",
-                  background: "var(--surface)",
+                  border: p.id === activeSpotlightId
+                    ? "1px solid rgba(34,197,94,0.34)"
+                    : productHasChanges(p)
+                      ? "1px solid rgba(251,191,36,0.28)"
+                      : undefined,
+                  boxShadow: p.id === activeSpotlightId
+                    ? "0 0 0 1px rgba(34,197,94,0.14) inset, 0 20px 44px rgba(2,6,23,0.22)"
+                    : productHasChanges(p)
+                      ? "0 0 0 1px rgba(251,191,36,0.1) inset, 0 20px 44px rgba(2,6,23,0.18)"
+                      : undefined,
                 }}
               >
-                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                  {p.emoji && <span style={{ fontSize: "18px" }}>{p.emoji}</span>}
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 600, fontSize: "14px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</div>
-                    {(p.brand || p.supplierName) && (
+                <div className="restock-modal__product-head">
+                  <ProductThumb image={p.image} emoji={p.emoji} name={p.name} size={56} radius={18} previewable />
+                  <div className="restock-modal__product-copy">
+                    <div className="restock-modal__product-title-row">
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div className="restock-modal__product-title">{p.name}</div>
+                        {[p.brand, p.supplierName, p.presentation].filter(Boolean).length > 0 && (
                       <div style={{ fontSize: "11px", color: "var(--text-3)" }}>{[p.brand, p.supplierName].filter(Boolean).join(" · ")}</div>
                     )}
+                      </div>
+                      <div className="restock-modal__product-tags">
+                        {p.id === activeSpotlightId && (
+                          <span className="restock-modal__tag restock-modal__tag--spotlight">Nuevo</span>
+                        )}
+                        {productHasChanges(p) && (
+                          <span className="restock-modal__tag restock-modal__tag--changed">Pendiente</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {[p.internalCode, p.barcode].filter(Boolean).length > 0 && (
+                      <div className="restock-modal__product-meta">
+                        {[p.internalCode, p.barcode].filter(Boolean).map((code) => (
+                          <span key={code} className="restock-modal__product-chip">
+                            {code}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="restock-modal__product-meta">
+                      <span className="restock-modal__product-chip">Stock {getProductTotalStock(p) ?? 0}</span>
+                      {p.variants && p.variants.length > 0 && (
+                        <span className="restock-modal__product-chip">{p.variants.length} variantes</span>
+                      )}
+                      {!p.variants && typeof p.availableStock === "number" && p.availableStock !== p.stock && (
+                        <span className="restock-modal__product-chip">Vendible {p.availableStock}</span>
+                      )}
+                      {getProductStockBadge(p) && (
+                        <span className="restock-modal__product-chip" style={getStatusChipStyle(getProductStockBadge(p)!.tone)}>
+                          {getProductStockBadge(p)!.label}
+                        </span>
+                      )}
+                      {formatExpiryBadge(p) && (
+                        <span className="restock-modal__product-chip">{formatExpiryBadge(p)}</span>
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -3183,25 +3430,35 @@ function StockLoadingModal({
                     })}
                   </div>
                 )}
-              </div>
+              </section>
             ))
           )}
         </div>
 
         {/* Footer */}
-        <div style={{ padding: "12px 20px", borderTop: "1px solid var(--border)", display: "flex", gap: "10px", alignItems: "center" }}>
-          <span style={{ fontSize: "13px", color: "var(--text-3)", flex: 1 }}>
-            {changesCount > 0 ? `${changesCount} cambio${changesCount !== 1 ? "s" : ""} pendiente${changesCount !== 1 ? "s" : ""}` : "Sin cambios"}
-          </span>
+        <div className="restock-modal__footer">
+          <div className="restock-modal__footer-copy">
+            <div className="restock-modal__footer-title">
+              {changesCount > 0
+                ? `${changesCount} cambio${changesCount !== 1 ? "s" : ""} en ${visibleChangedCount} producto${visibleChangedCount !== 1 ? "s" : ""}`
+                : "Todavia no cargaste cambios"}
+            </div>
           {saveError && (
-            <span style={{ fontSize: "12px", color: "var(--red)", flex: 1.2 }}>
+            <span style={{ fontSize: "12px", color: "var(--red)" }}>
               {saveError}
             </span>
           )}
-          <button className="btn btn-ghost" style={{ flexShrink: 0 }} onClick={onClose}>Cancelar</button>
+            {!saveError && (
+              <div className="restock-modal__footer-text">
+                {hasInvalidRows
+                  ? "Revisa los lotes que superan el stock final antes de guardar."
+                  : "Puedes seguir cargando sin cerrar el modal."}
+              </div>
+            )}
+          </div>
+          <button className="btn btn-ghost" onClick={onClose}>Cancelar</button>
           <button
             className="btn btn-green"
-            style={{ flexShrink: 0 }}
             onClick={handleSaveAll}
             disabled={saving || uploadingAttachments || changesCount === 0 || hasInvalidRows}
           >

@@ -36,12 +36,31 @@ impl CotoScraper {
         }
     }
 
+    #[allow(dead_code)]
     pub fn scan(
         &self,
         category_url: &str,
         root_url: Option<&str>,
         limit: Option<usize>,
     ) -> Result<Vec<ScrapedProductInput>> {
+        let mut products = Vec::new();
+        self.scan_with_handler(category_url, root_url, limit, |product| {
+            products.push(product);
+            Ok(())
+        })?;
+        Ok(products)
+    }
+
+    pub fn scan_with_handler<F>(
+        &self,
+        category_url: &str,
+        root_url: Option<&str>,
+        limit: Option<usize>,
+        mut on_product: F,
+    ) -> Result<usize>
+    where
+        F: FnMut(ScrapedProductInput) -> Result<()>,
+    {
         let launch_options = LaunchOptionsBuilder::default()
             .headless(true)
             .window_size(Some((1440, 1200)))
@@ -69,11 +88,11 @@ impl CotoScraper {
         self.human_delay();
 
         let mut seen_links = BTreeSet::new();
-        let mut products = Vec::new();
+        let mut processed_products = 0usize;
         let mut idle_rounds = 0usize;
 
         loop {
-            if limit.is_some_and(|max| products.len() >= max) {
+            if limit.is_some_and(|max| processed_products >= max) {
                 break;
             }
 
@@ -96,7 +115,8 @@ impl CotoScraper {
                                 .clone()
                                 .unwrap_or_else(|| "(sin EAN)".to_string())
                         );
-                        products.push(product);
+                        on_product(product)?;
+                        processed_products += 1;
                     }
                     Ok(None) => {
                         println!("  - Se omitio un producto sin nombre valido: {product_url}");
@@ -106,14 +126,14 @@ impl CotoScraper {
                     }
                 }
 
-                if limit.is_some_and(|max| products.len() >= max) {
+                if limit.is_some_and(|max| processed_products >= max) {
                     break;
                 }
 
                 self.human_delay();
             }
 
-            if limit.is_some_and(|max| products.len() >= max) {
+            if limit.is_some_and(|max| processed_products >= max) {
                 break;
             }
 
@@ -129,7 +149,7 @@ impl CotoScraper {
             }
         }
 
-        Ok(products)
+        Ok(processed_products)
     }
 
     fn open_page(&self, tab: &Arc<Tab>, url: &str) -> Result<()> {

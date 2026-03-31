@@ -74,8 +74,28 @@ pub async fn finish_run(
     Ok(())
 }
 
+pub async fn resume_run(pool: &PgPool, run_id: &str) -> Result<()> {
+    let now = Utc::now();
+    sqlx::query(
+        r#"
+        UPDATE "ScrapeRun"
+        SET "status" = $2::"ScrapeRunStatus",
+            "errorMessage" = NULL,
+            "finishedAt" = NULL,
+            "updatedAt" = $3
+        WHERE id = $1
+        "#,
+    )
+    .bind(run_id)
+    .bind(RunStatus::Running.as_db_value())
+    .bind(now)
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
 pub async fn insert_scraped_product(pool: &PgPool, record: &StageProductRecord) -> Result<String> {
-    let product_id = Uuid::new_v4().to_string();
     let now = Utc::now();
     let row = sqlx::query(
         r#"
@@ -127,10 +147,11 @@ pub async fn insert_scraped_product(pool: &PgPool, record: &StageProductRecord) 
           $21,
           $22
         )
+        ON CONFLICT ("id") DO NOTHING
         RETURNING id
         "#,
     )
-    .bind(&product_id)
+    .bind(&record.id)
     .bind(&record.run_id)
     .bind(record.source.as_db_value())
     .bind(&record.barcode)
@@ -152,10 +173,13 @@ pub async fn insert_scraped_product(pool: &PgPool, record: &StageProductRecord) 
     .bind(record.compare_outcome.conflict_fields.clone())
     .bind(now)
     .bind(now)
-    .fetch_one(pool)
+    .fetch_optional(pool)
     .await?;
 
-    Ok(row.try_get::<String, _>("id")?)
+    Ok(row
+        .map(|value| value.try_get::<String, _>("id"))
+        .transpose()?
+        .unwrap_or_else(|| record.id.clone()))
 }
 
 pub async fn list_run_products(
@@ -291,26 +315,50 @@ pub async fn update_compare_outcome(
     Ok(())
 }
 
-pub async fn mark_keep_remote(pool: &PgPool, product_id: &str, review_note: Option<&str>) -> Result<()> {
+pub async fn mark_skipped(
+    pool: &PgPool,
+    product_id: &str,
+    review_action: ReviewAction,
+    review_note: Option<&str>,
+    remote_platform_product_id: Option<&str>,
+    remote_owner_type: Option<&str>,
+) -> Result<()> {
     sqlx::query(
         r#"
         UPDATE "ScrapedProduct"
         SET "syncStatus" = $2::"ScrapedProductSyncStatus",
             "reviewAction" = $3::"ScrapedProductReviewAction",
             "reviewNote" = $4,
-            "updatedAt" = $5
+            "publishedAt" = NULL,
+            "remotePlatformProductId" = COALESCE($5, "remotePlatformProductId"),
+            "remoteOwnerType" = COALESCE($6, "remoteOwnerType"),
+            "updatedAt" = $7
         WHERE id = $1
         "#,
     )
     .bind(product_id)
     .bind(SyncStatus::Skipped.as_db_value())
-    .bind(ReviewAction::KeepRemote.as_db_value())
+    .bind(review_action.as_db_value())
     .bind(review_note)
+    .bind(remote_platform_product_id)
+    .bind(remote_owner_type)
     .bind(Utc::now())
     .execute(pool)
     .await?;
 
     Ok(())
+}
+
+pub async fn mark_keep_remote(pool: &PgPool, product_id: &str, review_note: Option<&str>) -> Result<()> {
+    mark_skipped(
+        pool,
+        product_id,
+        ReviewAction::KeepRemote,
+        review_note,
+        None,
+        None,
+    )
+    .await
 }
 
 pub async fn mark_published(

@@ -13,7 +13,7 @@ use regex::Regex;
 use scraper::{Html, Selector};
 
 use crate::{
-    models::ScrapedProductInput,
+    models::{ScanPageProgress, ScanResumePosition, ScrapedProductInput},
     normalize::{normalize_barcode, squeeze_spaces},
 };
 
@@ -23,20 +23,13 @@ const PRODUCT_GRID_WAIT_MS: u64 = 12_000;
 const PRODUCT_READY_WAIT_MS: u64 = 10_000;
 const POLL_INTERVAL_MS: u64 = 900;
 const KNOWN_CARREFOUR_TOP_CATEGORIES: &[(&str, &str)] = &[
-    ("https://www.carrefour.com.ar/electro-y-tecnologia", "Electro y Tecnologia"),
-    ("https://www.carrefour.com.ar/hogar", "Hogar"),
     ("https://www.carrefour.com.ar/almacen", "Almacen"),
-    ("https://www.carrefour.com.ar/desayuno-y-merienda", "Desayuno y Merienda"),
     ("https://www.carrefour.com.ar/bebidas", "Bebidas"),
+    ("https://www.carrefour.com.ar/desayuno-y-merienda", "Desayuno y Merienda"),
     ("https://www.carrefour.com.ar/lacteos-y-productos-frescos", "Lacteos y Productos Frescos"),
     ("https://www.carrefour.com.ar/congelados", "Congelados"),
     ("https://www.carrefour.com.ar/limpieza", "Limpieza"),
     ("https://www.carrefour.com.ar/perfumeria-y-farmacia", "Perfumeria y Farmacia"),
-    ("https://www.carrefour.com.ar/mundo-bebe", "Mundo Bebe"),
-    ("https://www.carrefour.com.ar/mascotas", "Mascotas"),
-    ("https://www.carrefour.com.ar/jugueteria-y-libreria", "Jugueteria y Libreria"),
-    ("https://www.carrefour.com.ar/automotor", "Automotor"),
-    ("https://www.carrefour.com.ar/aire-libre-y-ocio", "Aire Libre y Ocio"),
 ];
 
 #[derive(Clone)]
@@ -49,6 +42,12 @@ pub struct CarrefourScraper {
 struct CategoryCandidate {
     url: String,
     label: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct LoadedCategoryPageOutcome {
+    new_links_total: usize,
+    completed: bool,
 }
 
 impl CategoryCandidate {
@@ -65,6 +64,7 @@ impl CarrefourScraper {
         }
     }
 
+    #[allow(dead_code)]
     pub fn scan(
         &self,
         category_url: &str,
@@ -73,6 +73,37 @@ impl CarrefourScraper {
         discover_categories: bool,
         max_categories: Option<usize>,
     ) -> Result<Vec<ScrapedProductInput>> {
+        let mut products = Vec::new();
+        self.scan_with_handler(
+            category_url,
+            root_url,
+            limit,
+            discover_categories,
+            max_categories,
+            None,
+            |_| Ok(()),
+            |product| {
+                products.push(product);
+                Ok(())
+            },
+        )?;
+        Ok(products)
+    }
+
+    pub fn scan_with_handler<F>(
+        &self,
+        category_url: &str,
+        root_url: Option<&str>,
+        limit: Option<usize>,
+        discover_categories: bool,
+        max_categories: Option<usize>,
+        resume_from: Option<ScanResumePosition>,
+        mut on_page_complete: impl FnMut(ScanPageProgress) -> Result<()>,
+        mut on_product: F,
+    ) -> Result<usize>
+    where
+        F: FnMut(ScrapedProductInput) -> Result<()>,
+    {
         let launch_options = LaunchOptionsBuilder::default()
             .headless(true)
             .window_size(Some((1440, 1200)))
@@ -102,32 +133,85 @@ impl CarrefourScraper {
 
         print_line(format!("Categorias a recorrer: {}", categories.len()));
 
+        let resume_target = resume_from.as_ref().map(|state| {
+            (
+                self.normalize_category_url(&state.category_url),
+                state.next_page_number,
+            )
+        });
+        let resume_index = resume_target.as_ref().and_then(|(category_url, _)| {
+            categories
+                .iter()
+                .position(|category| self.normalize_category_url(&category.url) == *category_url)
+        });
+
+        if resume_target.is_some() && resume_index.is_none() {
+            let missing = &resume_target
+                .as_ref()
+                .map(|(category_url, _)| category_url.clone())
+                .unwrap_or_default();
+            anyhow::bail!(
+                "No pude ubicar la categoria del checkpoint para retomar: {}",
+                missing
+            );
+        }
+
         let mut seen_links = BTreeSet::new();
-        let mut products = Vec::new();
+        let mut processed_products = 0usize;
 
         for (index, category) in categories.iter().enumerate() {
-            if limit.is_some_and(|max| products.len() >= max) {
+            if limit.is_some_and(|max| processed_products >= max) {
                 break;
             }
 
-            print_line(format!(
-                "Categoria {}/{}: {}",
-                index + 1,
-                categories.len(),
-                category.url
-            ));
+            if resume_index.is_some_and(|resume_at| index < resume_at) {
+                print_line(format!(
+                    "Categoria {}/{}: {} (omitida por resume)",
+                    index + 1,
+                    categories.len(),
+                    category.url
+                ));
+                continue;
+            }
+
+            let start_page_number = if resume_index == Some(index) {
+                let next_page = resume_target
+                    .as_ref()
+                    .map(|(_, page_number)| *page_number)
+                    .unwrap_or(1);
+                print_line(format!(
+                    "Categoria {}/{}: {} (retomando desde pagina {})",
+                    index + 1,
+                    categories.len(),
+                    category.url,
+                    next_page
+                ));
+                next_page
+            } else {
+                print_line(format!(
+                    "Categoria {}/{}: {}",
+                    index + 1,
+                    categories.len(),
+                    category.url
+                ));
+                self.extract_page_number(&category.url).unwrap_or(1)
+            };
+
             self.scan_category_pages(
                 &category.url,
                 &category_tab,
                 &product_tab,
                 category.label.clone(),
+                start_page_number,
                 limit,
                 &mut seen_links,
-                &mut products,
+                &mut processed_products,
+                &mut on_page_complete,
+                &mut on_product,
             )?;
         }
 
-        Ok(products)
+        Ok(processed_products)
     }
 
     fn discover_categories(
@@ -172,7 +256,7 @@ impl CarrefourScraper {
                     normalized.clone(),
                     page_label.clone().or(candidate.label.clone()),
                 ));
-                if max_categories.is_some_and(|max| discovered.len() >= max) {
+                if max_categories.is_some_and(|max| discovered.len() >= max.saturating_mul(3).max(max)) {
                     break;
                 }
             }
@@ -192,28 +276,142 @@ impl CarrefourScraper {
             }
         }
 
-        if discovered.is_empty() {
-            Ok(vec![CategoryCandidate::new(seed_url.to_string(), None)])
-        } else {
-            Ok(discovered)
-        }
+        Ok(self.prioritize_categories(discovered, seed_url, max_categories))
     }
 
-    fn scan_category_pages(
+    fn prioritize_categories(
+        &self,
+        discovered: Vec<CategoryCandidate>,
+        seed_url: &str,
+        max_categories: Option<usize>,
+    ) -> Vec<CategoryCandidate> {
+        let mut prioritized: Vec<CategoryCandidate> = discovered
+            .into_iter()
+            .filter(|candidate| self.is_preferred_category_candidate(&candidate.url, candidate.label.as_deref()))
+            .collect();
+
+        prioritized.sort_by_key(|candidate| {
+            self.category_priority(candidate.label.as_deref(), &candidate.url)
+        });
+
+        if prioritized.is_empty()
+            && self.is_preferred_category_candidate(seed_url, None)
+        {
+            prioritized.push(CategoryCandidate::new(seed_url.to_string(), None));
+        }
+
+        if let Some(max) = max_categories {
+            prioritized.truncate(max);
+        }
+
+        prioritized
+    }
+
+    fn category_priority(&self, label: Option<&str>, url: &str) -> usize {
+        let fingerprint = format!(
+            "{} {}",
+            label.unwrap_or_default().to_lowercase(),
+            url.to_lowercase()
+        );
+
+        let priorities = [
+            "almacen",
+            "bebidas",
+            "desayuno",
+            "merienda",
+            "lacteos",
+            "frescos",
+            "congelados",
+            "limpieza",
+            "perfumeria",
+            "farmacia",
+        ];
+
+        priorities
+            .iter()
+            .position(|keyword| fingerprint.contains(keyword))
+            .unwrap_or(priorities.len() + 1)
+    }
+
+    fn is_preferred_category_candidate(&self, url: &str, label: Option<&str>) -> bool {
+        let fingerprint = format!(
+            "{} {}",
+            label.unwrap_or_default().to_lowercase(),
+            url.to_lowercase()
+        );
+
+        let excluded_keywords = [
+            "electro",
+            "tecnologia",
+            "hogar",
+            "muebles",
+            "bazar",
+            "deco",
+            "jugueteria",
+            "libreria",
+            "automotor",
+            "aire libre",
+            "aire-libre",
+            "ocio",
+            "mundo bebe",
+            "mundo-bebe",
+            "textil",
+            "calzado",
+            "ferreteria",
+            "jardin",
+            "mascotas",
+        ];
+
+        if excluded_keywords
+            .iter()
+            .any(|keyword| fingerprint.contains(keyword))
+        {
+            return false;
+        }
+
+        let preferred_keywords = [
+            "almacen",
+            "bebidas",
+            "desayuno",
+            "merienda",
+            "lacteos",
+            "frescos",
+            "congelados",
+            "limpieza",
+            "perfumeria",
+            "farmacia",
+            "golosinas",
+            "snacks",
+            "galletitas",
+            "infusiones",
+        ];
+
+        preferred_keywords
+            .iter()
+            .any(|keyword| fingerprint.contains(keyword))
+    }
+
+    fn scan_category_pages<F>(
         &self,
         category_url: &str,
         category_tab: &Arc<Tab>,
         product_tab: &Arc<Tab>,
         category_label: Option<String>,
+        start_page_number: usize,
         limit: Option<usize>,
         seen_links: &mut BTreeSet<String>,
-        products: &mut Vec<ScrapedProductInput>,
-    ) -> Result<()> {
+        processed_products: &mut usize,
+        on_page_complete: &mut impl FnMut(ScanPageProgress) -> Result<()>,
+        on_product: &mut F,
+    ) -> Result<()>
+    where
+        F: FnMut(ScrapedProductInput) -> Result<()>,
+    {
         let base_category_url = self.remove_page_param(category_url);
-        let mut page_number = self.extract_page_number(category_url).unwrap_or(1);
+        let mut page_number = start_page_number.max(1);
 
         loop {
-            if limit.is_some_and(|max| products.len() >= max) {
+            if limit.is_some_and(|max| *processed_products >= max) {
                 break;
             }
 
@@ -227,20 +425,29 @@ impl CarrefourScraper {
                 .extract_category_name_from_category_page(category_tab)?
                 .or_else(|| category_label.clone());
 
-            let new_links = self.scan_loaded_category_page(
+            let page_outcome = self.scan_loaded_category_page(
                 category_tab,
                 product_tab,
                 category_name,
                 limit,
                 seen_links,
-                products,
+                processed_products,
+                on_product,
             )?;
 
-            if limit.is_some_and(|max| products.len() >= max) {
+            if page_outcome.completed && page_outcome.new_links_total > 0 {
+                on_page_complete(ScanPageProgress {
+                    category_url: base_category_url.clone(),
+                    page_url: page_url.clone(),
+                    page_number,
+                })?;
+            }
+
+            if limit.is_some_and(|max| *processed_products >= max) {
                 break;
             }
 
-            if new_links == 0 {
+            if page_outcome.new_links_total == 0 {
                 break;
             }
 
@@ -250,20 +457,26 @@ impl CarrefourScraper {
         Ok(())
     }
 
-    fn scan_loaded_category_page(
+    fn scan_loaded_category_page<F>(
         &self,
         category_tab: &Arc<Tab>,
         product_tab: &Arc<Tab>,
         category_name: Option<String>,
         limit: Option<usize>,
         seen_links: &mut BTreeSet<String>,
-        products: &mut Vec<ScrapedProductInput>,
-    ) -> Result<usize> {
+        processed_products: &mut usize,
+        on_product: &mut F,
+    ) -> Result<LoadedCategoryPageOutcome>
+    where
+        F: FnMut(ScrapedProductInput) -> Result<()>,
+    {
         let mut idle_rounds = 0usize;
         let mut new_links_total = 0usize;
+        let mut stopped_by_limit = false;
 
         loop {
-            if limit.is_some_and(|max| products.len() >= max) {
+            if limit.is_some_and(|max| *processed_products >= max) {
+                stopped_by_limit = true;
                 break;
             }
 
@@ -287,7 +500,8 @@ impl CarrefourScraper {
                                 .clone()
                                 .unwrap_or_else(|| "(sin EAN)".to_string())
                         ));
-                        products.push(product);
+                        on_product(product)?;
+                        *processed_products += 1;
                     }
                     Ok(None) => {
                         print_line(format!(
@@ -299,14 +513,16 @@ impl CarrefourScraper {
                     }
                 }
 
-                if limit.is_some_and(|max| products.len() >= max) {
+                if limit.is_some_and(|max| *processed_products >= max) {
+                    stopped_by_limit = true;
                     break;
                 }
 
                 self.human_delay();
             }
 
-            if limit.is_some_and(|max| products.len() >= max) {
+            if limit.is_some_and(|max| *processed_products >= max) {
+                stopped_by_limit = true;
                 break;
             }
 
@@ -322,7 +538,10 @@ impl CarrefourScraper {
             }
         }
 
-        Ok(new_links_total)
+        Ok(LoadedCategoryPageOutcome {
+            new_links_total,
+            completed: !stopped_by_limit,
+        })
     }
 
     fn open_page(&self, tab: &Arc<Tab>, url: &str) -> Result<()> {

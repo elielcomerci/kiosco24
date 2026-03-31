@@ -182,6 +182,9 @@ function matchesProductSearch(product: Product, rawQuery: string) {
     return true;
   }
 
+  // Buscar por palabras completas para más flexibilidad
+  const queryWords = query.split(/\s+/).filter(Boolean);
+
   const searchableValues = [
     product.name,
     product.barcode,
@@ -198,9 +201,13 @@ function matchesProductSearch(product: Product, rawQuery: string) {
     ]) ?? []),
   ];
 
-  return searchableValues.some((value) =>
-    typeof value === "string" && value.toLowerCase().includes(query),
-  );
+  const searchText = searchableValues
+    .filter((value) => typeof value === "string")
+    .map((value) => value.toLowerCase())
+    .join(" ");
+
+  // Todos los palabras de la búsqueda deben estar presentes en el texto combinado
+  return queryWords.every((word) => searchText.includes(word));
 }
 
 function normalizeLookupCandidate(value?: string | null) {

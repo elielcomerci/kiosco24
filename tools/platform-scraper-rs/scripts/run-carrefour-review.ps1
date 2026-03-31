@@ -1,6 +1,6 @@
 param(
     [int]$MaxCategories = 14,
-    [Nullable[int]]$Limit = $null,
+    [int]$Limit,
     [switch]$NoOpen
 )
 
@@ -154,7 +154,7 @@ function Get-FileUrl {
     return ([System.Uri]$Path).AbsoluteUri
 }
 
-function Rebuild-StatusCounts {
+function Update-StatusCounts {
     $counts = [ordered]@{}
     foreach ($product in $state.Products) {
         if (-not $product.syncStatus) {
@@ -168,21 +168,21 @@ function Rebuild-StatusCounts {
     $state.StatusCounts = $counts
 }
 
-function Upsert-Product {
+function Update-ProductListEntry {
     param($Product)
 
     for ($i = 0; $i -lt $state.Products.Count; $i++) {
         if ($state.Products[$i].id -eq $Product.id) {
             $state.Products[$i] = $Product
             $state.ExtractedCount = [Math]::Max($state.BufferedCount, $state.Products.Count)
-            Rebuild-StatusCounts
+            Update-StatusCounts
             return
         }
     }
 
     [void]$state.Products.Add($Product)
     $state.ExtractedCount = [Math]::Max($state.BufferedCount, $state.Products.Count)
-    Rebuild-StatusCounts
+    Update-StatusCounts
 }
 
 function Convert-BufferedProductToDashboardProduct {
@@ -268,7 +268,7 @@ function Sync-StateFromBuffer {
         }
     }
 
-    Rebuild-StatusCounts
+    Update-StatusCounts
 }
 
 function Write-DashboardHtml {
@@ -637,20 +637,20 @@ function Update-StateFromLine {
     if ($Line.StartsWith("__SCRAPER_EVENT__")) {
         $payload = $Line.Substring("__SCRAPER_EVENT__".Length)
         try {
-            $event = $payload | ConvertFrom-Json
-            if ($event.type -eq "staged_product") {
-                Upsert-Product ([ordered]@{
-                    id = [string]$event.id
-                    name = Repair-MojibakeText ([string]$event.name)
-                    barcode = Repair-MojibakeText ([string]$event.barcode)
-                    categoryName = Repair-MojibakeText ([string]$event.categoryName)
-                    presentation = Repair-MojibakeText ([string]$event.presentation)
-                    image = [string]$event.image
-                    sourceUrl = [string]$event.sourceUrl
-                    syncStatus = Repair-MojibakeText ([string]$event.syncStatus)
+            $scraperEvent = $payload | ConvertFrom-Json
+            if ($scraperEvent.type -eq "staged_product") {
+                Update-ProductListEntry ([ordered]@{
+                    id = [string]$scraperEvent.id
+                    name = Repair-MojibakeText ([string]$scraperEvent.name)
+                    barcode = Repair-MojibakeText ([string]$scraperEvent.barcode)
+                    categoryName = Repair-MojibakeText ([string]$scraperEvent.categoryName)
+                    presentation = Repair-MojibakeText ([string]$scraperEvent.presentation)
+                    image = [string]$scraperEvent.image
+                    sourceUrl = [string]$scraperEvent.sourceUrl
+                    syncStatus = Repair-MojibakeText ([string]$scraperEvent.syncStatus)
                 })
                 Sync-StateFromBuffer -LoadProducts
-                Add-Log "Producto listo: $(Repair-MojibakeText ([string]$event.name)) [$(Repair-MojibakeText ([string]$event.syncStatus))]"
+                Add-Log "Producto listo: $(Repair-MojibakeText ([string]$scraperEvent.name)) [$(Repair-MojibakeText ([string]$scraperEvent.syncStatus))]"
             }
         } catch {
             Add-Log "No pude interpretar el evento del scrapper."
@@ -772,7 +772,7 @@ if ($resumeRunId) {
     $scanArgs += @("--resume-run-id", $resumeRunId)
 }
 
-if ($null -ne $Limit) {
+if ($PSBoundParameters.ContainsKey('Limit')) {
     $scanArgs += @("--limit", $Limit)
 }
 

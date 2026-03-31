@@ -1,0 +1,25 @@
+[Prisma Init] pg TCP | Runtime: Node | Host: ep-long-bar-ady5nkk0-pooler.c-2.us-east-1.aws.neon.tech
+Ejecutando parche en kiosco: Lau24/7 (ID: cmmxmm3t0000004l16q3kt5jc)
+
+Sucursal: Mi kiosco (ID: cmmxmm3tc000104l1vimvlzyp)
+ + [Base] Villavicencio con gas 500 ml | Agregadas: 21u a $500
+ + [Base] Levite pomelo 500 ml | Agregadas: 59u a $750
+ + [Base] Baggio Pronto Multifruta 200 ml | Agregadas: 32u a $450
+ + [Base] Alfajor Jorgito 55 g | Agregadas: 35u a $450
+ + [Base] Alfajor Guaymallen dulce de chocolate 38 g | Agregadas: 22u a $380
+ + [Base] Maxialfajor Jorgelin 85 g | Agregadas: 34u a $650
+ + [Base] Tita 36 g | Agregadas: 23u a $380
+ + [Base] Rhodesia 22 g | Agregadas: 18u a $380
+ + [Base] Sonrisas 108 g | Agregadas: 17u a $650
+ + [Base] Opera 92 g | Agregadas: 48u a $600
+ + [Base] Mentitas frutal | Agregadas: 47u a $320
+ + [Base] Rocklets 40 g | Agregadas: 50u a $700
+ + [Base] Cofler Block 38 g | Agregadas: 10u a $800
+ + [Base] Doritos sabor queso 77 g | Agregadas: 45u a $1100
+ + [Base] Palitos Salados Krachitos 110 g | Agregadas: 35u a $700
+ + [Base] 9 de Oro clasicos 200 g | Agregadas: 23u a $750
+ + [Base] Yerba Mate | Agregadas: 59u a $800
+
+=== MIGRACION COMPLETADA ===
+Capas creadas: 17
+Capital Valuado Recuperado: $367280.00

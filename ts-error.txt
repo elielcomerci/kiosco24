@@ -1,0 +1,2 @@
+src/lib/catalog-import.ts(1031,53): error TS2339: Property 'cost' does not exist on type '{ id: string; stock: number | null; minStock: number | null; branchId: string; }'.
+src/lib/catalog-import.ts(1031,61): error TS2304: Cannot find name 'actualCost'.

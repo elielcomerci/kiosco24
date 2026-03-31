@@ -1,0 +1,8 @@
+[Prisma Init] pg TCP | Runtime: Node | Host: ep-long-bar-ady5nkk0-pooler.c-2.us-east-1.aws.neon.tech
+Analizando kiosco: La comarca  (ID: cmn1tg7yw000104gp706uzaw9)
+
+Sucursal: Sucursal Principal (ID: cmn1tg7z6000204gpqaqfaf2q)
+
+=== RESUMEN ===
+Capas a crear: 0
+Capital Valuado a Recuperar: $0.00

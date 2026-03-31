@@ -93,7 +93,9 @@ export default async function SubscriptionPage({
   }
 
   const freshAccess = await getKioscoAccessContextForSession(session.user);
-  if (freshAccess.allowed) {
+  const isMercadoPagoReturn = query.source === "mercadopago";
+
+  if (freshAccess.allowed && !isMercadoPagoReturn) {
     redirect(freshAccess.firstBranchId ? `/${freshAccess.firstBranchId}/caja` : "/");
   }
 
@@ -138,7 +140,24 @@ export default async function SubscriptionPage({
           gap: "20px",
         }}
       >
-        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+        {freshAccess.allowed && isMercadoPagoReturn ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: "16px", textAlign: "center", padding: "16px 0" }}>
+            <div style={{ fontSize: "56px" }}>{"\uD83C\uDF89"}</div>
+            <h1 style={{ fontSize: "28px", margin: 0, fontWeight: 800 }}>¡Gracias por sumarte a Kiosco24!</h1>
+            <p style={{ color: "var(--text-2)", margin: 0, lineHeight: 1.6, fontSize: "16px" }}>
+              El cobro se está procesando. Ya podés disfrutar de todas las herramientas exclusivas para manejar tu negocio al siguiente nivel.
+            </p>
+            <a 
+              href={freshAccess.firstBranchId ? `/${freshAccess.firstBranchId}/caja` : "/"} 
+              className="btn btn-primary btn-lg" 
+              style={{ marginTop: "16px", textDecoration: "none", width: "100%", justifyContent: "center" }}
+            >
+              Ir a mi Kiosco
+            </a>
+          </div>
+        ) : (
+          <>
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
           <div style={{ fontSize: "13px", color: "var(--text-3)", fontWeight: 700 }}>
             Acceso restringido
           </div>
@@ -247,6 +266,8 @@ export default async function SubscriptionPage({
             Salir
           </button>
         </form>
+        </>
+        )}
       </div>
     </div>
   );

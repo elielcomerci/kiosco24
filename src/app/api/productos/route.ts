@@ -551,26 +551,47 @@ export async function POST(req: Request) {
     });
 
     if (branches.length > 0) {
+      const layerData: Prisma.InventoryCostLayerCreateManyInput[] = [];
+
       await prisma.inventoryRecord.createMany({
-        data: branches.map((branch) => ({
-          productId: product.id,
-          branchId: branch.id,
-          price:
-            pricingMode === "SHARED"
+        data: branches.map((branch) => {
+          const mappedPrice = pricingMode === "SHARED"
+            ? (typeof price === "number" ? price : 0)
+            : branch.id === branchId
               ? (typeof price === "number" ? price : 0)
-              : branch.id === branchId
-                ? (typeof price === "number" ? price : 0)
-                : 0,
-          cost:
-            pricingMode === "SHARED"
+              : 0;
+
+          const mappedCost = pricingMode === "SHARED"
+            ? (typeof cost === "number" ? cost : null)
+            : branch.id === branchId
               ? (typeof cost === "number" ? cost : null)
-              : branch.id === branchId
-                ? (typeof cost === "number" ? cost : null)
-                : null,
-          stock: branch.id === branchId ? (typeof stock === "number" ? stock : 0) : 0,
-          minStock: branch.id === branchId ? (typeof minStock === "number" ? minStock : 0) : 0,
-          showInGrid: typeof showInGrid === "boolean" ? showInGrid : true,
-        })),
+              : null;
+
+          const mappedStock = branch.id === branchId ? (typeof stock === "number" ? stock : 0) : 0;
+          
+          if (mappedStock > 0 && typeof mappedCost === "number" && mappedCost > 0 && product.variants.length === 0) {
+            layerData.push({
+              branchId: branch.id,
+              productId: product.id,
+              variantId: null,
+              sourceType: "LEGACY_SNAPSHOT",
+              unitCost: mappedCost,
+              initialQuantity: mappedStock,
+              remainingQuantity: mappedStock,
+              receivedAt: new Date(),
+            });
+          }
+
+          return {
+            productId: product.id,
+            branchId: branch.id,
+            price: mappedPrice,
+            cost: mappedCost,
+            stock: mappedStock,
+            minStock: branch.id === branchId ? (typeof minStock === "number" ? minStock : 0) : 0,
+            showInGrid: typeof showInGrid === "boolean" ? showInGrid : true,
+          };
+        }),
       });
 
       if (product.variants.length > 0 && normalizedVariants.length > 0) {
@@ -579,10 +600,30 @@ export async function POST(req: Request) {
         branches.forEach((branch) => {
           product.variants.forEach((productVariant) => {
             const requestedVariant = normalizedVariants.find((variant) => variant.name === productVariant.name);
+            const mappedStock = branch.id === branchId ? requestedVariant?.stock ?? 0 : 0;
+            const mappedCost = pricingMode === "SHARED"
+              ? requestedVariant?.cost ?? (typeof cost === "number" ? cost : null)
+              : branch.id === branchId
+                ? requestedVariant?.cost ?? (typeof cost === "number" ? cost : null)
+                : null;
+            
+            if (mappedStock > 0 && typeof mappedCost === "number" && mappedCost > 0) {
+              layerData.push({
+                branchId: branch.id,
+                productId: product.id,
+                variantId: productVariant.id,
+                sourceType: "LEGACY_SNAPSHOT",
+                unitCost: mappedCost,
+                initialQuantity: mappedStock,
+                remainingQuantity: mappedStock,
+                receivedAt: new Date(),
+              });
+            }
+
             variantStockData.push({
               variantId: productVariant.id,
               branchId: branch.id,
-              stock: branch.id === branchId ? requestedVariant?.stock ?? 0 : 0,
+              stock: mappedStock,
               minStock: branch.id === branchId ? requestedVariant?.minStock ?? 0 : 0,
               price:
                 pricingMode === "SHARED"
@@ -590,12 +631,7 @@ export async function POST(req: Request) {
                   : branch.id === branchId
                     ? requestedVariant?.price ?? (typeof price === "number" ? price : null)
                     : null,
-              cost:
-                pricingMode === "SHARED"
-                  ? requestedVariant?.cost ?? (typeof cost === "number" ? cost : null)
-                  : branch.id === branchId
-                    ? requestedVariant?.cost ?? (typeof cost === "number" ? cost : null)
-                    : null,
+              cost: mappedCost,
             });
           });
         });
@@ -605,6 +641,12 @@ export async function POST(req: Request) {
             data: variantStockData,
           });
         }
+      }
+
+      if (layerData.length > 0) {
+        await prisma.inventoryCostLayer.createMany({
+          data: layerData,
+        });
       }
     }
 

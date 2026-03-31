@@ -3967,8 +3967,8 @@ function StockLoadingModal({
                 {/* Simple product */}
                 {(!p.variants || p.variants.length === 0) && (
                   <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginTop: "8px" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                      <span style={{ fontSize: "12px", color: "var(--text-3)", flex: 1 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                      <span style={{ fontSize: "12px", color: "var(--text-3)", flex: 1, minWidth: 0 }}>
                         Stock físico: {p.stock ?? 0}
                         {typeof p.availableStock === "number" && p.availableStock !== p.stock ? ` · Vendible: ${p.availableStock}` : ""}
                       </span>
@@ -3976,10 +3976,10 @@ function StockLoadingModal({
                         className="input"
                         type="number"
                         inputMode="numeric"
-                        placeholder={mode === "sumar" ? "+0" : "nuevo"}
+                        placeholder={mode === "sumar" ? "+Cantidad" : "Cantidad"}
                         value={inputs[p.id] ?? ""}
                         onChange={(e) => setQty(p.id, e.target.value, setInputs)}
-                        style={{ width: "80px", textAlign: "right" }}
+                        style={{ width: "100px", textAlign: "center", minWidth: 0 }}
                       />
                       {(() => {
                         const result = computeTargetStock(p.stock, p.id);
@@ -3996,23 +3996,31 @@ function StockLoadingModal({
                       </button>
                     </div>
                     {isReceiveFlow && (
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
-                        <input
-                          className="input"
-                          type="number"
-                          inputMode="decimal"
-                          placeholder="Costo unit."
-                          value={costInputs[getPricingKey(p.id)] ?? ""}
-                          onChange={(e) => setQty(getPricingKey(p.id), e.target.value, setCostInputs)}
-                        />
-                        <input
-                          className="input"
-                          type="number"
-                          inputMode="decimal"
-                          placeholder="Precio venta"
-                          value={priceInputs[getPricingKey(p.id)] ?? ""}
-                          onChange={(e) => setQty(getPricingKey(p.id), e.target.value, setPriceInputs)}
-                        />
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", width: "100%" }}>
+                        <label style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                          <span style={{ fontSize: "10px", fontWeight: 700, color: "var(--text-3)", textTransform: "uppercase" }}>💰 Costo</span>
+                          <input
+                            className="input"
+                            type="number"
+                            inputMode="decimal"
+                            placeholder="$0.00"
+                            value={costInputs[getPricingKey(p.id)] ?? ""}
+                            onChange={(e) => setQty(getPricingKey(p.id), e.target.value, setCostInputs)}
+                            style={{ textAlign: "right" }}
+                          />
+                        </label>
+                        <label style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                          <span style={{ fontSize: "10px", fontWeight: 700, color: "var(--text-3)", textTransform: "uppercase" }}>💵 Precio</span>
+                          <input
+                            className="input"
+                            type="number"
+                            inputMode="decimal"
+                            placeholder="$0.00"
+                            value={priceInputs[getPricingKey(p.id)] ?? ""}
+                            onChange={(e) => setQty(getPricingKey(p.id), e.target.value, setPriceInputs)}
+                            style={{ textAlign: "right" }}
+                          />
+                        </label>
                       </div>
                     )}
                     {openLotPanels[lotOwnerKey(p.id)] && renderLotsPanel(p, p.stock)}
@@ -4038,10 +4046,10 @@ function StockLoadingModal({
                               className="input"
                               type="number"
                               inputMode="numeric"
-                              placeholder={mode === "sumar" ? "+0" : "nuevo"}
+                              placeholder={mode === "sumar" ? "+Cant" : "Cant"}
                               value={val}
                               onChange={(e) => setQty(v.id ?? "", e.target.value, setVariantInputs)}
-                              style={{ width: "72px", textAlign: "right" }}
+                              style={{ width: "90px", textAlign: "center" }}
                             />
                             {result !== null && (
                               <span style={{ fontSize: "13px", fontWeight: 700, color: "var(--green)", minWidth: "40px" }}>= {result}</span>
@@ -4055,23 +4063,31 @@ function StockLoadingModal({
                             </button>
                           </div>
                           {isReceiveFlow && v.id && (
-                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
-                              <input
-                                className="input"
-                                type="number"
-                                inputMode="decimal"
-                                placeholder="Costo unit."
-                                value={costInputs[getPricingKey(p.id, v.id)] ?? ""}
-                                onChange={(e) => setQty(getPricingKey(p.id, v.id), e.target.value, setCostInputs)}
-                              />
-                              <input
-                                className="input"
-                                type="number"
-                                inputMode="decimal"
-                                placeholder="Precio venta"
-                                value={priceInputs[getPricingKey(p.id, v.id)] ?? ""}
-                                onChange={(e) => setQty(getPricingKey(p.id, v.id), e.target.value, setPriceInputs)}
-                              />
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", width: "100%" }}>
+                              <label style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                                <span style={{ fontSize: "10px", fontWeight: 700, color: "var(--text-3)", textTransform: "uppercase" }}>💰 Costo</span>
+                                <input
+                                  className="input"
+                                  type="number"
+                                  inputMode="decimal"
+                                  placeholder="$0.00"
+                                  value={costInputs[getPricingKey(p.id, v.id)] ?? ""}
+                                  onChange={(e) => setQty(getPricingKey(p.id, v.id), e.target.value, setCostInputs)}
+                                  style={{ textAlign: "right" }}
+                                />
+                              </label>
+                              <label style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                                <span style={{ fontSize: "10px", fontWeight: 700, color: "var(--text-3)", textTransform: "uppercase" }}>💵 Precio</span>
+                                <input
+                                  className="input"
+                                  type="number"
+                                  inputMode="decimal"
+                                  placeholder="$0.00"
+                                  value={priceInputs[getPricingKey(p.id, v.id)] ?? ""}
+                                  onChange={(e) => setQty(getPricingKey(p.id, v.id), e.target.value, setPriceInputs)}
+                                  style={{ textAlign: "right" }}
+                                />
+                              </label>
                             </div>
                           )}
                           {openLotPanels[lotOwnerKey(p.id, v.id)] && renderLotsPanel(p, v.stock, v)}

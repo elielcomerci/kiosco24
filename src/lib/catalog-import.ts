@@ -78,6 +78,8 @@ type ImportableProduct = Prisma.ProductGetPayload<{
             branchId: true;
             stock: true;
             minStock: true;
+            cost: true;
+            price: true;
           };
         };
       };
@@ -449,6 +451,8 @@ async function loadImportContext(kioscoId: string, branchId: string) {
                 branchId: true,
                 stock: true,
                 minStock: true,
+                cost: true,
+                price: true,
               },
             },
           },
@@ -885,6 +889,9 @@ async function applyPreparedPlan(input: {
     for (const plan of applicablePlans) {
       const product = plan.product!;
       const inventory = product.inventory[0] ?? null;
+      const priceValue = maybeNumber(plan.price, inventory?.price ?? 0, input.mode, 0) ?? 0;
+      const costValue = maybeNumber(plan.cost, inventory?.cost ?? null, input.mode, null);
+      const actualCost = shouldApplyPricing(input.scope) ? costValue : (inventory?.cost ?? null);
 
       if (shouldApplyCatalog(input.scope)) {
         const categoryId = await ensureCategoryId(
@@ -936,8 +943,6 @@ async function applyPreparedPlan(input: {
         shouldApplyDisplay(input.scope) ||
         shouldApplyStock(input.scope)
       ) {
-        const priceValue = maybeNumber(plan.price, inventory?.price ?? 0, input.mode, 0) ?? 0;
-        const costValue = maybeNumber(plan.cost, inventory?.cost ?? null, input.mode, null);
         const firstOwner = plan.owners[0];
         const baseStockValue =
           plan.hasVariants || !firstOwner
@@ -961,6 +966,20 @@ async function applyPreparedPlan(input: {
               showInGrid: shouldApplyDisplay(input.scope) ? showInGridValue : true,
             },
           });
+          if (shouldApplyStock(input.scope) && baseStockValue > 0 && actualCost !== null && actualCost > 0 && !plan.hasVariants) {
+            await tx.inventoryCostLayer.create({
+              data: {
+                branchId: input.branchId,
+                productId: product.id,
+                variantId: null,
+                sourceType: "LEGACY_SNAPSHOT",
+                unitCost: actualCost,
+                initialQuantity: baseStockValue,
+                remainingQuantity: baseStockValue,
+                receivedAt: new Date(),
+              },
+            });
+          }
           inventoryCreates += 1;
         } else if (inventory) {
           const previousStock = inventory.stock ?? 0;
@@ -973,13 +992,29 @@ async function applyPreparedPlan(input: {
               ...(shouldApplyDisplay(input.scope) ? { showInGrid: showInGridValue } : {}),
             },
           });
-          if (shouldApplyStock(input.scope) && !plan.hasVariants && baseStockValue < previousStock) {
-            await applyInventoryCorrectionToCostLayers(tx, {
-              branchId: input.branchId,
-              productId: product.id,
-              variantId: null,
-              delta: baseStockValue - previousStock,
-            });
+          if (shouldApplyStock(input.scope) && !plan.hasVariants) {
+            if (baseStockValue < previousStock) {
+              await applyInventoryCorrectionToCostLayers(tx, {
+                branchId: input.branchId,
+                productId: product.id,
+                variantId: null,
+                delta: baseStockValue - previousStock,
+              });
+            } else if (baseStockValue > previousStock && actualCost !== null && actualCost > 0) {
+              const delta = baseStockValue - previousStock;
+              await tx.inventoryCostLayer.create({
+                data: {
+                  branchId: input.branchId,
+                  productId: product.id,
+                  variantId: null,
+                  sourceType: "LEGACY_SNAPSHOT",
+                  unitCost: actualCost,
+                  initialQuantity: delta,
+                  remainingQuantity: delta,
+                  receivedAt: new Date(),
+                },
+              });
+            }
           }
           inventoryUpdates += 1;
         }
@@ -997,6 +1032,7 @@ async function applyPreparedPlan(input: {
         const variantInventory = owner.variant.inventory[0] ?? null;
         const nextStock = maybeNumber(owner.row.stock, variantInventory?.stock ?? 0, input.mode, 0) ?? 0;
         const nextMinStock = maybeNumber(owner.row.minStock, variantInventory?.minStock ?? 0, input.mode, 0) ?? 0;
+        const actualVariantCost = variantInventory?.cost ?? actualCost;
 
         if (!variantInventory && input.mode !== "only_existing") {
           if (shouldApplyStock(input.scope) || shouldApplyDisplay(input.scope)) {
@@ -1008,6 +1044,20 @@ async function applyPreparedPlan(input: {
                 minStock: shouldApplyDisplay(input.scope) ? nextMinStock : 0,
               },
             });
+            if (shouldApplyStock(input.scope) && nextStock > 0 && actualVariantCost !== null && actualVariantCost > 0) {
+              await tx.inventoryCostLayer.create({
+                data: {
+                  branchId: input.branchId,
+                  productId: product.id,
+                  variantId: owner.variant.id,
+                  sourceType: "LEGACY_SNAPSHOT",
+                  unitCost: actualVariantCost,
+                  initialQuantity: nextStock,
+                  remainingQuantity: nextStock,
+                  receivedAt: new Date(),
+                },
+              });
+            }
             variantInventoryCreates += 1;
           }
         } else if (variantInventory) {
@@ -1020,13 +1070,29 @@ async function applyPreparedPlan(input: {
                 ...(shouldApplyDisplay(input.scope) ? { minStock: nextMinStock } : {}),
               },
             });
-            if (shouldApplyStock(input.scope) && nextStock < previousStock) {
-              await applyInventoryCorrectionToCostLayers(tx, {
-                branchId: input.branchId,
-                productId: product.id,
-                variantId: owner.variant.id,
-                delta: nextStock - previousStock,
-              });
+            if (shouldApplyStock(input.scope)) {
+              if (nextStock < previousStock) {
+                await applyInventoryCorrectionToCostLayers(tx, {
+                  branchId: input.branchId,
+                  productId: product.id,
+                  variantId: owner.variant.id,
+                  delta: nextStock - previousStock,
+                });
+              } else if (nextStock > previousStock && actualVariantCost !== null && actualVariantCost > 0) {
+                const delta = nextStock - previousStock;
+                await tx.inventoryCostLayer.create({
+                  data: {
+                    branchId: input.branchId,
+                    productId: product.id,
+                    variantId: owner.variant.id,
+                    sourceType: "LEGACY_SNAPSHOT",
+                    unitCost: actualVariantCost,
+                    initialQuantity: delta,
+                    remainingQuantity: delta,
+                    receivedAt: new Date(),
+                  },
+                });
+              }
             }
             variantInventoryUpdates += 1;
           }

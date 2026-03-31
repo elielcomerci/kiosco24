@@ -676,6 +676,10 @@ export default function ConfiguracionPage() {
   const [loadingFiscalSettings, setLoadingFiscalSettings] = useState(true);
 
   const [subscription, setSubscription] = useState<{status: string, managementUrl: string | null} | null>(null);
+  const [creatingSubscription, setCreatingSubscription] = useState(false);
+  const [subscriptionError, setSubscriptionError] = useState<string | null>(null);
+  const [cancelingSubscription, setCancelingSubscription] = useState(false);
+  const [cancelModalOpen, setCancelModalOpen] = useState(false);
   const [expiryAlertDays, setExpiryAlertDays] = useState("30");
   const [pricingMode, setPricingMode] = useState<PricingMode>("BRANCH");
   const [savedPricingMode, setSavedPricingMode] = useState<PricingMode>("BRANCH");
@@ -1248,6 +1252,42 @@ export default function ConfiguracionPage() {
       setMpSetupError(data.error ?? "Error configurando punto de venta.");
     }
     setMpSetupLoading(false);
+  };
+
+  const handleCreateSubscription = async () => {
+    setCreatingSubscription(true);
+    setSubscriptionError(null);
+    try {
+      const res = await fetch("/api/subscription/create", { method: "POST" });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.init_point) {
+        window.location.href = data.init_point;
+        return;
+      }
+      setSubscriptionError(data?.error || "No se pudo generar el link.");
+    } catch {
+      setSubscriptionError("Error de conexión al generar la suscripción.");
+    } finally {
+      setCreatingSubscription(false);
+    }
+  };
+
+  const handleCancelSubscription = async () => {
+    setCancelingSubscription(true);
+    try {
+      const res = await fetch("/api/subscription/cancel", { method: "POST" });
+      const data = await res.json().catch(() => null);
+      if (res.ok) {
+        setCancelModalOpen(false);
+        fetchSubscription();
+        return;
+      }
+      alert(data?.error || "Error al cancelar la suscripción.");
+    } catch {
+      alert("Error de conexión al cancelar.");
+    } finally {
+      setCancelingSubscription(false);
+    }
   };
 
   const handleMpDisconnect = async () => {
@@ -2523,18 +2563,40 @@ export default function ConfiguracionPage() {
                   target="_blank" 
                   rel="noopener noreferrer"
                   className="btn btn-sm btn-ghost" 
-                  style={{ width: "100%", textDecoration: "none" }}
+                  style={{ width: "100%", textDecoration: "none", textAlign: "center" }}
                 >
                   💳 Gestionar en MercadoPago
                 </a>
               </div>
             )}
             
-            {!subscription && (
+            {subscription?.status !== "ACTIVE" && (
               <div style={{ borderTop: "1px solid var(--border)", paddingTop: "12px", marginTop: "4px" }}>
-                <a href="/onboarding" className="btn btn-sm btn-green" style={{ width: "100%", textDecoration: "none" }}>
-                  Suscribirse ahora
-                </a>
+                <button 
+                  onClick={handleCreateSubscription} 
+                  disabled={creatingSubscription}
+                  className="btn btn-sm btn-green" 
+                  style={{ width: "100%", justifyContent: "center" }}
+                >
+                  {creatingSubscription ? "Generando link..." : (subscription ? "Generar nuevo link de pago" : "Suscribirse ahora")}
+                </button>
+                {subscriptionError && (
+                  <p style={{ color: "var(--red)", fontSize: "13px", marginTop: "8px", textAlign: "center", marginBottom: 0 }}>
+                    {subscriptionError}
+                  </p>
+                )}
+              </div>
+            )}
+            
+            {subscription?.status === "ACTIVE" && (
+              <div style={{ borderTop: "1px solid var(--border)", paddingTop: "12px", marginTop: "4px" }}>
+                <button 
+                  onClick={() => setCancelModalOpen(true)} 
+                  className="btn btn-sm btn-ghost" 
+                  style={{ width: "100%", justifyContent: "center", color: "var(--red)", border: "1px solid rgba(239, 68, 68, 0.4)" }}
+                >
+                  Cancelar suscripción
+                </button>
               </div>
             )}
           </div>
@@ -2639,6 +2701,36 @@ export default function ConfiguracionPage() {
       </div>
 
       {/* Modals */}
+      {cancelModalOpen && (
+        <ModalPortal>
+          <div className="modal-overlay animate-fade-in" style={{ zIndex: 9999, padding: "16px" }} onClick={() => !cancelingSubscription && setCancelModalOpen(false)}>
+            <div className="modal animate-slide-up" style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "24px", padding: "24px", maxWidth: "420px", display: "flex", flexDirection: "column", gap: "16px" }} onClick={(e) => e.stopPropagation()}>
+              <h2 style={{ fontSize: "20px", fontWeight: 800, margin: 0, color: "var(--text)" }}>¿Cancelar suscripción?</h2>
+              <p style={{ color: "var(--text-2)", lineHeight: 1.6, margin: 0, fontSize: "14px" }}>
+                Perderás el acceso a las funciones principales del sistema cuando termine tu período de facturación actual. ¿Estás seguro que querés cancelarla?
+              </p>
+              <div style={{ display: "flex", gap: "10px", marginTop: "8px" }}>
+                <button 
+                  className="btn btn-ghost" 
+                  style={{ flex: 1, border: "1px solid var(--border)", color: "var(--text)" }} 
+                  onClick={() => setCancelModalOpen(false)}
+                  disabled={cancelingSubscription}
+                >
+                  Volver
+                </button>
+                <button 
+                  className="btn" 
+                  style={{ flex: 1, backgroundColor: "var(--red)", color: "white", padding: "10px", border: "none" }} 
+                  onClick={handleCancelSubscription}
+                  disabled={cancelingSubscription}
+                >
+                  {cancelingSubscription ? "Cancelando..." : "Confirmar cancelación"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </ModalPortal>
+      )}
       {employeeModal && (
         <ModalPortal>
           <EmployeeModal

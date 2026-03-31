@@ -4,21 +4,31 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import {
   SUBSCRIPTION_CANCEL_LABEL,
-  SUBSCRIPTION_PROMO_LABEL,
+  SUBSCRIPTION_PRICE_ARS,
+  formatSubscriptionPrice,
+  getSubscriptionPromoLabel,
 } from "@/lib/subscription-plan";
 
 type Props = {
   canCreateSubscription: boolean;
   managementUrl: string | null;
+  specialPriceArs?: number | null;
 };
 
 export default function SubscriptionActions({
   canCreateSubscription,
   managementUrl,
+  specialPriceArs = null,
 }: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const hasSpecialPrice =
+    typeof specialPriceArs === "number" &&
+    Number.isFinite(specialPriceArs) &&
+    specialPriceArs > 0 &&
+    specialPriceArs < SUBSCRIPTION_PRICE_ARS;
+  const effectivePriceLabel = formatSubscriptionPrice(hasSpecialPrice ? specialPriceArs : SUBSCRIPTION_PRICE_ARS);
 
   const handleStartSubscription = async () => {
     setLoading(true);
@@ -78,7 +88,22 @@ export default function SubscriptionActions({
           lineHeight: 1.6,
         }}
       >
-        {SUBSCRIPTION_PROMO_LABEL} {SUBSCRIPTION_CANCEL_LABEL}
+        {hasSpecialPrice ? (
+          <div style={{ display: "grid", gap: "6px" }}>
+            <strong style={{ color: "var(--green)" }}>Precio especial activo para esta cuenta</strong>
+            <div style={{ display: "flex", alignItems: "baseline", gap: "10px", flexWrap: "wrap" }}>
+              <span style={{ textDecoration: "line-through", opacity: 0.7 }}>
+                {formatSubscriptionPrice(SUBSCRIPTION_PRICE_ARS)}
+              </span>
+              <span style={{ fontSize: "22px", fontWeight: 800, color: "var(--green)" }}>
+                {formatSubscriptionPrice(specialPriceArs)}
+              </span>
+            </div>
+            <span>{SUBSCRIPTION_CANCEL_LABEL}</span>
+          </div>
+        ) : (
+          `${getSubscriptionPromoLabel()} ${SUBSCRIPTION_CANCEL_LABEL}`
+        )}
       </div>
 
       {canCreateSubscription && (
@@ -89,7 +114,7 @@ export default function SubscriptionActions({
           disabled={loading}
           style={{ width: "100%" }}
         >
-          {loading ? "Generando link..." : "Continuar con Mercado Pago"}
+          {loading ? "Generando link..." : `Continuar por ${effectivePriceLabel} en Mercado Pago`}
         </button>
       )}
 

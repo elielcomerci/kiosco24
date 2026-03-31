@@ -1,5 +1,6 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getSubscriptionPriceOverrideForEmail } from "@/lib/subscription-price-overrides";
 import { SUBSCRIPTION_PRICE_ARS } from "@/lib/subscription-plan";
 import { NextResponse } from "next/server";
 
@@ -16,6 +17,9 @@ export async function POST() {
   if (!session.user.email) {
     return NextResponse.json({ error: "Falta un email valido para generar la suscripcion." }, { status: 400 });
   }
+
+  const priceOverride = await getSubscriptionPriceOverrideForEmail(session.user.email);
+  const transactionAmount = priceOverride?.amount ?? SUBSCRIPTION_PRICE_ARS;
 
   // 1. Obtener el kiosco del usuario
   const kiosco = await prisma.kiosco.findUnique({
@@ -56,6 +60,12 @@ export async function POST() {
     status: "pending",
   };
 
+  if (priceOverride) {
+    payload.reason = "Suscripcion Mensual Especial - Kiosco24";
+  }
+
+  payload.auto_recurring.transaction_amount = transactionAmount;
+
   const mpRes = await fetch("https://api.mercadopago.com/preapproval", {
     method: "POST",
     headers: mpHeaders,
@@ -92,5 +102,5 @@ export async function POST() {
   });
 
   // 5. Retornar la URL de pago para redirigir al usuario
-  return NextResponse.json({ init_point: initPoint });
+  return NextResponse.json({ init_point: initPoint, amount: transactionAmount });
 }

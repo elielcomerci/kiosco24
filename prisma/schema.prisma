@@ -860,6 +860,19 @@ model Subscription {
   updatedAt       DateTime           @updatedAt
 }
 
+model SubscriptionPriceOverride {
+  id             String   @id @default(cuid())
+  email          String   @unique
+  amount         Int
+  note           String?  @db.Text
+  createdById    String?
+  createdByEmail String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([updatedAt])
+}
+
 enum SubscriptionStatus {
   PENDING
   ACTIVE

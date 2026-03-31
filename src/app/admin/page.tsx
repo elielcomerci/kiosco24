@@ -2,6 +2,11 @@ import { AccessGrantKind, KioscoAccessOverride } from "@prisma/client";
 import { auth, signOut } from "@/lib/auth";
 import { isPlatformAdmin } from "@/lib/platform-admin";
 import { prisma } from "@/lib/prisma";
+import {
+  normalizeSubscriptionPriceOverrideEmail,
+  parseSubscriptionPriceOverrideAmount,
+} from "@/lib/subscription-price-overrides";
+import { SUBSCRIPTION_PRICE_ARS, formatSubscriptionPrice } from "@/lib/subscription-plan";
 import { revalidatePath } from "next/cache";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -103,6 +108,57 @@ async function setAccessOverride(formData: FormData) {
   revalidatePath("/admin");
 }
 
+async function saveSubscriptionPriceOverride(formData: FormData) {
+  "use server";
+
+  const session = await ensurePlatformAdmin();
+  const rawEmail = String(formData.get("email") ?? "");
+  const normalizedEmail = normalizeSubscriptionPriceOverrideEmail(rawEmail);
+  const amount = parseSubscriptionPriceOverrideAmount(formData.get("amount"));
+  const note = String(formData.get("note") ?? "").trim();
+
+  if (!normalizedEmail || !normalizedEmail.includes("@") || !amount || amount >= SUBSCRIPTION_PRICE_ARS) {
+    return;
+  }
+
+  await prisma.subscriptionPriceOverride.upsert({
+    where: { email: normalizedEmail },
+    create: {
+      email: normalizedEmail,
+      amount,
+      note: note || null,
+      createdById: session.user.id,
+      createdByEmail: session.user.email ?? null,
+    },
+    update: {
+      amount,
+      note: note || null,
+      createdById: session.user.id,
+      createdByEmail: session.user.email ?? null,
+    },
+  });
+
+  revalidatePath("/admin");
+  revalidatePath("/suscripcion");
+}
+
+async function deleteSubscriptionPriceOverride(formData: FormData) {
+  "use server";
+
+  await ensurePlatformAdmin();
+  const overrideId = String(formData.get("overrideId") ?? "");
+  if (!overrideId) {
+    return;
+  }
+
+  await prisma.subscriptionPriceOverride.delete({
+    where: { id: overrideId },
+  });
+
+  revalidatePath("/admin");
+  revalidatePath("/suscripcion");
+}
+
 export default async function AdminPage() {
   await ensurePlatformAdmin();
 
@@ -158,6 +214,55 @@ export default async function AdminPage() {
     },
   });
 
+  const subscriptionPriceOverrides = await prisma.subscriptionPriceOverride.findMany({
+    orderBy: { updatedAt: "desc" },
+    select: {
+      id: true,
+      email: true,
+      amount: true,
+      note: true,
+      createdByEmail: true,
+      updatedAt: true,
+    },
+  });
+
+  const emailsWithOverride = subscriptionPriceOverrides.map((override) => override.email);
+  const overrideUsers =
+    emailsWithOverride.length > 0
+      ? await prisma.user.findMany({
+          where: {
+            email: {
+              in: emailsWithOverride,
+            },
+          },
+          select: {
+            email: true,
+            name: true,
+            kiosco: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        })
+      : [];
+
+  const overrideMatchByEmail = new Map(
+    overrideUsers.map((user) => [normalizeSubscriptionPriceOverrideEmail(user.email), user]),
+  );
+  const overrideByOwnerEmail = new Map(
+    subscriptionPriceOverrides.map((override) => [override.email, override]),
+  );
+  const ownerEmailOptions = Array.from(
+    new Set(
+      kioscos
+        .map((kiosco) => kiosco.owner.email)
+        .filter((email): email is string => Boolean(email))
+        .map((email) => normalizeSubscriptionPriceOverrideEmail(email)),
+    ),
+  ).sort((left, right) => left.localeCompare(right, "es-AR"));
+
   return (
     <div style={{ minHeight: "100dvh", background: "#020617", padding: "24px", color: "white" }}>
       <div style={{ maxWidth: "1180px", margin: "0 auto", display: "grid", gap: "20px" }}>
@@ -205,15 +310,134 @@ export default async function AdminPage() {
             color: "#cbd5e1",
             lineHeight: 1.6,
           }}
+          >
+            Desde aca podes revisar el estado de cada kiosco y otorgar acceso temporal por gracia administrativa o
+            invitacion. Si queres bootstrapear administradores sin tocar la base manualmente, podes usar el env
+            <code style={{ marginLeft: 6 }}>PLATFORM_ADMIN_EMAILS</code>.
+          </div>
+
+        <section
+          style={{
+            background: "rgba(15,23,42,.82)",
+            border: "1px solid rgba(148,163,184,.18)",
+            borderRadius: "22px",
+            padding: "20px",
+            display: "grid",
+            gap: "18px",
+          }}
         >
-          Desde aca podes revisar el estado de cada kiosco y otorgar acceso temporal por gracia administrativa o
-          invitacion. Si queres bootstrapear administradores sin tocar la base manualmente, podes usar el env
-          <code style={{ marginLeft: 6 }}>PLATFORM_ADMIN_EMAILS</code>.
-        </div>
+          <div style={{ display: "grid", gap: "6px" }}>
+            <h2 style={{ margin: 0, fontSize: "24px" }}>Precios especiales de suscripcion</h2>
+            <div style={{ color: "#94a3b8", lineHeight: 1.6 }}>
+              Asigna un precio especial por email. Sirve tanto para clientes ya registrados como para alguien que se
+              va a registrar despues con ese mismo correo. Precio base actual:{" "}
+              <strong style={{ color: "white" }}>{formatSubscriptionPrice(SUBSCRIPTION_PRICE_ARS)}</strong>.
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "minmax(320px, 420px) minmax(320px, 1fr)",
+              gap: "18px",
+            }}
+          >
+            <form action={saveSubscriptionPriceOverride} style={{ display: "grid", gap: "10px" }}>
+              <div style={{ fontWeight: 700 }}>Asignar o actualizar precio especial</div>
+              <input
+                name="email"
+                type="email"
+                className="input"
+                placeholder="cliente@ejemplo.com"
+                list="subscription-owner-email-options"
+                required
+              />
+              <datalist id="subscription-owner-email-options">
+                {ownerEmailOptions.map((email) => (
+                  <option key={email} value={email} />
+                ))}
+              </datalist>
+              <input
+                name="amount"
+                type="number"
+                min={1}
+                max={Math.max(SUBSCRIPTION_PRICE_ARS - 1, 1)}
+                defaultValue={Math.max(SUBSCRIPTION_PRICE_ARS - 5000, 1)}
+                className="input"
+                required
+              />
+              <textarea
+                name="note"
+                className="input"
+                placeholder="Motivo interno o referencia comercial"
+                rows={3}
+                style={{ resize: "vertical" }}
+              />
+              <button type="submit" className="btn btn-primary">
+                Guardar precio especial
+              </button>
+            </form>
+
+            <div style={{ display: "grid", gap: "10px" }}>
+              <div style={{ fontWeight: 700 }}>Overrides activos</div>
+              {subscriptionPriceOverrides.length === 0 ? (
+                <div style={{ color: "#94a3b8" }}>Todavia no hay precios especiales definidos.</div>
+              ) : (
+                subscriptionPriceOverrides.map((override) => {
+                  const matchedUser = overrideMatchByEmail.get(override.email);
+
+                  return (
+                    <div
+                      key={override.id}
+                      style={{
+                        padding: "14px 16px",
+                        borderRadius: "16px",
+                        background: "rgba(30,41,59,.8)",
+                        display: "grid",
+                        gap: "8px",
+                      }}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: "16px", flexWrap: "wrap" }}>
+                        <div style={{ display: "grid", gap: "4px" }}>
+                          <strong>{override.email}</strong>
+                          <span style={{ color: "#94a3b8", fontSize: "13px" }}>
+                            {matchedUser?.kiosco
+                              ? `${matchedUser.name || "Cliente registrado"} · ${matchedUser.kiosco.name}`
+                              : "Todavia sin cuenta o sin kiosco"}
+                          </span>
+                        </div>
+                        <div style={{ textAlign: "right", display: "grid", gap: "4px" }}>
+                          <strong style={{ color: "#86efac" }}>{formatSubscriptionPrice(override.amount)}</strong>
+                          <span style={{ color: "#94a3b8", fontSize: "13px" }}>
+                            Actualizado {formatDate(override.updatedAt)}
+                          </span>
+                        </div>
+                      </div>
+                      {override.note && <div style={{ color: "#cbd5e1", fontSize: "14px" }}>{override.note}</div>}
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
+                        <span style={{ color: "#94a3b8", fontSize: "13px" }}>
+                          Asignado por {override.createdByEmail ?? "admin"}
+                        </span>
+                        <form action={deleteSubscriptionPriceOverride}>
+                          <input type="hidden" name="overrideId" value={override.id} />
+                          <button type="submit" className="btn btn-ghost">
+                            Quitar precio especial
+                          </button>
+                        </form>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </section>
 
         <div style={{ display: "grid", gap: "16px" }}>
           {kioscos.map((kiosco) => {
             const activeGrant = kiosco.accessGrants.find((grant) => !grant.revokedAt && grant.endsAt >= new Date());
+            const ownerEmail = kiosco.owner.email ? normalizeSubscriptionPriceOverrideEmail(kiosco.owner.email) : null;
+            const subscriptionPriceOverride = ownerEmail ? overrideByOwnerEmail.get(ownerEmail) ?? null : null;
             const overrideLabel =
               kiosco.accessOverride === "FORCE_ALLOW"
                 ? "Habilitada manualmente"
@@ -242,6 +466,11 @@ export default async function AdminPage() {
                   </div>
                   <div style={{ textAlign: "right", display: "grid", gap: "6px" }}>
                     <strong>Suscripcion: {kiosco.subscription?.status ?? "SIN_CONFIGURAR"}</strong>
+                    {subscriptionPriceOverride && (
+                      <span style={{ color: "#86efac", fontSize: "13px" }}>
+                        Precio especial: {formatSubscriptionPrice(subscriptionPriceOverride.amount)}
+                      </span>
+                    )}
                     <span style={{ color: "#94a3b8", fontSize: "13px" }}>
                       Ultimo cambio: {kiosco.subscription?.updatedAt ? formatDate(kiosco.subscription.updatedAt) : "Nunca"}
                     </span>

@@ -16,7 +16,11 @@ export function formatSubscriptionPrice(amount = resolveSubscriptionPrice()) {
   }).format(amount)}`;
 }
 
+export function getSubscriptionPromoLabel(amount = resolveSubscriptionPrice()) {
+  return `Probalo a solo ${formatSubscriptionPrice(amount)} por mes.`;
+}
+
 export const SUBSCRIPTION_PRICE_ARS = resolveSubscriptionPrice();
 export const SUBSCRIPTION_PRICE_LABEL = formatSubscriptionPrice(SUBSCRIPTION_PRICE_ARS);
-export const SUBSCRIPTION_PROMO_LABEL = `Probalo a solo ${SUBSCRIPTION_PRICE_LABEL} por mes.`;
+export const SUBSCRIPTION_PROMO_LABEL = getSubscriptionPromoLabel(SUBSCRIPTION_PRICE_ARS);
 export const SUBSCRIPTION_CANCEL_LABEL = "Si no es para vos, podes cancelar cuando quieras.";

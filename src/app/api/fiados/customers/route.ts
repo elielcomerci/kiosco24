@@ -9,6 +9,15 @@ export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json([]);
 
+  const isOwner = session.user.role === "OWNER";
+  const isManager = session.user.employeeRole === "MANAGER";
+  const isCashier = session.user.role === "EMPLOYEE" && session.user.employeeRole === "CASHIER";
+
+  // CASHIER, OWNER y MANAGER pueden ver la lista de fiados (es operativo)
+  if (!isOwner && !isManager && !isCashier) {
+    return NextResponse.json({ error: "No tenés permiso para ver la lista de fiados." }, { status: 403 });
+  }
+
   const branchId = await getBranchId(req, session.user.id);
   if (!branchId) return NextResponse.json([]);
 

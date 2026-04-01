@@ -325,7 +325,7 @@ export default function LoginExperience({
             marginBottom: "8px",
           }}
         >
-          Kiosco 24h
+          Kiosco24
         </h1>
         <p
           style={{

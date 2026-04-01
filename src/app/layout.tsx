@@ -5,7 +5,7 @@ import { GeistSans } from "geist/font/sans";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Kiosco 24",
+  title: "Kiosco24",
   description: "POS rapido para kioscos argentinos",
   manifest: "/manifest.json",
   icons: {

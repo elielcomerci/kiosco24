@@ -46,7 +46,7 @@ export default function PrintablePage({
           )}
 
           <div>
-            <div className="print-sheet__eyebrow">Kiosco 24</div>
+            <div className="print-sheet__eyebrow">Kiosco24</div>
             <h1 className="print-sheet__title">{title}</h1>
             <div className="print-sheet__subtitle">
               {branch.name}

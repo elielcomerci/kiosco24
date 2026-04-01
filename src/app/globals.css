@@ -1573,7 +1573,7 @@ body {
 /* ─── Layout ─────────────────────────────────────────────────────────────── */
 .app-layout {
   --bottom-nav-offset: max(12px, calc(env(safe-area-inset-bottom) + 6px));
-  --bottom-nav-height: 78px;
+  --bottom-nav-height: 48px; /* Barra más compacta */
   width: 100vw;
   max-width: 480px;
   margin: 0 auto;
@@ -1816,7 +1816,7 @@ body[data-text-scale] .product-btn-price,
 .pos-layout {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  height: 100vh;
   width: 100%;
   overflow: hidden;
 }
@@ -1842,6 +1842,27 @@ body[data-text-scale] .product-btn-price,
   display: flex;
   flex-direction: column;
   z-index: 10;
+  
+  /* En móvil: aparece desde atrás de la barra inferior */
+  position: fixed;
+  bottom: calc(var(--bottom-nav-height) + 28px); /* 28px arriba de la barra para que los botones no queden pegados */
+  left: 24px; /* Margen izquierdo - alineado con la barra */
+  right: 24px; /* Margen derecho - alineado con la barra */
+  max-height: 65vh; /* Máximo 65% de la pantalla */
+  overflow-y: auto;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  box-shadow: 0 -2px 10px rgba(0,0,0,0); /* Sin sombra por defecto */
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0; /* Bordes redondeados arriba */
+}
+
+/* Cuando hay productos y está expandido, el panel se eleva */
+.pos-sidebar.has-content {
+  box-shadow: 0 -4px 20px rgba(0,0,0,0.3);
+}
+
+/* Cuando está colapsado (sin productos o contraído), solo se ve el header */
+.pos-sidebar.collapsed {
+  transform: translateY(calc(100% - 36px)); /* Solo 36px visibles (header mínimo) */
 }
 
 @media (min-width: 1024px) {
@@ -1852,9 +1873,24 @@ body[data-text-scale] .product-btn-price,
     border-right: 1px solid var(--border);
   }
   .pos-sidebar {
-    width: 380px;
+    width: 340px; /* Más angosto en desktop también */
     border-top: none;
+    display: flex;
+    flex-direction: column;
+    /* Desktop: altura completa con scroll interno */
     height: 100%;
+    overflow-y: auto;
+    position: static; /* Sin fixed en desktop */
+    box-shadow: none;
+    transform: none;
+    left: auto; /* Resetear left/right en desktop */
+    right: auto;
+    border-radius: 0;
+  }
+  
+  .pos-sidebar.has-content,
+  .pos-sidebar.collapsed {
+    /* Sin efectos en desktop */
   }
 
   /* El panel de tickets expandible se vuelve flexible y libre en PC */
@@ -1864,7 +1900,7 @@ body[data-text-scale] .product-btn-price,
     overflow-y: auto !important;
     border-top: none !important;
   }
-  
+
   .desktop-hide-toggle {
     display: none !important;
   }
@@ -1883,7 +1919,7 @@ body[data-text-scale] .product-btn-price,
   display: flex;
   align-items: center;
   justify-content: space-around;
-  padding: 8px 0 12px;
+  padding: 0 0 1px; /* Mínimo posible */
   background: var(--surface);
   border: 1px solid var(--border);
   border-bottom-color: rgba(255,255,255,0.12);

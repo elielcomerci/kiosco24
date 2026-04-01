@@ -334,7 +334,7 @@ export default function CajaPage() {
       return Boolean(employeeId && activeShift.employeeId && activeShift.employeeId === employeeId);
     }
     return true;
-  }, [activeShift, employeeId, userRole]);
+  }, [activeShift, userRole, employeeId]);
 
   const canManageCurrentShift = useMemo(() => {
     if (!activeShift) return false;
@@ -1019,6 +1019,9 @@ export default function CajaPage() {
         alert(`${targetName} no tiene stock disponible`);
         return prev;
       }
+
+      // Al agregar un producto nuevo, mantener el panel colapsado
+      setIsTicketExpanded(false);
 
       return [
         ...prev,
@@ -1826,70 +1829,88 @@ export default function CajaPage() {
       </div> {/* End of HTML Main Content Area */}
 
 
-      {/* Sidebar / Bottom Block (Fixed) */}
-      <div className="pos-sidebar no-print">
+      {/* Sidebar - Panel de Caja (aparece desde atrás de la barra inferior en móvil) */}
+      <div className={`pos-sidebar no-print ${ticket.length > 0 ? 'has-content' : 'collapsed'}`}>
         
-        {/* Ticket Header / Summary */}
+        {/* Ticket Header / Summary (Sticky dentro del sidebar) */}
         {ticket.length > 0 ? (
-          <div 
+          <div
             onClick={() => setIsTicketExpanded(!isTicketExpanded)}
-            style={{ 
-              padding: "12px 16px", 
-              display: "flex", 
-              justifyContent: "space-between", 
-              alignItems: "center", 
+            style={{
+              padding: "14px 16px",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
               cursor: "pointer",
-              background: "var(--surface-2)" 
+              background: "var(--surface)",
+              borderBottom: "1px solid var(--border)",
+              position: "sticky",
+              top: 0,
+              zIndex: 1,
             }}
           >
             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
               <span style={{ fontSize: "16px", fontWeight: 700 }}>TOTAL</span>
               <span style={{ fontSize: "13px", color: "var(--text-3)" }}>({ticket.length} {ticket.length === 1 ? 'ítem' : 'ítems'})</span>
-              <span style={{ fontSize: "10px", color: "var(--text-3)" }}>{isTicketExpanded ? '▲' : '▼'}</span>
             </div>
             <span style={{ fontSize: "20px", fontWeight: 800, color: "var(--primary)" }}>{formatARS(total)}</span>
           </div>
         ) : (
-          <div style={{ padding: "14px 16px", textAlign: "center", color: "var(--text-3)", fontSize: "14px", background: "var(--surface-2)" }}>
-            Tocá un producto para empezar
+          <div 
+            style={{ 
+              padding: "4px 16px", 
+              textAlign: "center", 
+              color: "var(--text-3)", 
+              fontSize: "10px", 
+              background: "var(--surface)",
+              borderBottom: "1px solid var(--border)",
+              opacity: 0.5,
+            }}
+          >
+            + Agregá un producto
           </div>
         )}
 
-        {/* Collapsible Ticket Detail */}
+        {/* Collapsible Ticket Detail & Payment Buttons */}
         {ticket.length > 0 && (isTicketExpanded || isDesktop) && (
-          <div className="desktop-ticket-scroll" style={{ padding: "0 16px", maxHeight: "40vh", overflowY: "auto", borderTop: "1px solid var(--border)" }}>
+          <div style={{ 
+            overflowY: "auto", 
+            flex: 1,
+            display: "flex",
+            flexDirection: "column",
+          }}>
             {ticket.map((item, idx) => {
               const availableStock = getItemAvailableStock(item);
               const projectedStock = availableStock === null ? null : availableStock - item.quantity;
               const itemNeedsNegativeStock = allowNegativeStock && projectedStock !== null && projectedStock < 0;
 
               return (
-              <div key={idx} className="ticket-item">
+              <div key={idx} className="ticket-item" style={{ padding: "10px 12px" }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <span style={{ fontWeight: 600, fontSize: "14px" }}>{item.name}</span>
+                  <span style={{ fontWeight: 600, fontSize: "13px", display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.name}</span>
                   {itemNeedsNegativeStock && (
                     <div
                       style={{
                         marginTop: "4px",
                         display: "inline-flex",
-                        padding: "3px 7px",
+                        padding: "2px 6px",
                         borderRadius: "999px",
-                        fontSize: "10px",
+                        fontSize: "9px",
                         fontWeight: 700,
                         color: "var(--red)",
                         background: "rgba(239,68,68,0.12)",
                         border: "1px solid rgba(239,68,68,0.24)",
                       }}
                     >
-                      Queda en {projectedStock}
+                      Queda {projectedStock}
                     </div>
                   )}
                 </div>
-                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "6px", flexShrink: 0 }}>
                   <button
                     onClick={(e) => { e.stopPropagation(); changeQty(idx, -1); }}
                     disabled={operationsDisabled}
-                    style={{ width: "28px", height: "28px", background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: "6px", cursor: "pointer", color: "var(--text-2)", fontSize: "16px" }}
+                    style={{ width: "26px", height: "26px", background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: "6px", cursor: "pointer", color: "var(--text-2)", fontSize: "14px", flexShrink: 0 }}
                   >
                     −
                   </button>
@@ -1908,16 +1929,17 @@ export default function CajaPage() {
                         if (e.key === "Escape") setEditingQty(null);
                       }}
                       style={{
-                        width: "48px",
+                        width: "42px",
                         textAlign: "center",
                         fontWeight: 700,
-                        fontSize: "15px",
+                        fontSize: "14px",
                         background: "var(--surface)",
                         border: "1.5px solid var(--primary)",
                         borderRadius: "6px",
                         color: "var(--text)",
                         padding: "2px 4px",
                         outline: "none",
+                        flexShrink: 0,
                       }}
                     />
                   ) : (
@@ -1928,15 +1950,16 @@ export default function CajaPage() {
                       }}
                       title="Tocá para editar cantidad"
                       style={{
-                        minWidth: "28px",
+                        minWidth: "42px",
                         textAlign: "center",
                         fontWeight: 700,
                         cursor: operationsDisabled ? "default" : "text",
                         padding: "2px 4px",
                         borderRadius: "4px",
                         border: operationsDisabled ? "none" : "1px dashed var(--border)",
-                        fontSize: "15px",
+                        fontSize: "14px",
                         userSelect: "none",
+                        flexShrink: 0,
                       }}
                     >
                       {item.quantity}
@@ -1945,11 +1968,11 @@ export default function CajaPage() {
                   <button
                     onClick={(e) => { e.stopPropagation(); changeQty(idx, 1); }}
                     disabled={operationsDisabled}
-                    style={{ width: "28px", height: "28px", background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: "6px", cursor: "pointer", color: "var(--text-2)", fontSize: "16px" }}
+                    style={{ width: "26px", height: "26px", background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: "6px", cursor: "pointer", color: "var(--text-2)", fontSize: "14px", flexShrink: 0 }}
                   >
                     +
                   </button>
-                  <span style={{ minWidth: "70px", textAlign: "right", fontWeight: 600 }}>
+                  <span style={{ minWidth: "60px", textAlign: "right", fontWeight: 600, fontSize: "13px", flexShrink: 0 }}>
                     {formatARS(item.price * item.quantity)}
                   </span>
                 </div>
@@ -1966,79 +1989,75 @@ export default function CajaPage() {
                 </button>
               </div>
             )}
-          </div>
-        )}
 
-        {/* Separator / Border */}
-        <div style={{ height: "1px", background: "var(--border)", width: "100%" }} />
+            {/* Separator / Border */}
+            <div style={{ height: "1px", background: "var(--border)", margin: "12px 0" }} />
 
-        {/* Secondary Actions: OTRO, GASTO, RETIRO */}
-        <div style={{ 
-          display: "grid", 
-          gridTemplateColumns: isCashier ? "repeat(2, 1fr)" : "repeat(4, 1fr)", 
-          gap: "8px", 
-          padding: "8px 12px",
-          background: "var(--surface)"
-        }}>
-          <button
-            className="btn btn-sm btn-ghost"
-            style={{
-              fontSize: "12px",
-              color: invoiceDraft ? "var(--primary)" : "var(--text-2)",
-              border: "1px solid var(--border)",
-            }}
-            onClick={() => {
-              if (!ensureCanOperateCurrentShift()) return;
-              setShowInvoiceDraftModal(true);
-            }}
-            disabled={total === 0 || operationsDisabled || !isOnline}
-            title={!isOnline ? "Necesitas conexion para emitir factura." : "Preparar factura electronica"}
-          >
-            {invoiceDraft ? "FACTURA LISTA" : "CON FACTURA"}
-          </button>
-          <button
-            className="btn btn-sm btn-ghost"
-            style={{ fontSize: "12px", color: "var(--text-2)", border: "1px solid var(--border)" }}
-            onClick={() => {
-              if (!ensureCanOperateCurrentShift()) return;
-              setShowOtro(true);
-            }}
-            disabled={operationsDisabled}
-          >
-            ➕ OTRO
-          </button>
-          <button
-            className="btn btn-sm btn-ghost"
-            style={{ fontSize: "12px", color: "var(--text-2)", border: "1px solid var(--border)" }}
-            onClick={() => {
-              if (!ensureCanOperateCurrentShift()) return;
-              setShowGasto(true);
-            }}
-            disabled={operationsDisabled}
-          >
-            💸 GASTO
-          </button>
-          <button
-            className="btn btn-sm btn-ghost"
-            style={{ fontSize: "12px", color: "var(--text-2)", border: "1px solid var(--border)" }}
-            onClick={() => {
-              if (!ensureCanOperateCurrentShift()) return;
-              setShowRetiro(true);
-            }}
-            disabled={operationsDisabled}
-          >
-            💰 RETIRO
-          </button>
-        </div>
+            {/* Secondary Actions: OTRO, GASTO, RETIRO */}
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: isCashier ? "repeat(2, 1fr)" : "repeat(4, 1fr)",
+              gap: "8px",
+              padding: "8px 12px 16px",
+            }}>
+              <button
+                className="btn btn-sm btn-ghost"
+                style={{
+                  fontSize: "12px",
+                  color: invoiceDraft ? "var(--primary)" : "var(--text-2)",
+                  border: "1px solid var(--border)",
+                }}
+                onClick={() => {
+                  if (!ensureCanOperateCurrentShift()) return;
+                  setShowInvoiceDraftModal(true);
+                }}
+                disabled={total === 0 || operationsDisabled || !isOnline}
+                title={!isOnline ? "Necesitas conexion para emitir factura." : "Preparar factura electronica"}
+              >
+                {invoiceDraft ? "FACTURA LISTA" : "CON FACTURA"}
+              </button>
+              <button
+                className="btn btn-sm btn-ghost"
+                style={{ fontSize: "12px", color: "var(--text-2)", border: "1px solid var(--border)" }}
+                onClick={() => {
+                  if (!ensureCanOperateCurrentShift()) return;
+                  setShowOtro(true);
+                }}
+                disabled={operationsDisabled}
+              >
+                ➕ OTRO
+              </button>
+              <button
+                className="btn btn-sm btn-ghost"
+                style={{ fontSize: "12px", color: "var(--text-2)", border: "1px solid var(--border)" }}
+                onClick={() => {
+                  if (!ensureCanOperateCurrentShift()) return;
+                  setShowGasto(true);
+                }}
+                disabled={operationsDisabled}
+              >
+                💸 GASTO
+              </button>
+              <button
+                className="btn btn-sm btn-ghost"
+                style={{ fontSize: "12px", color: "var(--text-2)", border: "1px solid var(--border)" }}
+                onClick={() => {
+                  if (!ensureCanOperateCurrentShift()) return;
+                  setShowRetiro(true);
+                }}
+                disabled={operationsDisabled}
+              >
+                💰 RETIRO
+              </button>
+            </div>
 
-        {/* Payment Methods Grid */}
-        <div style={{ 
-          padding: "8px 12px 12px", 
-          display: "grid", 
-          gridTemplateColumns: "repeat(3, 1fr)", 
-          gap: "8px",
-          background: "var(--surface)"
-        }}>
+            {/* Payment Methods Grid */}
+            <div style={{
+              padding: "0 12px 16px",
+              display: "grid",
+              gridTemplateColumns: "repeat(3, 1fr)",
+              gap: "8px",
+            }}>
           <button
             className="btn btn-ghost"
             style={{ flexDirection: "column", gap: "2px", borderStyle: "solid", height: "54px" }}
@@ -2097,6 +2116,8 @@ export default function CajaPage() {
             <span style={{ fontSize: "10px", fontWeight: 700 }}>FIADO</span>
           </button>
         </div>
+          </div>
+        )}
       </div> {/* End of POS Sidebar */}
 
       </div> {/* End of POS BODY */}

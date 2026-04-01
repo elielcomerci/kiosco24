@@ -773,39 +773,55 @@ src/app/(app)/[branchId]/estadisticas/tabs/
 - Turnos abiertos marcados con badge "ABIERTO"
 - Diferencias en verde (positiva) o rojo (negativa)
 
-### Fase 5: Tab 4 - Empleados ✅ (Mejorado)
+### Fase 5: Tab 4 - Empleados ✅ (Completado con vistas)
 
 - [x] Implementar UI del tab Empleados
 - [x] Conectar con API `/api/stats/empleados`
 - [x] Implementar filtros (rol)
-- [x] Implementar KPIs de resumen
-- [x] Implementar tabla de empleados
-- [x] Agregar gráfico de ventas por franja horaria
-- [x] Agregar gráfico de ventas por día de la semana
-- [x] Calcular venta por hora trabajada (más justo que venta total)
+- [x] Implementar selector de vista (Diaria/Semanal/Mensual)
+- [x] Implementar vista diaria (turnos del día con horarios)
+- [x] Implementar vista semanal (asistencia, horas, ventas)
+- [x] Implementar vista mensual (liquidación, ausencias, rendimiento)
+- [x] Agregar gráfico de ventas por franja horaria (contexto)
+- [x] Agregar gráfico de ventas por día de la semana (contexto)
+- [x] Calcular venta por hora trabajada (métrica justa)
+- [x] Calcular días programados/trabajados/ausencias
 - [x] Testear responsive
 
 **Mejoras implementadas:**
-- ❌ **Sin ranking injusto** - eliminado porque no considera contexto
-- ✅ **Venta por hora** - métrica justa que compara eficiencia, no volumen
-- ✅ **Horas trabajadas** - muestra cuántas horas trabajó cada empleado
-- ✅ **Ventas por franja** - identifica horarios pico (mañana/tarde/noche)
-- ✅ **Ventas por día** - identifica días fuertes/débiles de la semana
+- ✅ **3 vistas por período**: Diaria (turnos), Semanal (asistencia), Mensual (liquidación)
+- ✅ **Control de ausencias**: Días programados vs trabajados para liquidar sueldo
+- ✅ **Horas trabajadas**: Por turno (diaria) y acumulado (semanal/mensual)
+- ✅ **Venta por hora**: Métrica justa que compara eficiencia, no volumen
+- ✅ **Calendario visual**: Días trabajados marcados con ✅
+- ✅ **Datos para liquidación**: Horas totales, ausencias, rendimiento mensual
 
-**Componentes creados:**
-- `EmpleadosFilterBar` - Filtro por rol (cajeros/encargados)
-- `VentasPorFranjaChart` - Gráfico de barras por franja (6-12, 12-18, 18-23)
-- `VentasPorDiaChart` - Gráfico de barras por día (Dom-Sáb)
-- `EmpleadosTable` - Tabla paginada con métricas justas
+**Vista Diaria:**
+- Lista de turnos por empleado
+- Hora de apertura y cierre de cada turno
+- Duración del turno
+- Caja inicial y diferencia
+- Ventas del turno
 
-**Características:**
-- Filtro por rol (CASHIER, MANAGER)
-- KPIs: total empleados, activos, suspendidos, mejor venta/hora
-- Gráfico de 3 franjas horarias (detecta picos naturales)
-- Gráfico de 7 días (identifica días fuertes)
-- Tabla con: empleado, rol, estado, horas trabajadas, venta/hora, ventas, ticket prom., gastos, turnos
-- Estados con badges de colores
-- Paginación de 20 empleados por página
+**Vista Semanal:**
+- Resumen: días trabajados/programados, horas totales, venta/hora, ventas totales
+- Calendario visual Lun-Dom con ✅ en días trabajados
+- Ausencias marcadas en rojo
+- Gráficos de contexto (franjas horarias, días de la semana)
+
+**Vista Mensual:**
+- Horas para liquidar (total del mes)
+- Asistencia: días trabajados/programados con porcentaje
+- Ausencias con porcentaje de falta
+- Rendimiento: venta/hora, ticket promedio, total vendido
+- Gastos/retiros totales
+- Anulaciones, reposiciones, eficiencia
+
+**API actualizada:**
+- `diasProgramados`: Días únicos con al menos 1 turno
+- `diasTrabajados`: Días con turno cerrado (trabajado)
+- `ausencias`: diferencia entre programados y trabajados
+- `turnos`: array con detalle de cada turno (openedAt, closedAt, diferencia, duración)
 
 ### Fase 6: Tab 6 - Fiados ✅
 

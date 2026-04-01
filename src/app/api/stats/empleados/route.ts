@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { artDayRange, todayART } from "@/lib/utils";
 
-// GET /api/stats/empleados?periodo=dia|semana|mes&isoDate=YYYY-MM-DD&rol=CASHIER|MANAGER
+// GET /api/stats/empleados?periodo=dia|semana|mes&isoDate=YYYY-MM-DD&rol=CASHIER|MANAGER&empleadoId=XXX
 export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user?.id) {
@@ -26,7 +26,8 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const periodo = searchParams.get("periodo") ?? "semana";
   const isoDate = searchParams.get("isoDate") ?? todayART();
-  const rol = searchParams.get("rol"); // optional - CASHIER | MANAGER
+  const rol = searchParams.get("rol"); // optional
+  const empleadoId = searchParams.get("empleadoId"); // optional - para detalle individual
 
   // Build date range
   const { start: dayStart, end: dayEnd } = artDayRange(isoDate);
@@ -68,7 +69,7 @@ export async function GET(req: Request) {
     },
   });
 
-  // Fetch all sales in period for franja/día analysis
+  // Fetch all sales in period for analysis
   const allVentas = await prisma.sale.findMany({
     where: {
       branchId,
@@ -82,46 +83,31 @@ export async function GET(req: Request) {
     },
   });
 
-  // Fetch all shifts in period for horas trabajadas
-  const allTurnos = await prisma.shift.findMany({
-    where: {
-      branchId,
-      openedAt: { gte: start, lte: end },
-    },
-    select: {
-      employeeId: true,
-      openedAt: true,
-      closedAt: true,
-    },
-  });
-
-  // Helper: get franja horaria (0-23)
+  // Aggregate ventas por franja horaria (global del local)
   const getFranja = (hour: number): "manana" | "tarde" | "noche" => {
     if (hour >= 6 && hour < 12) return "manana";
     if (hour >= 12 && hour < 18) return "tarde";
     return "noche";
   };
 
-  // Helper: get día de la semana (0=Dom, 1=Lun, ...)
-  const getDiaSemana = (date: Date): number => date.getDay();
-
-  // Aggregate ventas por franja horaria (global del local)
   const ventasPorFranja = { manana: 0, tarde: 0, noche: 0 };
   const ventasPorDia = [0, 0, 0, 0, 0, 0, 0]; // Dom-Sáb
 
   for (const venta of allVentas) {
     const hour = new Date(venta.createdAt).getHours();
-    const franja = getFranja(hour);
-    ventasPorFranja[franja] += venta.total;
-
-    const dia = getDiaSemana(new Date(venta.createdAt));
-    ventasPorDia[dia] += venta.total;
+    ventasPorFranja[getFranja(hour)] += venta.total;
+    ventasPorDia[new Date(venta.createdAt).getDay()] += venta.total;
   }
 
   // Aggregate data for each employee
   const empleadosConDatos = await Promise.all(
     empleados.map(async (empleado) => {
-      // Sales by this employee (as creator)
+      // Si hay empleadoId específico, filtrar solo ese empleado
+      if (empleadoId && empleado.id !== empleadoId) {
+        return null;
+      }
+
+      // Sales by this employee
       const ventas = await prisma.sale.aggregate({
         where: {
           createdByEmployeeId: empleado.id,
@@ -132,7 +118,7 @@ export async function GET(req: Request) {
         _count: true,
       });
 
-      // Voided sales (anulaciones)
+      // Voided sales
       const anulaciones = await prisma.sale.aggregate({
         where: {
           createdByEmployeeId: empleado.id,
@@ -143,7 +129,7 @@ export async function GET(req: Request) {
         _count: true,
       });
 
-      // Expenses created by this employee
+      // Expenses
       const gastos = await prisma.expense.aggregate({
         where: {
           createdByEmployeeId: empleado.id,
@@ -153,7 +139,7 @@ export async function GET(req: Request) {
         _count: true,
       });
 
-      // Withdrawals created by this employee
+      // Withdrawals
       const retiros = await prisma.withdrawal.aggregate({
         where: {
           createdByEmployeeId: empleado.id,
@@ -163,29 +149,43 @@ export async function GET(req: Request) {
         _count: true,
       });
 
-      // Shifts worked with duration
+      // Shifts with details
       const turnosData = await prisma.shift.findMany({
         where: {
           employeeId: empleado.id,
           openedAt: { gte: start, lte: end },
         },
         select: {
+          id: true,
           openedAt: true,
           closedAt: true,
+          openingAmount: true,
+          closingAmount: true,
+          expectedAmount: true,
+          difference: true,
         },
+        orderBy: { openedAt: "desc" },
       });
 
-      // Calculate horas trabajadas
-      const horasTrabajadas = turnosData.reduce((acc, turno) => {
-        if (turno.closedAt) {
-          const diffMs = turno.closedAt.getTime() - turno.openedAt.getTime();
-          return acc + (diffMs / (1000 * 60 * 60)); // Convert to hours
-        }
-        // Si está abierto, calcular hasta ahora
-        const diffMs = Date.now() - turno.openedAt.getTime();
-        return acc + (diffMs / (1000 * 60 * 60));
-      }, 0);
+      // Calculate horas trabajadas y días
+      let horasTrabajadas = 0;
+      const diasSet = new Set<string>();
+      const diasTrabajadosSet = new Set<string>();
 
+      for (const turno of turnosData) {
+        const openedDate = turno.openedAt.toISOString().split("T")[0];
+        diasSet.add(openedDate);
+
+        if (turno.closedAt) {
+          diasTrabajadosSet.add(openedDate);
+          const diffMs = turno.closedAt.getTime() - turno.openedAt.getTime();
+          horasTrabajadas += diffMs / (1000 * 60 * 60);
+        }
+      }
+
+      const diasProgramados = diasSet.size;
+      const diasTrabajados = diasTrabajadosSet.size;
+      const ausencias = diasProgramados - diasTrabajados;
       const turnosCantidad = turnosData.length;
 
       // Restock events
@@ -201,6 +201,19 @@ export async function GET(req: Request) {
       const ticketPromedio = ventasCantidad > 0 ? ventasTotal / ventasCantidad : 0;
       const ventaPorHora = horasTrabajadas > 0 ? ventasTotal / horasTrabajadas : 0;
 
+      // Turnos detalle para vista diaria
+      const turnosDetalle = turnosData.map((t) => ({
+        id: t.id,
+        openedAt: t.openedAt.toISOString(),
+        closedAt: t.closedAt?.toISOString() ?? null,
+        openingAmount: t.openingAmount,
+        closingAmount: t.closingAmount ?? null,
+        difference: t.difference ?? null,
+        duracionMinutos: t.closedAt
+          ? Math.floor((t.closedAt.getTime() - t.openedAt.getTime()) / (1000 * 60))
+          : null,
+      }));
+
       return {
         id: empleado.id,
         name: empleado.name,
@@ -212,6 +225,9 @@ export async function GET(req: Request) {
         ticketPromedio: Math.round(ticketPromedio),
         ventaPorHora: Math.round(ventaPorHora),
         horasTrabajadas: Math.round(horasTrabajadas),
+        diasProgramados,
+        diasTrabajados,
+        ausencias,
         gastosCantidad: gastos._count,
         gastosTotal: Math.round(gastos._sum.amount ?? 0),
         retirosCantidad: retiros._count,
@@ -220,32 +236,35 @@ export async function GET(req: Request) {
         reposicionesCantidad: reposiciones,
         anulacionesCantidad: anulaciones._count,
         anulacionesTotal: Math.round(anulaciones._sum.total ?? 0),
+        turnos: turnosDetalle,
       };
     })
   );
 
-  // Summary
-  const totalEmpleados = empleadosConDatos.length;
-  const empleadosActivos = empleadosConDatos.filter((e) => e.active && !e.suspendedUntil).length;
-  const empleadosSuspendidos = empleadosConDatos.filter((e) => e.suspendedUntil).length;
+  const empleadosFiltrados = empleadosConDatos.filter((e) => e !== null);
 
-  // Top employee by ventaPorHora (más justo que por total)
-  const topEmpleado = empleadosConDatos
-    .filter((e) => e.horasTrabajadas > 0)
+  // Summary
+  const totalEmpleados = empleadosFiltrados.length;
+  const empleadosActivos = empleadosFiltrados.filter((e) => e!.active && !e!.suspendedUntil).length;
+  const empleadosSuspendidos = empleadosFiltrados.filter((e) => e!.suspendedUntil).length;
+
+  // Top employee by ventaPorHora
+  const topEmpleado = empleadosFiltrados
+    .filter((e) => e!.horasTrabajadas > 0)
     .length > 0
-    ? empleadosConDatos
-        .filter((e) => e.horasTrabajadas > 0)
-        .reduce((max, e) => e.ventaPorHora > max.ventaPorHora ? e : max, empleadosConDatos[0])
+    ? empleadosFiltrados
+        .filter((e) => e!.horasTrabajadas > 0)
+        .reduce((max, e) => e!.ventaPorHora > max.ventaPorHora ? e : max, empleadosFiltrados[0])
     : null;
 
-  // Ventas por franja horaria (formato para gráfico)
+  // Ventas por franja horaria
   const franjasParaGrafico = [
     { franja: "Mañana", label: "☀️ 6-12hs", total: Math.round(ventasPorFranja.manana) },
     { franja: "Tarde", label: "🌆 12-18hs", total: Math.round(ventasPorFranja.tarde) },
     { franja: "Noche", label: "🌙 18-23hs", total: Math.round(ventasPorFranja.noche) },
   ];
 
-  // Ventas por día de la semana (Dom=0, Lun=1, ..., Sáb=6)
+  // Ventas por día de la semana
   const DIAS_LABEL = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
   const diasParaGrafico = ventasPorDia.map((total, idx) => ({
     dia: DIAS_LABEL[idx],
@@ -254,7 +273,7 @@ export async function GET(req: Request) {
   }));
 
   return NextResponse.json({
-    empleados: empleadosConDatos,
+    empleados: empleadosFiltrados,
     resumen: {
       totalEmpleados,
       empleadosActivos,

@@ -7,6 +7,16 @@ import { KpiCard, BarChart, EmptyState } from "@/components/stats";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+interface TurnoDetalle {
+  id: string;
+  openedAt: string;
+  closedAt: string | null;
+  openingAmount: number;
+  closingAmount: number | null;
+  difference: number | null;
+  duracionMinutos: number | null;
+}
+
 interface EmpleadoItem {
   id: string;
   name: string;
@@ -18,6 +28,9 @@ interface EmpleadoItem {
   ticketPromedio: number;
   ventaPorHora: number;
   horasTrabajadas: number;
+  diasProgramados: number;
+  diasTrabajados: number;
+  ausencias: number;
   gastosCantidad: number;
   gastosTotal: number;
   retirosCantidad: number;
@@ -26,6 +39,7 @@ interface EmpleadoItem {
   reposicionesCantidad: number;
   anulacionesCantidad: number;
   anulacionesTotal: number;
+  turnos: TurnoDetalle[];
 }
 
 interface FranjaData {
@@ -53,6 +67,8 @@ interface EmpleadosData {
   ventasPorDia: DiaData[];
 }
 
+type VistaTipo = "diaria" | "semanal" | "mensual";
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const ROLE_LABEL: Record<string, string> = {
@@ -60,7 +76,74 @@ const ROLE_LABEL: Record<string, string> = {
   MANAGER: "Encargado",
 };
 
+const DIAS_LABEL = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
+
+function formatTime(date: Date): string {
+  return date.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" });
+}
+
+function formatDate(date: Date): string {
+  return date.toLocaleDateString("es-AR", { day: "numeric", month: "short" });
+}
+
+function formatDuration(minutes: number | null): string {
+  if (minutes === null) return "—";
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  if (hours > 0) {
+    return `${hours}h ${mins}m`;
+  }
+  return `${mins}m`;
+}
+
 // ─── Sub-components ───────────────────────────────────────────────────────────
+
+function VistaSelector({
+  vista,
+  setVista,
+}: {
+  vista: VistaTipo;
+  setVista: (v: VistaTipo) => void;
+}) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        gap: 6,
+        background: "var(--surface-2)",
+        padding: 4,
+        borderRadius: "var(--radius)",
+        border: "1px solid var(--border)",
+        marginBottom: 16,
+        width: "fit-content",
+      }}
+    >
+      {[
+        { value: "diaria", label: "📅 Diaria" },
+        { value: "semanal", label: "📆 Semanal" },
+        { value: "mensual", label: "📊 Mensual" },
+      ].map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          onClick={() => setVista(option.value as VistaTipo)}
+          style={{
+            border: "none",
+            cursor: "pointer",
+            padding: "8px 12px",
+            borderRadius: "calc(var(--radius) - 2px)",
+            fontSize: 13,
+            fontWeight: 700,
+            background: vista === option.value ? "var(--primary)" : "transparent",
+            color: vista === option.value ? "#000" : "var(--text-2)",
+          }}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 function EmpleadosFilterBar({
   rol,
@@ -112,265 +195,436 @@ function EmpleadosFilterBar({
   );
 }
 
-function VentasPorFranjaChart({ ventasPorFranja }: { ventasPorFranja: FranjaData[] }) {
-  return (
-    <div className="card" style={{ padding: "16px" }}>
-      <h3
-        style={{
-          fontSize: 11,
-          fontWeight: 700,
-          textTransform: "uppercase",
-          letterSpacing: "0.08em",
-          color: "var(--text-3)",
-          marginBottom: 14,
-        }}
-      >
-        ☀️ Ventas por Franja Horaria
-      </h3>
-      <div style={{ marginBottom: 12, fontSize: 12, color: "var(--text-3)" }}>
-        Mañana (6-12hs) · Tarde (12-18hs) · Noche (18-23hs)
-      </div>
-      <BarChart
-        data={ventasPorFranja.map((f) => ({ label: f.label, total: f.total }))}
-        valueKey="total"
-        labelKey="label"
-      />
-    </div>
-  );
-}
+// ─── Vista Diaria ─────────────────────────────────────────────────────────────
 
-function VentasPorDiaChart({ ventasPorDia }: { ventasPorDia: DiaData[] }) {
-  return (
-    <div className="card" style={{ padding: "16px" }}>
-      <h3
-        style={{
-          fontSize: 11,
-          fontWeight: 700,
-          textTransform: "uppercase",
-          letterSpacing: "0.08em",
-          color: "var(--text-3)",
-          marginBottom: 14,
-        }}
-      >
-        📅 Ventas por Día de la Semana
-      </h3>
-      <BarChart
-        data={ventasPorDia.map((d) => ({ label: d.dia, total: d.total }))}
-        valueKey="total"
-        labelKey="label"
-      />
-    </div>
-  );
-}
-
-function EmpleadosTable({
-  empleados,
-  page,
-  setPage,
-}: {
-  empleados: EmpleadoItem[];
-  page: number;
-  setPage: (p: number) => void;
-}) {
-  const itemsPerPage = 20;
-  const totalPages = Math.ceil(empleados.length / itemsPerPage);
-  const paginatedEmpleados = empleados.slice((page - 1) * itemsPerPage, page * itemsPerPage);
+function VistaDiaria({ empleados }: { empleados: EmpleadoItem[] }) {
+  if (empleados.length === 0) {
+    return <EmptyState emoji="📭" title="Sin empleados" description="No hay empleados para mostrar" />;
+  }
 
   return (
-    <div className="card" style={{ padding: "16px" }}>
-      <h3
-        style={{
-          fontSize: 11,
-          fontWeight: 700,
-          textTransform: "uppercase",
-          letterSpacing: "0.08em",
-          color: "var(--text-3)",
-          marginBottom: 14,
-        }}
-      >
-        Equipo de trabajo
-      </h3>
-
-      {empleados.length === 0 ? (
-        <EmptyState emoji="📭" title="Sin empleados" description="No hay empleados para mostrar" />
-      ) : (
-        <>
-          <div style={{ overflowX: "auto" }}>
-            <table
-              style={{
-                width: "100%",
-                borderCollapse: "collapse",
-                fontSize: 13,
-              }}
-            >
-              <thead>
-                <tr style={{ borderBottom: "2px solid var(--border)", textAlign: "left" }}>
-                  <th style={{ padding: "8px", fontWeight: 700, color: "var(--text-3)" }}>Empleado</th>
-                  <th style={{ padding: "8px", fontWeight: 700, color: "var(--text-3)" }}>Rol</th>
-                  <th style={{ padding: "8px", fontWeight: 700, color: "var(--text-3)" }}>Estado</th>
-                  <th style={{ padding: "8px", fontWeight: 700, color: "var(--text-3)" }}>Horas</th>
-                  <th style={{ padding: "8px", fontWeight: 700, color: "var(--text-3)" }}>Venta/Hora</th>
-                  <th style={{ padding: "8px", fontWeight: 700, color: "var(--text-3)" }}>Ventas</th>
-                  <th style={{ padding: "8px", fontWeight: 700, color: "var(--text-3)" }}>Ticket Prom.</th>
-                  <th style={{ padding: "8px", fontWeight: 700, color: "var(--text-3)" }}>Gastos</th>
-                  <th style={{ padding: "8px", fontWeight: 700, color: "var(--text-3)" }}>Turnos</th>
-                </tr>
-              </thead>
-              <tbody>
-                {paginatedEmpleados.map((emp) => (
-                  <tr
-                    key={emp.id}
-                    style={{
-                      borderBottom: "1px solid var(--border)",
-                      opacity: !emp.active || emp.suspendedUntil ? 0.6 : 1,
-                    }}
-                  >
-                    <td style={{ padding: "10px 8px" }}>
-                      <div style={{ fontWeight: 700, color: "var(--text-2)" }}>
-                        {emp.name}
-                      </div>
-                    </td>
-                    <td style={{ padding: "10px 8px" }}>
-                      <span
-                        style={{
-                          fontSize: 11,
-                          fontWeight: 600,
-                          padding: "2px 6px",
-                          borderRadius: 4,
-                          background: emp.role === "MANAGER" ? "rgba(34,197,94,0.15)" : "var(--surface-2)",
-                          color: emp.role === "MANAGER" ? "var(--green)" : "var(--text-3)",
-                        }}
-                      >
-                        {ROLE_LABEL[emp.role] ?? emp.role}
-                      </span>
-                    </td>
-                    <td style={{ padding: "10px 8px" }}>
-                      {emp.suspendedUntil ? (
-                        <span
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 700,
-                            padding: "2px 6px",
-                            borderRadius: 4,
-                            background: "rgba(239,68,68,0.15)",
-                            color: "var(--red)",
-                          }}
-                        >
-                          Suspendido
-                        </span>
-                      ) : emp.active ? (
-                        <span
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 700,
-                            padding: "2px 6px",
-                            borderRadius: 4,
-                            background: "rgba(34,197,94,0.15)",
-                            color: "var(--green)",
-                          }}
-                        >
-                          Activo
-                        </span>
-                      ) : (
-                        <span
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 700,
-                            padding: "2px 6px",
-                            borderRadius: 4,
-                            background: "var(--surface-2)",
-                            color: "var(--text-3)",
-                          }}
-                        >
-                          Inactivo
-                        </span>
-                      )}
-                    </td>
-                    <td style={{ padding: "10px 8px" }}>
-                      <span style={{ color: "var(--text-2)" }}>
-                        {emp.horasTrabajadas}h
-                      </span>
-                    </td>
-                    <td style={{ padding: "10px 8px" }}>
-                      <span
-                        style={{
-                          fontWeight: 700,
-                          color: "var(--primary)",
-                        }}
-                      >
-                        {formatARS(emp.ventaPorHora)}/h
-                      </span>
-                    </td>
-                    <td style={{ padding: "10px 8px" }}>
-                      <div style={{ fontWeight: 700 }}>{formatARS(emp.ventasTotal)}</div>
-                      <div style={{ fontSize: 11, color: "var(--text-3)" }}>
-                        {emp.ventasCantidad} ops
-                      </div>
-                    </td>
-                    <td style={{ padding: "10px 8px" }}>
-                      <span style={{ color: "var(--text-2)" }}>
-                        {formatARS(emp.ticketPromedio)}
-                      </span>
-                    </td>
-                    <td style={{ padding: "10px 8px" }}>
-                      <div style={{ fontWeight: 600, color: "var(--red)" }}>
-                        {formatARS(emp.gastosTotal)}
-                      </div>
-                      <div style={{ fontSize: 11, color: "var(--text-3)" }}>
-                        {emp.gastosCantidad} ops
-                      </div>
-                    </td>
-                    <td style={{ padding: "10px 8px", textAlign: "center" }}>
-                      <span style={{ color: "var(--text-2)" }}>{emp.turnosCantidad}</span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      {empleados.map((emp) => (
+        <div
+          key={emp.id}
+          className="card"
+          style={{ padding: "16px" }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: 16,
+              paddingBottom: 12,
+              borderBottom: "2px solid var(--border)",
+            }}
+          >
+            <div>
+              <h3 style={{ fontSize: 16, fontWeight: 800, margin: 0, color: "var(--text-2)" }}>
+                {emp.name}
+              </h3>
+              <div style={{ fontSize: 12, color: "var(--text-3)", marginTop: 4 }}>
+                {ROLE_LABEL[emp.role]} · {emp.turnosCantidad} turno{emp.turnosCantidad !== 1 ? "s" : ""}
+              </div>
+            </div>
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontSize: 11, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                Horas trabajadas
+              </div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: "var(--primary)" }}>
+                {emp.horasTrabajadas}h
+              </div>
+            </div>
           </div>
 
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "center",
-                alignItems: "center",
-                gap: 8,
-                marginTop: 16,
-              }}
-            >
-              <button
-                className="btn btn-ghost"
-                onClick={() => setPage(Math.max(1, page - 1))}
-                disabled={page === 1}
-                style={{
-                  padding: "6px 12px",
-                  fontSize: 12,
-                  opacity: page === 1 ? 0.5 : 1,
-                }}
-              >
-                ‹ Anterior
-              </button>
-              <span style={{ fontSize: 12, color: "var(--text-3)" }}>
-                Página {page} de {totalPages}
-              </span>
-              <button
-                className="btn btn-ghost"
-                onClick={() => setPage(Math.min(totalPages, page + 1))}
-                disabled={page === totalPages}
-                style={{
-                  padding: "6px 12px",
-                  fontSize: 12,
-                  opacity: page === totalPages ? 0.5 : 1,
-                }}
-              >
-                Siguiente ›
-              </button>
+          {emp.turnos.length > 0 ? (
+            <div style={{ display: "grid", gap: 10 }}>
+              {emp.turnos.map((turno) => (
+                <div
+                  key={turno.id}
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "auto 1fr auto",
+                    gap: 16,
+                    alignItems: "center",
+                    padding: "12px",
+                    background: "var(--surface-2)",
+                    borderRadius: "var(--radius-lg)",
+                    border: "1px solid var(--border)",
+                  }}
+                >
+                  {/* Icono de estado */}
+                  <div
+                    style={{
+                      width: 40,
+                      height: 40,
+                      borderRadius: "50%",
+                      background: turno.closedAt ? "rgba(34,197,94,0.15)" : "rgba(251,191,36,0.15)",
+                      color: turno.closedAt ? "var(--green)" : "var(--amber)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: 18,
+                      fontWeight: 700,
+                    }}
+                  >
+                    {turno.closedAt ? "✓" : "⏳"}
+                  </div>
+
+                  {/* Información del turno */}
+                  <div>
+                    <div style={{ display: "flex", gap: 16, marginBottom: 6 }}>
+                      <div>
+                        <div style={{ fontSize: 10, color: "var(--text-3)", textTransform: "uppercase" }}>
+                          Apertura
+                        </div>
+                        <div style={{ fontWeight: 700, fontSize: 14 }}>
+                          {formatTime(new Date(turno.openedAt))}
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 10, color: "var(--text-3)", textTransform: "uppercase" }}>
+                          {turno.closedAt ? "Cierre" : "Estado"}
+                        </div>
+                        <div style={{ fontWeight: 700, fontSize: 14 }}>
+                          {turno.closedAt
+                            ? formatTime(new Date(turno.closedAt))
+                            : "Abierto"}
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 10, color: "var(--text-3)", textTransform: "uppercase" }}>
+                          Duración
+                        </div>
+                        <div style={{ fontWeight: 700, fontSize: 14 }}>
+                          {formatDuration(turno.duracionMinutos)}
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: 12, fontSize: 12, color: "var(--text-3)" }}>
+                      <span>Caja inicial: {formatARS(turno.openingAmount)}</span>
+                      {turno.difference !== null && turno.difference !== undefined && (
+                        <span
+                          style={{
+                            fontWeight: 600,
+                            color: turno.difference >= 0 ? "var(--green)" : "var(--red)",
+                          }}
+                        >
+                          Diferencia: {turno.difference >= 0 ? "+" : ""}{formatARS(turno.difference)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Ventas del turno */}
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ fontSize: 11, color: "var(--text-3)", textTransform: "uppercase" }}>
+                      Ventas
+                    </div>
+                    <div style={{ fontSize: 18, fontWeight: 800, color: "var(--text)" }}>
+                      {formatARS(emp.ventasTotal)}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ textAlign: "center", padding: "40px 20px", color: "var(--text-3)" }}>
+              <div style={{ fontSize: 32, marginBottom: 8 }}>📭</div>
+              <div>Sin turnos en este período</div>
             </div>
           )}
-        </>
-      )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Vista Semanal ────────────────────────────────────────────────────────────
+
+function VistaSemanal({ empleados }: { empleados: EmpleadoItem[] }) {
+  if (empleados.length === 0) {
+    return <EmptyState emoji="📭" title="Sin empleados" description="No hay empleados para mostrar" />;
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      {empleados.map((emp) => {
+        const asistenciaColor = emp.ausencias === 0
+          ? "var(--green)"
+          : emp.ausencias <= 2
+          ? "var(--amber)"
+          : "var(--red)";
+
+        return (
+          <div
+            key={emp.id}
+            className="card"
+            style={{ padding: "16px" }}
+          >
+            {/* Header del empleado */}
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+                gap: 16,
+                marginBottom: 16,
+                paddingBottom: 16,
+                borderBottom: "2px solid var(--border)",
+              }}
+            >
+              <div>
+                <div style={{ fontSize: 11, color: "var(--text-3)", textTransform: "uppercase", marginBottom: 4 }}>
+                  Empleado
+                </div>
+                <div style={{ fontWeight: 800, fontSize: 15, color: "var(--text-2)" }}>
+                  {emp.name}
+                </div>
+                <div style={{ fontSize: 12, color: "var(--text-3)", marginTop: 2 }}>
+                  {ROLE_LABEL[emp.role]}
+                </div>
+              </div>
+
+              <div>
+                <div style={{ fontSize: 11, color: "var(--text-3)", textTransform: "uppercase", marginBottom: 4 }}>
+                  Asistencia
+                </div>
+                <div style={{ fontWeight: 800, fontSize: 15, color: asistenciaColor }}>
+                  {emp.diasTrabajados}/{emp.diasProgramados} días
+                </div>
+                {emp.ausencias > 0 && (
+                  <div style={{ fontSize: 12, color: "var(--red)", marginTop: 2 }}>
+                    {emp.ausencias} falta{emp.ausencias !== 1 ? "s" : ""}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <div style={{ fontSize: 11, color: "var(--text-3)", textTransform: "uppercase", marginBottom: 4 }}>
+                  Horas totales
+                </div>
+                <div style={{ fontWeight: 800, fontSize: 15, color: "var(--primary)" }}>
+                  {emp.horasTrabajadas}h
+                </div>
+              </div>
+
+              <div>
+                <div style={{ fontSize: 11, color: "var(--text-3)", textTransform: "uppercase", marginBottom: 4 }}>
+                  Venta/hora
+                </div>
+                <div style={{ fontWeight: 800, fontSize: 15, color: "var(--green)" }}>
+                  {formatARS(emp.ventaPorHora)}/h
+                </div>
+              </div>
+
+              <div>
+                <div style={{ fontSize: 11, color: "var(--text-3)", textTransform: "uppercase", marginBottom: 4 }}>
+                  Ventas total
+                </div>
+                <div style={{ fontWeight: 800, fontSize: 15, color: "var(--text)" }}>
+                  {formatARS(emp.ventasTotal)}
+                </div>
+                <div style={{ fontSize: 12, color: "var(--text-3)", marginTop: 2 }}>
+                  {emp.ventasCantidad} operaciones
+                </div>
+              </div>
+
+              <div>
+                <div style={{ fontSize: 11, color: "var(--text-3)", textTransform: "uppercase", marginBottom: 4 }}>
+                  Ticket prom.
+                </div>
+                <div style={{ fontWeight: 800, fontSize: 15, color: "var(--text-2)" }}>
+                  {formatARS(emp.ticketPromedio)}
+                </div>
+              </div>
+            </div>
+
+            {/* Calendario visual de la semana */}
+            <div>
+              <div style={{ fontSize: 11, color: "var(--text-3)", textTransform: "uppercase", marginBottom: 8 }}>
+                Días trabajados esta semana
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 6 }}>
+                {DIAS_LABEL.map((dia, idx) => {
+                  // Simplemente mostramos los días, en el futuro podríamos marcar cuáles trabajó
+                  const trabajoHoy = idx < emp.diasTrabajados;
+                  return (
+                    <div
+                      key={dia}
+                      style={{
+                        padding: "8px 4px",
+                        borderRadius: "var(--radius)",
+                        background: trabajoHoy
+                          ? "rgba(34,197,94,0.15)"
+                          : "var(--surface-2)",
+                        border: `1px solid ${trabajoHoy ? "rgba(34,197,94,0.3)" : "var(--border)"}`,
+                        textAlign: "center",
+                      }}
+                    >
+                      <div style={{ fontSize: 9, color: "var(--text-3)", marginBottom: 4 }}>
+                        {dia.slice(0, 3)}
+                      </div>
+                      <div style={{ fontSize: 18, fontWeight: 700 }}>
+                        {trabajoHoy ? "✅" : "—"}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Vista Mensual ────────────────────────────────────────────────────────────
+
+function VistaMensual({ empleados }: { empleados: EmpleadoItem[] }) {
+  if (empleados.length === 0) {
+    return <EmptyState emoji="📭" title="Sin empleados" description="No hay empleados para mostrar" />;
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      {empleados.map((emp) => {
+        const ausenciasPorcentaje = emp.diasProgramados > 0
+          ? Math.round((emp.ausencias / emp.diasProgramados) * 100)
+          : 0;
+
+        return (
+          <div
+            key={emp.id}
+            className="card"
+            style={{ padding: "16px" }}
+          >
+            {/* Header con resumen */}
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                gap: 16,
+                marginBottom: 16,
+                paddingBottom: 16,
+                borderBottom: "2px solid var(--border)",
+              }}
+            >
+              <div>
+                <div style={{ fontSize: 11, color: "var(--text-3)", textTransform: "uppercase", marginBottom: 4 }}>
+                  Empleado
+                </div>
+                <div style={{ fontWeight: 800, fontSize: 15, color: "var(--text-2)" }}>
+                  {emp.name}
+                </div>
+                <div style={{ fontSize: 12, color: "var(--text-3)", marginTop: 2 }}>
+                  {ROLE_LABEL[emp.role]}
+                </div>
+              </div>
+
+              <div>
+                <div style={{ fontSize: 11, color: "var(--text-3)", textTransform: "uppercase", marginBottom: 4 }}>
+                  Horas para liquidar
+                </div>
+                <div style={{ fontWeight: 800, fontSize: 18, color: "var(--primary)" }}>
+                  {emp.horasTrabajadas}h
+                </div>
+                <div style={{ fontSize: 12, color: "var(--text-3)", marginTop: 2 }}>
+                  {emp.turnosCantidad} turnos
+                </div>
+              </div>
+
+              <div>
+                <div style={{ fontSize: 11, color: "var(--text-3)", textTransform: "uppercase", marginBottom: 4 }}>
+                  Asistencia
+                </div>
+                <div style={{ fontWeight: 800, fontSize: 18, color: emp.ausencias > 2 ? "var(--red)" : "var(--green)" }}>
+                  {emp.diasTrabajados}/{emp.diasProgramados}
+                </div>
+                {emp.ausencias > 0 && (
+                  <div style={{ fontSize: 12, color: "var(--red)", marginTop: 2 }}>
+                    {emp.ausencias} falta{emp.ausencias !== 1 ? "s" : ""} ({ausenciasPorcentaje}%)
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <div style={{ fontSize: 11, color: "var(--text-3)", textTransform: "uppercase", marginBottom: 4 }}>
+                  Rendimiento
+                </div>
+                <div style={{ fontWeight: 800, fontSize: 18, color: "var(--green)" }}>
+                  {formatARS(emp.ventaPorHora)}/h
+                </div>
+                <div style={{ fontSize: 12, color: "var(--text-3)", marginTop: 2 }}>
+                  {formatARS(emp.ventasTotal)} total
+                </div>
+              </div>
+
+              <div>
+                <div style={{ fontSize: 11, color: "var(--text-3)", textTransform: "uppercase", marginBottom: 4 }}>
+                  Ticket promedio
+                </div>
+                <div style={{ fontWeight: 800, fontSize: 18, color: "var(--text-2)" }}>
+                  {formatARS(emp.ticketPromedio)}
+                </div>
+                <div style={{ fontSize: 12, color: "var(--text-3)", marginTop: 2 }}>
+                  {emp.ventasCantidad} ventas
+                </div>
+              </div>
+
+              <div>
+                <div style={{ fontSize: 11, color: "var(--text-3)", textTransform: "uppercase", marginBottom: 4 }}>
+                  Gastos/Retiros
+                </div>
+                <div style={{ fontWeight: 700, fontSize: 16, color: "var(--red)" }}>
+                  {formatARS(emp.gastosTotal + emp.retirosTotal)}
+                </div>
+                <div style={{ fontSize: 12, color: "var(--text-3)", marginTop: 2 }}>
+                  {emp.gastosCantidad + emp.retirosCantidad} operaciones
+                </div>
+              </div>
+            </div>
+
+            {/* Estadísticas adicionales */}
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+                gap: 12,
+                padding: "12px",
+                background: "var(--surface-2)",
+                borderRadius: "var(--radius-lg)",
+              }}
+            >
+              <div>
+                <div style={{ fontSize: 10, color: "var(--text-3)", textTransform: "uppercase" }}>
+                  Anulaciones
+                </div>
+                <div style={{ fontWeight: 700, fontSize: 14, color: emp.anulacionesCantidad > 0 ? "var(--red)" : "var(--text-2)" }}>
+                  {emp.anulacionesCantidad} ({formatARS(emp.anulacionesTotal)})
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 10, color: "var(--text-3)", textTransform: "uppercase" }}>
+                  Reposiciones
+                </div>
+                <div style={{ fontWeight: 700, fontSize: 14, color: "var(--text-2)" }}>
+                  {emp.reposicionesCantidad}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 10, color: "var(--text-3)", textTransform: "uppercase" }}>
+                  Eficiencia
+                </div>
+                <div style={{ fontWeight: 700, fontSize: 14, color: "var(--green)" }}>
+                  {emp.diasProgramados > 0 ? Math.round((emp.diasTrabajados / emp.diasProgramados) * 100) : 0}% asistencia
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -390,7 +644,7 @@ export default function TabEmpleados({
   const [data, setData] = useState<EmpleadosData | null>(null);
   const [loading, setLoading] = useState(false);
   const [rol, setRol] = useState("");
-  const [page, setPage] = useState(1);
+  const [vista, setVista] = useState<VistaTipo>("semanal");
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -406,7 +660,6 @@ export default function TabEmpleados({
       });
       const json = await res.json();
       setData(json);
-      setPage(1);
     } finally {
       setLoading(false);
     }
@@ -428,6 +681,9 @@ export default function TabEmpleados({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      {/* Selector de vista */}
+      <VistaSelector vista={vista} setVista={setVista} />
+
       {/* Filtros */}
       <EmpleadosFilterBar rol={rol} setRol={setRol} />
 
@@ -448,18 +704,58 @@ export default function TabEmpleados({
         />
       </div>
 
-      {/* Gráfico de ventas por franja horaria */}
-      <VentasPorFranjaChart ventasPorFranja={data.ventasPorFranja} />
+      {/* Gráficos de contexto (solo en vista semanal/mensual) */}
+      {vista !== "diaria" && (
+        <>
+          <div className="card" style={{ padding: "16px" }}>
+            <h3
+              style={{
+                fontSize: 11,
+                fontWeight: 700,
+                textTransform: "uppercase",
+                letterSpacing: "0.08em",
+                color: "var(--text-3)",
+                marginBottom: 14,
+              }}
+            >
+              ☀️ Ventas por Franja Horaria
+            </h3>
+            <div style={{ marginBottom: 12, fontSize: 12, color: "var(--text-3)" }}>
+              Mañana (6-12hs) · Tarde (12-18hs) · Noche (18-23hs)
+            </div>
+            <BarChart
+              data={data.ventasPorFranja.map((f) => ({ label: f.label, total: f.total }))}
+              valueKey="total"
+              labelKey="label"
+            />
+          </div>
 
-      {/* Gráfico de ventas por día */}
-      <VentasPorDiaChart ventasPorDia={data.ventasPorDia} />
+          <div className="card" style={{ padding: "16px" }}>
+            <h3
+              style={{
+                fontSize: 11,
+                fontWeight: 700,
+                textTransform: "uppercase",
+                letterSpacing: "0.08em",
+                color: "var(--text-3)",
+                marginBottom: 14,
+              }}
+            >
+              📅 Ventas por Día de la Semana
+            </h3>
+            <BarChart
+              data={data.ventasPorDia.map((d) => ({ label: d.dia, total: d.total }))}
+              valueKey="total"
+              labelKey="label"
+            />
+          </div>
+        </>
+      )}
 
-      {/* Tabla de empleados */}
-      <EmpleadosTable
-        empleados={data.empleados}
-        page={page}
-        setPage={setPage}
-      />
+      {/* Vista seleccionada */}
+      {vista === "diaria" && <VistaDiaria empleados={data.empleados} />}
+      {vista === "semanal" && <VistaSemanal empleados={data.empleados} />}
+      {vista === "mensual" && <VistaMensual empleados={data.empleados} />}
     </div>
   );
 }

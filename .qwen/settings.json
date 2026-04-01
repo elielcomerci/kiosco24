@@ -9,7 +9,9 @@
       "Bash(netstat *)",
       "Bash(npm install *)",
       "Bash(select-object *)",
-      "Bash(rmdir *)"
+      "Bash(rmdir *)",
+      "Bash(git add *)",
+      "Bash(git commit *)"
     ]
   },
   "$version": 3

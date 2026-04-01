@@ -1098,7 +1098,9 @@ impl CarrefourScraper {
             return false;
         }
 
-        if !path.ends_with("/p") {
+        // VTEX: enlaces tipo /categoria/slug/p o /slug/p/<skuId>; el segundo caso no termina en "/p".
+        let looks_like_product_path = path.contains("/p/") || path.ends_with("/p");
+        if !looks_like_product_path {
             return false;
         }
 

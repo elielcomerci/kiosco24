@@ -82,8 +82,14 @@ export async function POST(req: Request) {
   try {
     const shift = await prisma.$transaction(async (tx) => {
       const currentShift = await getActiveShift(branchId, tx);
-      if (currentShift) {
-        throw new Error("ACTIVE_SHIFT_EXISTS");
+      
+      // OWNER puede operar incluso si hay un turno activo
+      // Solo bloqueamos a empleados que no son el responsable
+      if (currentShift && sessionRole !== UserRole.OWNER) {
+        // Verificar si el usuario actual es el responsable del turno activo
+        if (sessionRole === UserRole.EMPLOYEE && currentShift.employeeId !== sessionEmployeeId) {
+          throw new Error("ACTIVE_SHIFT_EXISTS");
+        }
       }
 
       const assigneeOpenShift = await tx.shift.findFirst({

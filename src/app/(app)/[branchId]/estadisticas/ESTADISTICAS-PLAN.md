@@ -884,9 +884,27 @@ src/app/(app)/[branchId]/estadisticas/tabs/
 | 📊 Resumen | ✅ | ✅ | Completo |
 | 💰 Ventas | ✅ | ✅ | Completo |
 | 🕐 Turnos | ✅ | ✅ | Completo |
-| 👷 Empleados | ✅ | ✅ | Completo |
+| 👷 Empleados | ✅ | ✅ | Completo (3 vistas) |
 | 📦 Stock | ✅ | ✅ | Completo |
 | 💳 Fiados | ✅ | ✅ | Completo |
+
+---
+
+## 🔐 Permisos de Turnos (Actualizado)
+
+**Reglas de negocio:**
+
+| Usuario | Puede operar turno activo | Puede abrir turno | Notas |
+|---------|---------------------------|-------------------|-------|
+| **OWNER** | ✅ Siempre | ✅ Siempre | Nunca tiene bloqueos |
+| **MANAGER** | ✅ Siempre | ✅ Siempre | Puede gestionar cualquier turno |
+| **EMPLEADO** | Solo su turno | ❌ Si hay turno activo | Solo opera su propio turno |
+
+**Cambios implementados:**
+- ✅ `canOperateShift`: OWNER y MANAGER operan cualquier turno
+- ✅ Apertura de turnos: OWNER puede abrir aunque haya turno activo
+- ✅ Empleados solo pueden operar su turno asignado
+- ✅ Mensajes de error claros cuando hay conflicto
 - [ ] Crear `StatsFilterBar.tsx`
 - [ ] Crear `AlertBadge.tsx`
 - [ ] Crear `EmptyState.tsx`

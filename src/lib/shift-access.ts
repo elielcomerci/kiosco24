@@ -23,11 +23,22 @@ export function getShiftResponsibleName(shift: { employeeName: string; employee?
 }
 
 export function canOperateShift(user: SessionUserLike, shift: { employeeId: string | null }) {
+  // OWNER puede operar cualquier turno
+  if (user.role === "OWNER") {
+    return true;
+  }
+
+  // MANAGER puede operar cualquier turno
+  if (user.employeeRole === "MANAGER") {
+    return true;
+  }
+
+  // EMPLOYEE solo puede operar su propio turno
   if (user.role === "EMPLOYEE") {
     return Boolean(user.employeeId && shift.employeeId && user.employeeId === shift.employeeId);
   }
 
-  return true;
+  return false;
 }
 
 export function canManageShiftLifecycle(user: SessionUserLike, shift: { employeeId: string | null }) {

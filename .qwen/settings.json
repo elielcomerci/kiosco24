@@ -6,7 +6,10 @@
       "Bash(findstr *)",
       "Bash(npm run *)",
       "Bash(timeout *)",
-      "Bash(netstat *)"
+      "Bash(netstat *)",
+      "Bash(npm install *)",
+      "Bash(select-object *)",
+      "Bash(rmdir *)"
     ]
   },
   "$version": 3

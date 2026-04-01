@@ -619,6 +619,20 @@ export default function LoginExperience({
               </button>
             </form>
 
+            {!isRegister && (
+              <a
+                href="/reset-password"
+                style={{
+                  fontSize: "13px",
+                  color: "var(--text-3)",
+                  textDecoration: "underline",
+                  textAlign: "center",
+                }}
+              >
+                Olvidé mi contraseña
+              </a>
+            )}
+
             <button
               className="btn-ghost"
               onClick={switchToEmployeeMode}

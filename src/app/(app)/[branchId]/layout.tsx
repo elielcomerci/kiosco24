@@ -121,7 +121,7 @@ export default async function BranchLayout({
               {"\uD83D\uDCC4"}
             </a>
           ) : null}
-          {!isEmployee && (
+          {(session.user.role === "OWNER" || session.user.employeeRole === "MANAGER") ? (
             <a
               href={`/${effectiveBranchId}/configuracion`}
               className="app-header-icon-link"
@@ -130,7 +130,7 @@ export default async function BranchLayout({
             >
               {"\u2699\uFE0F"}
             </a>
-          )}
+          ) : null}
           <form
             action={async () => {
               "use server";

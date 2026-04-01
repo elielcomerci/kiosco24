@@ -1,4 +1,4 @@
-import { requireOwnerBranchPage } from "@/lib/route-access";
+import { requireOperativeBranchPage } from "@/lib/route-access";
 
 export default async function StatsLayout({
   children,
@@ -7,6 +7,6 @@ export default async function StatsLayout({
   children: React.ReactNode;
   params: Promise<{ branchId: string }>;
 }) {
-  await requireOwnerBranchPage(params);
+  await requireOperativeBranchPage(params);
   return children;
 }

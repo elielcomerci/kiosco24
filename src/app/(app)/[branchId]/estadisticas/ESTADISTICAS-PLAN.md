@@ -773,28 +773,38 @@ src/app/(app)/[branchId]/estadisticas/tabs/
 - Turnos abiertos marcados con badge "ABIERTO"
 - Diferencias en verde (positiva) o rojo (negativa)
 
-### Fase 5: Tab 4 - Empleados ✅
+### Fase 5: Tab 4 - Empleados ✅ (Mejorado)
 
 - [x] Implementar UI del tab Empleados
 - [x] Conectar con API `/api/stats/empleados`
 - [x] Implementar filtros (rol)
 - [x] Implementar KPIs de resumen
-- [x] Implementar ranking de empleados
 - [x] Implementar tabla de empleados
+- [x] Agregar gráfico de ventas por franja horaria
+- [x] Agregar gráfico de ventas por día de la semana
+- [x] Calcular venta por hora trabajada (más justo que venta total)
 - [x] Testear responsive
+
+**Mejoras implementadas:**
+- ❌ **Sin ranking injusto** - eliminado porque no considera contexto
+- ✅ **Venta por hora** - métrica justa que compara eficiencia, no volumen
+- ✅ **Horas trabajadas** - muestra cuántas horas trabajó cada empleado
+- ✅ **Ventas por franja** - identifica horarios pico (mañana/tarde/noche)
+- ✅ **Ventas por día** - identifica días fuertes/débiles de la semana
 
 **Componentes creados:**
 - `EmpleadosFilterBar` - Filtro por rol (cajeros/encargados)
-- `RankingEmpleados` - Top empleados con medallas (🥇🥈🥉)
-- `EmpleadosTable` - Tabla paginada con métricas por empleado
+- `VentasPorFranjaChart` - Gráfico de barras por franja (6-12, 12-18, 18-23)
+- `VentasPorDiaChart` - Gráfico de barras por día (Dom-Sáb)
+- `EmpleadosTable` - Tabla paginada con métricas justas
 
 **Características:**
 - Filtro por rol (CASHIER, MANAGER)
-- KPIs: total empleados, activos, suspendidos, top empleado del período
-- Ranking con medallas para top 3
-- Tabla con: empleado, rol, estado (activo/suspendido/inactivo), ventas, ticket promedio, gastos, retiros, turnos, anulaciones
-- Estados con badges de colores (verde=activo, rojo=suspendido, gris=inactivo)
-- Anulaciones destacadas en rojo cuando hay
+- KPIs: total empleados, activos, suspendidos, mejor venta/hora
+- Gráfico de 3 franjas horarias (detecta picos naturales)
+- Gráfico de 7 días (identifica días fuertes)
+- Tabla con: empleado, rol, estado, horas trabajadas, venta/hora, ventas, ticket prom., gastos, turnos
+- Estados con badges de colores
 - Paginación de 20 empleados por página
 
 ### Fase 6: Tab 6 - Fiados ✅

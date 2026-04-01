@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { formatARS } from "@/lib/utils";
-import { KpiCard, EmptyState } from "@/components/stats";
+import { KpiCard, BarChart, EmptyState } from "@/components/stats";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -16,6 +16,8 @@ interface EmpleadoItem {
   ventasCantidad: number;
   ventasTotal: number;
   ticketPromedio: number;
+  ventaPorHora: number;
+  horasTrabajadas: number;
   gastosCantidad: number;
   gastosTotal: number;
   retirosCantidad: number;
@@ -26,16 +28,29 @@ interface EmpleadoItem {
   anulacionesTotal: number;
 }
 
+interface FranjaData {
+  franja: string;
+  label: string;
+  total: number;
+}
+
+interface DiaData {
+  dia: string;
+  label: string;
+  total: number;
+}
+
 interface EmpleadosData {
   empleados: EmpleadoItem[];
-  ranking: Array<{ id: string; name: string; total: number; rank: number }>;
   resumen: {
     totalEmpleados: number;
     empleadosActivos: number;
     empleadosSuspendidos: number;
     topEmpleadoId: string | null;
-    topEmpleadoVentas: number;
+    topEmpleadoVentaPorHora: number;
   };
+  ventasPorFranja: FranjaData[];
+  ventasPorDia: DiaData[];
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -97,13 +112,7 @@ function EmpleadosFilterBar({
   );
 }
 
-function RankingEmpleados({ ranking }: { ranking: EmpleadosData["ranking"] }) {
-  if (ranking.length === 0) {
-    return null;
-  }
-
-  const MEDALS = ["🥇", "🥈", "🥉"];
-
+function VentasPorFranjaChart({ ventasPorFranja }: { ventasPorFranja: FranjaData[] }) {
   return (
     <div className="card" style={{ padding: "16px" }}>
       <h3
@@ -116,48 +125,40 @@ function RankingEmpleados({ ranking }: { ranking: EmpleadosData["ranking"] }) {
           marginBottom: 14,
         }}
       >
-        🏆 Top Empleados del Período
+        ☀️ Ventas por Franja Horaria
       </h3>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12 }}>
-        {ranking.map((emp, idx) => (
-          <div
-            key={emp.id}
-            style={{
-              background: idx === 0
-                ? "linear-gradient(135deg, rgba(251,191,36,0.15), rgba(251,191,36,0.05))"
-                : idx === 1
-                ? "linear-gradient(135deg, rgba(148,163,184,0.15), rgba(148,163,184,0.05))"
-                : idx === 2
-                ? "linear-gradient(135deg, rgba(234,179,8,0.15), rgba(234,179,8,0.05))"
-                : "var(--surface)",
-              border: `1px solid ${idx === 0 ? "rgba(251,191,36,0.3)" : "var(--border)"}`,
-              borderRadius: "var(--radius-lg)",
-              padding: "14px",
-              textAlign: "center",
-            }}
-          >
-            <div style={{ fontSize: 24, marginBottom: 6 }}>
-              {idx < 3 ? MEDALS[idx] : `#${idx + 1}`}
-            </div>
-            <div
-              style={{
-                fontWeight: 700,
-                fontSize: 13,
-                color: "var(--text-2)",
-                marginBottom: 4,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-              }}
-            >
-              {emp.name}
-            </div>
-            <div style={{ fontSize: 15, fontWeight: 800, color: "var(--primary)" }}>
-              {formatARS(emp.total)}
-            </div>
-          </div>
-        ))}
+      <div style={{ marginBottom: 12, fontSize: 12, color: "var(--text-3)" }}>
+        Mañana (6-12hs) · Tarde (12-18hs) · Noche (18-23hs)
       </div>
+      <BarChart
+        data={ventasPorFranja.map((f) => ({ label: f.label, total: f.total }))}
+        valueKey="total"
+        labelKey="label"
+      />
+    </div>
+  );
+}
+
+function VentasPorDiaChart({ ventasPorDia }: { ventasPorDia: DiaData[] }) {
+  return (
+    <div className="card" style={{ padding: "16px" }}>
+      <h3
+        style={{
+          fontSize: 11,
+          fontWeight: 700,
+          textTransform: "uppercase",
+          letterSpacing: "0.08em",
+          color: "var(--text-3)",
+          marginBottom: 14,
+        }}
+      >
+        📅 Ventas por Día de la Semana
+      </h3>
+      <BarChart
+        data={ventasPorDia.map((d) => ({ label: d.dia, total: d.total }))}
+        valueKey="total"
+        labelKey="label"
+      />
     </div>
   );
 }
@@ -187,7 +188,7 @@ function EmpleadosTable({
           marginBottom: 14,
         }}
       >
-        Listado de empleados
+        Equipo de trabajo
       </h3>
 
       {empleados.length === 0 ? (
@@ -207,12 +208,12 @@ function EmpleadosTable({
                   <th style={{ padding: "8px", fontWeight: 700, color: "var(--text-3)" }}>Empleado</th>
                   <th style={{ padding: "8px", fontWeight: 700, color: "var(--text-3)" }}>Rol</th>
                   <th style={{ padding: "8px", fontWeight: 700, color: "var(--text-3)" }}>Estado</th>
+                  <th style={{ padding: "8px", fontWeight: 700, color: "var(--text-3)" }}>Horas</th>
+                  <th style={{ padding: "8px", fontWeight: 700, color: "var(--text-3)" }}>Venta/Hora</th>
                   <th style={{ padding: "8px", fontWeight: 700, color: "var(--text-3)" }}>Ventas</th>
                   <th style={{ padding: "8px", fontWeight: 700, color: "var(--text-3)" }}>Ticket Prom.</th>
                   <th style={{ padding: "8px", fontWeight: 700, color: "var(--text-3)" }}>Gastos</th>
-                  <th style={{ padding: "8px", fontWeight: 700, color: "var(--text-3)" }}>Retiros</th>
                   <th style={{ padding: "8px", fontWeight: 700, color: "var(--text-3)" }}>Turnos</th>
-                  <th style={{ padding: "8px", fontWeight: 700, color: "var(--text-3)" }}>Anulaciones</th>
                 </tr>
               </thead>
               <tbody>
@@ -286,6 +287,21 @@ function EmpleadosTable({
                       )}
                     </td>
                     <td style={{ padding: "10px 8px" }}>
+                      <span style={{ color: "var(--text-2)" }}>
+                        {emp.horasTrabajadas}h
+                      </span>
+                    </td>
+                    <td style={{ padding: "10px 8px" }}>
+                      <span
+                        style={{
+                          fontWeight: 700,
+                          color: "var(--primary)",
+                        }}
+                      >
+                        {formatARS(emp.ventaPorHora)}/h
+                      </span>
+                    </td>
+                    <td style={{ padding: "10px 8px" }}>
                       <div style={{ fontWeight: 700 }}>{formatARS(emp.ventasTotal)}</div>
                       <div style={{ fontSize: 11, color: "var(--text-3)" }}>
                         {emp.ventasCantidad} ops
@@ -304,30 +320,8 @@ function EmpleadosTable({
                         {emp.gastosCantidad} ops
                       </div>
                     </td>
-                    <td style={{ padding: "10px 8px" }}>
-                      <div style={{ fontWeight: 600, color: "var(--amber)" }}>
-                        {formatARS(emp.retirosTotal)}
-                      </div>
-                      <div style={{ fontSize: 11, color: "var(--text-3)" }}>
-                        {emp.retirosCantidad} ops
-                      </div>
-                    </td>
                     <td style={{ padding: "10px 8px", textAlign: "center" }}>
                       <span style={{ color: "var(--text-2)" }}>{emp.turnosCantidad}</span>
-                    </td>
-                    <td style={{ padding: "10px 8px", textAlign: "center" }}>
-                      {emp.anulacionesCantidad > 0 ? (
-                        <>
-                          <div style={{ fontWeight: 600, color: "var(--red)" }}>
-                            {emp.anulacionesCantidad}
-                          </div>
-                          <div style={{ fontSize: 11, color: "var(--text-3)" }}>
-                            {formatARS(emp.anulacionesTotal)}
-                          </div>
-                        </>
-                      ) : (
-                        <span style={{ color: "var(--text-3)" }}>—</span>
-                      )}
                     </td>
                   </tr>
                 ))}
@@ -445,17 +439,20 @@ export default function TabEmpleados({
           sub={`${data.resumen.empleadosActivos} activos · ${data.resumen.empleadosSuspendidos} suspendidos`}
         />
         <KpiCard
-          label="Top empleado"
+          label="Mejor venta/hora"
           value={data.resumen.topEmpleadoId
             ? (data.empleados.find((e) => e.id === data.resumen.topEmpleadoId)?.name ?? "—")
             : "—"}
-          sub={data.resumen.topEmpleadoVentas > 0 ? formatARS(data.resumen.topEmpleadoVentas) : "Sin ventas"}
+          sub={data.resumen.topEmpleadoVentaPorHora > 0 ? formatARS(data.resumen.topEmpleadoVentaPorHora) + "/h" : "Sin datos"}
           highlight
         />
       </div>
 
-      {/* Ranking */}
-      <RankingEmpleados ranking={data.ranking} />
+      {/* Gráfico de ventas por franja horaria */}
+      <VentasPorFranjaChart ventasPorFranja={data.ventasPorFranja} />
+
+      {/* Gráfico de ventas por día */}
+      <VentasPorDiaChart ventasPorDia={data.ventasPorDia} />
 
       {/* Tabla de empleados */}
       <EmpleadosTable

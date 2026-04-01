@@ -32,7 +32,12 @@ type SaleSummaryResponse = {
 export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (session.user.role !== "OWNER") {
+  
+  const isOwner = session.user.role === "OWNER";
+  const isManager = session.user.employeeRole === "MANAGER";
+  const isCashier = session.user.role === "EMPLOYEE" && session.user.employeeRole === "CASHIER";
+  
+  if (!isOwner && !isManager && !isCashier) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

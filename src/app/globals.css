@@ -1862,7 +1862,7 @@ body[data-text-scale] .product-btn-price,
 
 /* Cuando está colapsado (sin productos o contraído), solo se ve el header */
 .pos-sidebar.collapsed {
-  transform: translateY(calc(100% - 36px)); /* Solo 36px visibles (header mínimo) */
+  transform: translateY(calc(100% - 28px)); /* Solo 28px visibles (header mínimo, más cerca de la barra) */
 }
 
 @media (min-width: 1024px) {

@@ -21,7 +21,8 @@ export default auth((req: NextAuthRequest) => {
     nextUrl.pathname === "/sw.js" ||
     nextUrl.pathname === "/manifest.json" ||
     nextUrl.pathname.startsWith("/icons/") ||
-    nextUrl.pathname.startsWith("/api/auth");
+    nextUrl.pathname.startsWith("/api/auth") ||
+    nextUrl.pathname === "/reset-password";
 
   if (isPublic) {
     return;

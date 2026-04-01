@@ -10,7 +10,16 @@ $ErrorActionPreference = "Stop"
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $scraperRoot = (Resolve-Path (Join-Path $scriptDir "..")).Path
-$exePath = Join-Path $scraperRoot "target\release\platform-scraper-rs.exe"
+$exePathRelease = Join-Path $scraperRoot "target\release\platform-scraper-rs.exe"
+$exePathDebug = Join-Path $scraperRoot "target\debug\platform-scraper-rs.exe"
+if (Test-Path $exePathRelease) {
+    $exePath = $exePathRelease
+} elseif (Test-Path $exePathDebug) {
+    $exePath = $exePathDebug
+    Write-Warning "Usando target\debug (no hay release). Para mejor rendimiento: cargo build --release"
+} else {
+    throw "No encontre platform-scraper-rs.exe en target\release ni target\debug. Compilá con: cargo build --release"
+}
 $outputDir = Join-Path $scraperRoot "output"
 $latestRunFile = Join-Path $outputDir "latest-run.txt"
 $dashboardPath = Join-Path $outputDir "live-dashboard.html"
@@ -26,10 +35,6 @@ $encoding850 = [System.Text.Encoding]::GetEncoding(850)
 [Console]::InputEncoding = $utf8NoBom
 [Console]::OutputEncoding = $utf8NoBom
 $OutputEncoding = $utf8NoBom
-
-if (-not (Test-Path $exePath)) {
-    throw "No encontre el ejecutable en $exePath. Compilalo primero con cargo build --release."
-}
 
 New-Item -ItemType Directory -Force -Path $outputDir | Out-Null
 Set-Location $scraperRoot
@@ -90,13 +95,13 @@ function Get-AvailableDashboardPort {
 
 function Get-DashboardBaseUrl {
     $port = $null
-    $pid = $null
+    $serverPid = $null
 
     if ((Test-Path $dashboardServerPidPath) -and (Test-Path $dashboardServerPortPath)) {
         try {
-            $pid = [int](Get-Content $dashboardServerPidPath -Raw).Trim()
+            $serverPid = [int](Get-Content $dashboardServerPidPath -Raw).Trim()
             $port = [int](Get-Content $dashboardServerPortPath -Raw).Trim()
-            $process = Get-Process -Id $pid -ErrorAction Stop
+            $process = Get-Process -Id $serverPid -ErrorAction Stop
             if ($process) {
                 return "http://127.0.0.1:$port/"
             }

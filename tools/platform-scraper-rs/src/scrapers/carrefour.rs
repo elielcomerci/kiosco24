@@ -665,8 +665,19 @@ impl CarrefourScraper {
     ) -> Result<Option<ScrapedProductInput>> {
         self.open_page(tab, product_url)?;
         self.accept_cookie_banner(tab)?;
+        
+        // VTEX lazy-loads specs table. Hacer scroll para asegurar que aparezcan los tabs de Especificaciones
+        let _ = tab.evaluate("window.scrollBy(0, 600);", false);
+        thread::sleep(Duration::from_millis(800));
+        let _ = tab.evaluate("window.scrollBy(0, 600);", false);
+        thread::sleep(Duration::from_millis(800));
+
+        let _ = self.wait_for_product_html(tab)?;
         self.expand_product_sections(tab)?;
-        let html = self.wait_for_product_html(tab)?;
+        let ms = rand::rng().random_range(1500..=3000);
+        thread::sleep(Duration::from_millis(ms));
+        
+        let html = tab.get_content().context("No pude leer el HTML final del producto.")?;
         let document = Html::parse_document(&html);
 
         let name = self
@@ -713,14 +724,25 @@ impl CarrefourScraper {
             .extract_first_text(&document, &[".vtex-product-description-0-x-content"])
             .or_else(|| self.extract_meta_description(&document));
 
-        let page_text = document.root_element().text().collect::<Vec<_>>().join(" ");
-        let barcode = normalize_barcode(
-            Regex::new(r"(?:EAN|GTIN|Codigo de barras|Código de barras)[^\d]*(\d{8,14})")
-                .expect("regex valida")
-                .captures(&page_text)
-                .and_then(|captures| captures.get(1))
-                .map(|value| value.as_str()),
-        );
+        let mut barcode = self.extract_spec_value(
+            &document,
+            &["ean", "gtin", "código de barras", "codigo de barras", "barcode"],
+        )
+        .map(|value| Regex::new(r"\D").expect("regex").replace_all(&value, "").to_string())
+        .filter(|value| !value.is_empty());
+
+        if barcode.is_none() {
+            let page_text = document.root_element().text().collect::<Vec<_>>().join(" ");
+            barcode = normalize_barcode(
+                Regex::new(r"(?i)(?:EAN|GTIN|Codigo de barras|Código de barras)[^\d]*(\d{8,14})")
+                    .expect("regex valida")
+                    .captures(&page_text)
+                    .and_then(|captures| captures.get(1))
+                    .map(|value| value.as_str()),
+            );
+        } else {
+            barcode = normalize_barcode(barcode.as_deref());
+        }
 
         let presentation = self
             .extract_presentation_from_specs(&document)
@@ -805,11 +827,12 @@ impl CarrefourScraper {
             r#"
             (() => {{
               const labels = {labels_json}.map((value) => value.toLowerCase());
-              const candidates = Array.from(document.querySelectorAll("button, [role='button'], a"));
+              // Añadimos [role='tab'], [class*='tab'] y [class*='specification'] para atrapar los divs de VTEX
+              const candidates = Array.from(document.querySelectorAll("button, [role='button'], [role='tab'], a, [class*='tab'], [class*='specification']"));
               for (const candidate of candidates) {{
                 const text = (candidate.innerText || candidate.textContent || "").trim().toLowerCase();
                 if (!text) continue;
-                if (labels.some((label) => text.includes(label))) {{
+                if (labels.some((label) => text === label || text.includes(label))) {{
                   candidate.click();
                   return true;
                 }}
@@ -855,7 +878,23 @@ impl CarrefourScraper {
             .map(|value| value.chars().take(500).collect())
     }
 
-    fn extract_presentation_from_specs(&self, document: &Html) -> Option<String> {
+    fn extract_spec_value(&self, document: &Html, keywords: &[&str]) -> Option<String> {
+        let prop_selector = Selector::parse(".vtex-product-specifications-1-x-specificationItemProperty").ok()?;
+        let val_selector = Selector::parse(".vtex-product-specifications-1-x-specificationItemValue").ok()?;
+
+        let props: Vec<_> = document.select(&prop_selector).collect();
+        let vals: Vec<_> = document.select(&val_selector).collect();
+
+        if !props.is_empty() && props.len() == vals.len() {
+            for (prop, val) in props.iter().zip(vals.iter()) {
+                let key = squeeze_spaces(&prop.text().collect::<Vec<_>>().join(" ")).to_lowercase();
+                if keywords.iter().any(|candidate| key.contains(candidate)) {
+                    let value = squeeze_spaces(&val.text().collect::<Vec<_>>().join(" "));
+                    return Some(value);
+                }
+            }
+        }
+
         let rows_selector = Selector::parse("table tr").ok()?;
         let cell_selector = Selector::parse("td, th").ok()?;
 
@@ -865,24 +904,26 @@ impl CarrefourScraper {
                 .map(|cell| squeeze_spaces(&cell.text().collect::<Vec<_>>().join(" ")))
                 .collect();
 
-            if cells.len() < 2 {
-                continue;
-            }
-
-            let key = cells[0].to_lowercase();
-            if ["contenido neto", "presentacion", "presentación", "peso neto", "volumen"]
-                .iter()
-                .any(|candidate| key.contains(candidate))
-            {
-                return Some(cells[1].clone());
+            if cells.len() >= 2 {
+                let key = cells[0].to_lowercase();
+                if keywords.iter().any(|candidate| key.contains(candidate)) {
+                    return Some(cells[1].clone());
+                }
             }
         }
 
         None
     }
 
+    fn extract_presentation_from_specs(&self, document: &Html) -> Option<String> {
+        self.extract_spec_value(
+            document,
+            &["contenido neto", "presentacion", "presentación", "peso neto", "volumen"],
+        )
+    }
+
     fn extract_presentation_from_name(&self, name: &str) -> Option<String> {
-        Regex::new(r"(\d+[\.,]?\d*\s*(g|gr|kg|ml|l|lt|cc))\b")
+        Regex::new(r"(?i)(\d+[\.,]?\d*\s*(g|gr|kg|ml|l|lt|cc))\b")
             .expect("regex valida")
             .captures(name)
             .and_then(|captures| captures.get(1))
@@ -1112,6 +1153,8 @@ impl CarrefourScraper {
             "/institucional",
             "/club",
             "/stores",
+            "vtex-",
+            "-vtex",
         ];
 
         !reserved_fragments.iter().any(|fragment| path.contains(fragment))

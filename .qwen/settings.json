@@ -11,7 +11,8 @@
       "Bash(select-object *)",
       "Bash(rmdir *)",
       "Bash(git add *)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(move *)"
     ]
   },
   "$version": 3

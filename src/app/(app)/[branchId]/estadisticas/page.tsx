@@ -23,6 +23,7 @@ import {
   isCurrentPeriod,
 } from "@/lib/stats-helpers";
 import type { PeriodoData } from "@/lib/stats-types";
+import { downloadVentasReportPDF } from "@/lib/report-download";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -52,6 +53,7 @@ export default function EstadisticasPage() {
   const [currentDate, setCurrentDate] = useState<string>(today);
   const [data, setData] = useState<PeriodoData | null>(null);
   const [loading, setLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const load = useCallback(
     async (p: Periodo, iso: string) => {
@@ -90,6 +92,28 @@ export default function EstadisticasPage() {
     },
     [periodo]
   );
+
+  const handleExportPDF = useCallback(async () => {
+    setExporting(true);
+    try {
+      const { from, to } = getPeriodRange(periodo, currentDate);
+      const res = await fetch(`/api/reports/ventas?from=${from}&to=${to}`, {
+        headers: { "x-branch-id": branchId },
+      });
+      
+      if (!res.ok) {
+        throw new Error("Error al obtener datos para el reporte");
+      }
+      
+      const reportData = await res.json();
+      await downloadVentasReportPDF(reportData);
+    } catch (error) {
+      console.error("[Export PDF] Error:", error);
+      alert("Error al exportar el reporte. Reintentá en unos segundos.");
+    } finally {
+      setExporting(false);
+    }
+  }, [periodo, currentDate, branchId]);
 
   const { from, to } = getPeriodRange(periodo, currentDate);
   const currentIsCurrent = isCurrentPeriod(periodo, currentDate, today);
@@ -283,6 +307,30 @@ export default function EstadisticasPage() {
                 Sig ›
               </button>
             </div>
+
+            <button
+              onClick={handleExportPDF}
+              disabled={exporting || loading || !data}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "8px",
+                padding: "10px 16px",
+                borderRadius: "8px",
+                border: "1px solid var(--primary)",
+                background: exporting ? "var(--text-3)" : "var(--primary)",
+                color: exporting ? "#fff" : "#000",
+                fontWeight: 700,
+                fontSize: 13,
+                cursor: exporting || loading || !data ? "not-allowed" : "pointer",
+                opacity: exporting || loading || !data ? 0.6 : 1,
+                transition: "all 0.2s",
+              }}
+            >
+              <span>📄</span>
+              <span>{exporting ? "Generando PDF..." : "Exportar PDF"}</span>
+            </button>
           </div>
         )}
 

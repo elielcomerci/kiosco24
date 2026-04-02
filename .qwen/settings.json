@@ -13,7 +13,10 @@
       "Bash(git add *)",
       "Bash(git commit *)",
       "Bash(move *)",
-      "Bash(git push)"
+      "Bash(git push)",
+      "Bash(dir *)",
+      "Bash(git diff *)",
+      "Bash(branchid]/caja/page.tsx)"
     ]
   },
   "$version": 3

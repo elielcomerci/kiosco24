@@ -42,6 +42,7 @@ export type AccessBlockReason =
   | "SUBSCRIPTION_PENDING"
   | "SUBSCRIPTION_PAUSED"
   | "SUBSCRIPTION_CANCELLED"
+  | "TRIAL_ACTIVE"
   | "NO_BRANCH"
   | "UNAUTHORIZED";
 
@@ -54,6 +55,7 @@ export type KioscoAccessContext = {
   firstBranchId: string | null;
   subscriptionStatus: SubscriptionStatus | null;
   managementUrl: string | null;
+  trialEndsAt: Date | null;
   activeGrant: ActiveAccessGrant | null;
   manualOverride: ManualAccessOverride | null;
 };
@@ -78,6 +80,7 @@ const kioscoAccessSelect = {
     select: {
       status: true,
       managementUrl: true,
+      trialEndsAt: true,
     },
   },
   accessGrants: {
@@ -117,6 +120,7 @@ function buildContext(input: {
   activeGrant?: ActiveAccessGrant | null;
   manualOverride?: ManualAccessOverride | null;
   isPlatformAdmin?: boolean;
+  trialEndsAt?: Date | null;
 }): KioscoAccessContext {
   if (input.isPlatformAdmin) {
     return {
@@ -128,6 +132,7 @@ function buildContext(input: {
       firstBranchId: input.firstBranchId ?? null,
       subscriptionStatus: input.subscriptionStatus ?? null,
       managementUrl: input.managementUrl ?? null,
+      trialEndsAt: input.trialEndsAt ?? null,
       activeGrant: input.activeGrant ?? null,
       manualOverride: input.manualOverride ?? null,
     };
@@ -143,6 +148,7 @@ function buildContext(input: {
       firstBranchId: input.firstBranchId ?? null,
       subscriptionStatus: input.subscriptionStatus ?? null,
       managementUrl: input.managementUrl ?? null,
+      trialEndsAt: input.trialEndsAt ?? null,
       activeGrant: input.activeGrant ?? null,
       manualOverride: input.manualOverride,
     };
@@ -158,6 +164,7 @@ function buildContext(input: {
       firstBranchId: input.firstBranchId ?? null,
       subscriptionStatus: input.subscriptionStatus ?? null,
       managementUrl: input.managementUrl ?? null,
+      trialEndsAt: input.trialEndsAt ?? null,
       activeGrant: input.activeGrant ?? null,
       manualOverride: input.manualOverride,
     };
@@ -173,21 +180,26 @@ function buildContext(input: {
       firstBranchId: input.firstBranchId ?? null,
       subscriptionStatus: input.subscriptionStatus ?? null,
       managementUrl: input.managementUrl ?? null,
+      trialEndsAt: input.trialEndsAt ?? null,
       activeGrant: input.activeGrant,
       manualOverride: input.manualOverride ?? null,
     };
   }
 
-  if (input.subscriptionStatus === "ACTIVE") {
+  // Verificar si está en trial activo
+  const isInTrial = input.trialEndsAt && new Date(input.trialEndsAt) > new Date();
+
+  if (input.subscriptionStatus === "ACTIVE" || isInTrial) {
     return {
       allowed: true,
-      reason: "SUBSCRIPTION_ACTIVE",
+      reason: isInTrial ? "TRIAL_ACTIVE" : "SUBSCRIPTION_ACTIVE",
       isPlatformAdmin: false,
       kioscoId: input.kioscoId ?? null,
       kioscoName: input.kioscoName ?? null,
       firstBranchId: input.firstBranchId ?? null,
-      subscriptionStatus: "ACTIVE",
+      subscriptionStatus: input.subscriptionStatus ?? null,
       managementUrl: input.managementUrl ?? null,
+      trialEndsAt: input.trialEndsAt ?? null,
       activeGrant: null,
       manualOverride: input.manualOverride ?? null,
     };
@@ -202,6 +214,7 @@ function buildContext(input: {
     firstBranchId: input.firstBranchId ?? null,
     subscriptionStatus: input.subscriptionStatus ?? null,
     managementUrl: input.managementUrl ?? null,
+    trialEndsAt: input.trialEndsAt ?? null,
     activeGrant: null,
     manualOverride: input.manualOverride ?? null,
   };
@@ -259,6 +272,7 @@ export async function getKioscoAccessContextForSession(user: SessionUserLike | n
       firstBranchId: null,
       subscriptionStatus: null,
       managementUrl: null,
+      trialEndsAt: null,
       activeGrant: null,
       manualOverride: null,
     };
@@ -310,6 +324,7 @@ export async function getKioscoAccessContextForSession(user: SessionUserLike | n
           firstBranchId: null,
           subscriptionStatus: null,
           managementUrl: null,
+          trialEndsAt: null,
           activeGrant: null,
           manualOverride: null,
         };
@@ -321,6 +336,7 @@ export async function getKioscoAccessContextForSession(user: SessionUserLike | n
         firstBranchId: branch.id,
         subscriptionStatus: branch.kiosco.subscription?.status ?? null,
         managementUrl: branch.kiosco.subscription?.managementUrl ?? null,
+        trialEndsAt: branch.kiosco.subscription?.trialEndsAt ?? null,
         activeGrant: activeGrant(branch.kiosco.accessGrants),
         manualOverride: manualOverride(branch.kiosco),
       });
@@ -353,6 +369,7 @@ export async function getKioscoAccessContextForSession(user: SessionUserLike | n
         firstBranchId: null,
         subscriptionStatus: null,
         managementUrl: null,
+        trialEndsAt: null,
         activeGrant: null,
         manualOverride: null,
       };
@@ -366,6 +383,7 @@ export async function getKioscoAccessContextForSession(user: SessionUserLike | n
       firstBranchId: activeBranchId,
       subscriptionStatus: kiosco.subscription?.status ?? null,
       managementUrl: kiosco.subscription?.managementUrl ?? null,
+      trialEndsAt: kiosco.subscription?.trialEndsAt ?? null,
       activeGrant: activeGrant(kiosco.accessGrants),
       manualOverride: manualOverride(kiosco),
     });
@@ -386,6 +404,7 @@ export async function getKioscoAccessContextForSession(user: SessionUserLike | n
     firstBranchId: owner?.kiosco?.branches[0]?.id ?? null,
     subscriptionStatus: owner?.kiosco?.subscription?.status ?? null,
     managementUrl: owner?.kiosco?.subscription?.managementUrl ?? null,
+    trialEndsAt: owner?.kiosco?.subscription?.trialEndsAt ?? null,
     activeGrant: owner?.kiosco ? activeGrant(owner.kiosco.accessGrants) : null,
     manualOverride: owner?.kiosco ? manualOverride(owner.kiosco) : null,
   });
@@ -413,6 +432,7 @@ export async function getKioscoAccessContextByAccessKey(accessKey: string): Prom
       firstBranchId: null,
       subscriptionStatus: null,
       managementUrl: null,
+      trialEndsAt: null,
       activeGrant: null,
       manualOverride: null,
     };
@@ -424,6 +444,7 @@ export async function getKioscoAccessContextByAccessKey(accessKey: string): Prom
     firstBranchId: branch.id,
     subscriptionStatus: branch.kiosco.subscription?.status ?? null,
     managementUrl: branch.kiosco.subscription?.managementUrl ?? null,
+    trialEndsAt: branch.kiosco.subscription?.trialEndsAt ?? null,
     activeGrant: branch.kiosco.accessGrants.find((grant) => grant.startsAt <= now && grant.endsAt >= now) ?? null,
     manualOverride:
       branch.kiosco.accessOverride === "INHERIT"

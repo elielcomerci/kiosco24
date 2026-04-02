@@ -12,7 +12,8 @@
       "Bash(rmdir *)",
       "Bash(git add *)",
       "Bash(git commit *)",
-      "Bash(move *)"
+      "Bash(move *)",
+      "Bash(git push)"
     ]
   },
   "$version": 3

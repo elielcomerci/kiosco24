@@ -1976,7 +1976,7 @@ function ProductModal({
                         <label style={{ fontSize: "10px", color: "var(--text-3)", textTransform: "uppercase", fontWeight: 600 }}>STOCK{soldByWeight ? " (kg)" : ""}</label>
                         <input 
                           className="input" 
-                          type="number" 
+                          type={soldByWeight ? "text" : "number"}
                           inputMode={soldByWeight ? "decimal" : "numeric"}
                           step={soldByWeight ? "0.001" : "1"}
                           placeholder={soldByWeight ? "0.000" : "Stock..."}
@@ -1990,7 +1990,7 @@ function ProductModal({
                       <label style={{ fontSize: "10px", color: "var(--text-3)", textTransform: "uppercase", fontWeight: 600 }}>MINIMO{soldByWeight ? " (kg)" : ""}</label>
                       <input
                         className="input"
-                        type="number"
+                        type={soldByWeight ? "text" : "number"}
                         inputMode={soldByWeight ? "decimal" : "numeric"}
                         step={soldByWeight ? "0.001" : "1"}
                         placeholder={soldByWeight ? "0.000" : "0"}
@@ -2082,7 +2082,7 @@ function ProductModal({
                 <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase" }}>Stock{soldByWeight ? " (kg)" : ""}</label>
                 <input
                   className="input"
-                  type="number"
+                  type={soldByWeight ? "text" : "number"}
                   inputMode={soldByWeight ? "decimal" : "numeric"}
                   step={soldByWeight ? "0.001" : "1"}
                   placeholder="—"
@@ -2132,7 +2132,7 @@ function ProductModal({
                 <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
                   <input
                     className="input"
-                    type="number"
+                    type={soldByWeight ? "text" : "number"}
                     inputMode={soldByWeight ? "decimal" : "numeric"}
                     step={soldByWeight ? "0.001" : "1"}
                     min={0}

@@ -69,6 +69,32 @@ export async function GET(req: NextRequest) {
     });
   }
 
+  // Si la suscripción existe pero no tiene trial, asignarle uno
+  if (!subscription.trialStartsAt || !subscription.trialEndsAt) {
+    const now = new Date();
+    const trialEndsAt = new Date(now.getTime() + 24 * 60 * 60 * 1000); // 24 horas
+
+    const updatedSubscription = await prisma.subscription.update({
+      where: { id: subscription.id },
+      data: {
+        trialStartsAt: now,
+        trialEndsAt: trialEndsAt,
+      },
+      select: {
+        id: true,
+        status: true,
+        trialStartsAt: true,
+        trialEndsAt: true,
+        managementUrl: true,
+      },
+    });
+
+    return NextResponse.json({
+      subscription: updatedSubscription,
+      hasActiveSubscription: false,
+    });
+  }
+
   const hasActiveSubscription = subscription.status === "ACTIVE";
 
   return NextResponse.json({

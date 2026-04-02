@@ -329,10 +329,14 @@ export default function CajaPage() {
   
   // Trial handlers
   const handleTrialExplore = useCallback(() => {
+    // Guardar que el usuario ya vio el modal
+    localStorage.setItem("kiosco24_trial_welcome_seen", "true");
     setShowTrialWelcome(false);
   }, []);
   
   const handleTrialActivate = useCallback(() => {
+    // Guardar que el usuario ya vio el modal
+    localStorage.setItem("kiosco24_trial_welcome_seen", "true");
     setShowTrialWelcome(false);
     router.push("/configuracion");
   }, [router]);
@@ -457,16 +461,24 @@ export default function CajaPage() {
         
         console.log("[Trial] Calculado:", trial);
         
+        // Verificar si ya vio el modal de bienvenida (guardado en localStorage)
+        const hasSeenWelcome = localStorage.getItem("kiosco24_trial_welcome_seen") === "true";
+        
         setTrialInfo({
           isInTrial: trial.isInTrial,
           remainingHours: trial.remainingHours,
           isExpired: trial.isExpired,
         });
         
-        // Mostrar modal de bienvenida si está en trial y no expiró
-        if (trial.isInTrial && !trial.isExpired && !hasActiveSubscription) {
-          console.log("[Trial] Mostrando modal de bienvenida");
+        // Mostrar modal de bienvenida SOLO si:
+        // 1. Está en trial y no expiró
+        // 2. No tiene suscripción activa
+        // 3. NO ha visto el modal antes
+        if (trial.isInTrial && !trial.isExpired && !hasActiveSubscription && !hasSeenWelcome) {
+          console.log("[Trial] Mostrando modal de bienvenida (primera vez)");
           setShowTrialWelcome(true);
+        } else if (hasSeenWelcome) {
+          console.log("[Trial] Usuario ya vio el modal - no mostrar");
         }
       } catch (error) {
         console.error("[Trial] Error checking status:", error);

@@ -4199,13 +4199,14 @@ function StockLoadingModal({
         onClose={() => setScannerOpen(false)}
       />
     )}
-    {inlineCreateDraft && (
-      <ModalPortal>
-        <ProductModal
-          product={null}
-          draft={inlineCreateDraft}
-          branchId={branchId}
-          pricingMode={pricingMode}
+      {inlineCreateDraft && (
+        <ModalPortal>
+          <ProductModal
+            key={`inline-${inlineCreateDraft.barcode || inlineCreateDraft.name || "draft"}`}
+            product={null}
+            draft={inlineCreateDraft}
+            branchId={branchId}
+            pricingMode={pricingMode}
           categories={categories}
           onClose={() => setInlineCreateDraft(null)}
           onSave={(payload) => {
@@ -5984,6 +5985,7 @@ export default function ProductosPage() {
       {modal && (
         <ModalPortal>
           <ProductModal
+            key={modal === "new" ? "new-product" : `edit-${modal.id}`}
             product={modal === "new" ? null : modal}
             branchId={branchId}
             pricingMode={pricingMode}

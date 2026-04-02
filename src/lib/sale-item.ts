@@ -1,4 +1,8 @@
 const GRAMS_PER_KILO = 1000;
+const KILO_FORMATTER = new Intl.NumberFormat("es-AR", {
+  minimumFractionDigits: 3,
+  maximumFractionDigits: 3,
+});
 
 export type SaleItemLike = {
   quantity: number;
@@ -16,10 +20,7 @@ type WeightLabelLike = {
 };
 
 function formatQuantityKg(quantityGrams: number) {
-  return new Intl.NumberFormat("es-AR", {
-    minimumFractionDigits: 3,
-    maximumFractionDigits: 3,
-  }).format(quantityGrams / GRAMS_PER_KILO);
+  return KILO_FORMATTER.format(quantityGrams / GRAMS_PER_KILO);
 }
 
 export function isWeightedSaleItem(item: SaleQuantityLike) {

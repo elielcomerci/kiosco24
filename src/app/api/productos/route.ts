@@ -64,6 +64,147 @@ type ProductListInventory = Prisma.InventoryRecordGetPayload<{
   };
 }>;
 
+type ProductGridInventory = {
+  stock: number;
+  price: number;
+  cost: number | null;
+  minStock: number;
+  showInGrid: boolean;
+  product: {
+    id: string;
+    name: string;
+    emoji: string | null;
+    barcode: string | null;
+    internalCode: string | null;
+    image: string | null;
+    brand: string | null;
+    description: string | null;
+    presentation: string | null;
+    supplierName: string | null;
+    notes: string | null;
+    categoryId: string | null;
+    category: {
+      showInGrid: boolean;
+    } | null;
+    variants: Array<{
+      id: string;
+      name: string;
+      barcode: string | null;
+      internalCode: string | null;
+      inventory: Array<{
+        stock: number;
+        price: number | null;
+        cost: number | null;
+        minStock: number;
+      }>;
+    }>;
+  };
+};
+
+function isPositiveFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0;
+}
+
+function buildGridProduct(record: ProductGridInventory, allowNegativeStock: boolean) {
+  const baseAvailableStock = record.stock;
+  const baseFlags = getStockFlags(baseAvailableStock, record.minStock);
+  const basePrice = isPositiveFiniteNumber(record.price) ? record.price : 0;
+  const baseCost = isPositiveFiniteNumber(record.cost) ? record.cost : null;
+
+  const variants = record.product.variants.map((variant) => {
+    const variantInventory = variant.inventory[0];
+    const variantStock = variantInventory?.stock ?? 0;
+    const variantPrice =
+      isPositiveFiniteNumber(variantInventory?.price) ? variantInventory.price : basePrice;
+    const variantCost =
+      isPositiveFiniteNumber(variantInventory?.cost) ? variantInventory.cost : baseCost;
+    const variantAvailableStock = variantStock;
+    const variantFlags = getStockFlags(variantAvailableStock, variantInventory?.minStock ?? 0);
+    const variantReadyForSale =
+      record.showInGrid &&
+      (record.product.category?.showInGrid ?? true) &&
+      isPositiveFiniteNumber(variantPrice) &&
+      isPositiveFiniteNumber(variantCost) &&
+      (allowNegativeStock || variantAvailableStock > 0);
+
+    return {
+      id: variant.id,
+      name: variant.name,
+      barcode: variant.barcode,
+      internalCode: variant.internalCode,
+      price: variantPrice,
+      cost: variantCost,
+      stock: variantStock,
+      availableStock: variantAvailableStock,
+      minStock: variantInventory?.minStock ?? 0,
+      readyForSale: variantReadyForSale,
+      ...variantFlags,
+    };
+  });
+
+  const variantPrices = variants
+    .map((variant) => (isPositiveFiniteNumber(variant.price) ? variant.price : null))
+    .filter((price): price is number => price !== null);
+  const variantCosts = variants
+    .map((variant) => (isPositiveFiniteNumber(variant.cost) ? variant.cost : null))
+    .filter((cost): cost is number => cost !== null);
+  const hasVariantStock = variants.some((variant) => (variant.availableStock ?? 0) > 0);
+  const hasBaseStock = (baseAvailableStock ?? 0) > 0;
+  const hasStock = record.product.variants.length > 0 ? hasVariantStock : hasBaseStock;
+  const price = variantPrices.length > 0 ? Math.min(...variantPrices) : basePrice;
+  const cost = variantCosts.length > 0 ? Math.min(...variantCosts) : baseCost;
+  const readyForSale =
+    record.product.variants.length > 0
+      ? variants.some((variant) => variant.readyForSale)
+      : record.showInGrid &&
+        (record.product.category?.showInGrid ?? true) &&
+        isPositiveFiniteNumber(price) &&
+        isPositiveFiniteNumber(cost) &&
+        (allowNegativeStock || hasStock);
+  const aggregateFlags =
+    record.product.variants.length > 0
+      ? {
+          isNegativeStock: variants.some((variant) => variant.isNegativeStock),
+          isOutOfStock:
+            variants.length > 0 &&
+            variants.every((variant) => !variant.isNegativeStock && variant.isOutOfStock),
+          isBelowMinStock:
+            variants.some((variant) => variant.isBelowMinStock) ||
+            variants.some((variant) => !variant.isNegativeStock && variant.isOutOfStock),
+        }
+      : baseFlags;
+
+  return {
+    id: record.product.id,
+    name: record.product.name,
+    emoji: record.product.emoji,
+    barcode: record.product.barcode,
+    internalCode: record.product.internalCode,
+    image: record.product.image,
+    brand: record.product.brand,
+    description: record.product.description,
+    presentation: record.product.presentation,
+    supplierName: record.product.supplierName,
+    notes: record.product.notes,
+    categoryId: record.product.categoryId,
+    price,
+    cost,
+    stock: record.stock,
+    availableStock: baseAvailableStock,
+    minStock: record.minStock,
+    showInGrid: record.showInGrid,
+    readyForSale,
+    allowNegativeStock,
+    categoryShowInGrid: record.product.category?.showInGrid ?? true,
+    expiredQuantity: 0,
+    expiringSoonQuantity: 0,
+    nextExpiryOn: null,
+    hasTrackedLots: false,
+    ...aggregateFlags,
+    variants,
+  };
+}
+
 function normalizeVariantPayload(variants: unknown): VariantPayload[] {
   if (!Array.isArray(variants)) {
     return [];
@@ -176,9 +317,17 @@ export async function GET(req: Request) {
     return NextResponse.json([], { status: 401 });
   }
 
+  const { searchParams } = new URL(req.url);
+  const view = searchParams.get("view") ?? "full";
+  const detailProductId = searchParams.get("productId");
+
   const { branchId } = await getBranchContext(req, session.user.id);
   if (!branchId) {
     return NextResponse.json([], { status: 200 });
+  }
+
+  if (view === "detail" && !detailProductId) {
+    return NextResponse.json({ error: "Missing productId" }, { status: 400 });
   }
 
   const branchSettings = branchId
@@ -193,8 +342,73 @@ export async function GET(req: Request) {
   const expiryAlertDays = branchSettings?.kiosco?.expiryAlertDays ?? 30;
   const allowNegativeStock = branchSettings?.allowNegativeStock ?? false;
 
+  if (view === "grid") {
+    const inventory = (await prisma.inventoryRecord.findMany({
+      where: { branchId },
+      select: {
+        stock: true,
+        price: true,
+        cost: true,
+        minStock: true,
+        showInGrid: true,
+        product: {
+          select: {
+            id: true,
+            name: true,
+            emoji: true,
+            barcode: true,
+            internalCode: true,
+            image: true,
+            brand: true,
+            description: true,
+            presentation: true,
+            supplierName: true,
+            notes: true,
+            categoryId: true,
+            category: {
+              select: {
+                showInGrid: true,
+              },
+            },
+            variants: {
+              select: {
+                id: true,
+                name: true,
+                barcode: true,
+                internalCode: true,
+                inventory: {
+                  where: { branchId },
+                  select: {
+                    stock: true,
+                    price: true,
+                    cost: true,
+                    minStock: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      orderBy: { product: { name: "asc" } },
+      take: 100,
+    })) as ProductGridInventory[];
+
+    const products = inventory.map((record) => buildGridProduct(record, allowNegativeStock));
+    return NextResponse.json(products);
+  }
+
+  const inventoryWhere =
+    view === "detail" && detailProductId
+      ? { branchId, productId: detailProductId }
+      : { branchId };
+  const lotsWhere =
+    view === "detail" && detailProductId
+      ? { branchId, productId: detailProductId, quantity: { gt: 0 } }
+      : { branchId, quantity: { gt: 0 } };
+
   const inventory = await prisma.inventoryRecord.findMany({
-    where: { branchId },
+    where: inventoryWhere,
     include: {
       product: {
         include: {
@@ -226,10 +440,7 @@ export async function GET(req: Request) {
   });
 
   const lots = await prisma.stockLot.findMany({
-    where: {
-      branchId,
-      quantity: { gt: 0 },
-    },
+    where: lotsWhere,
     select: {
       productId: true,
       variantId: true,
@@ -403,7 +614,7 @@ export async function GET(req: Request) {
     };
   });
 
-  return NextResponse.json(products);
+  return NextResponse.json(view === "detail" ? products[0] ?? null : products);
 }
 
 export async function POST(req: Request) {

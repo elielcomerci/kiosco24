@@ -60,6 +60,17 @@ function formatDate(date: Date): string {
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
+function useDebouncedValue<T>(value: T, delayMs: number): T {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => setDebouncedValue(value), delayMs);
+    return () => window.clearTimeout(timeout);
+  }, [value, delayMs]);
+
+  return debouncedValue;
+}
+
 function VentasFilterBar({
   metodo,
   setMetodo,
@@ -490,6 +501,7 @@ export default function TabVentas({
   const [metodo, setMetodo] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
+  const debouncedSearch = useDebouncedValue(search, 300);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -499,7 +511,7 @@ export default function TabVentas({
         isoDate: currentDate,
       });
       if (metodo) params.set("metodo", metodo);
-      if (search) params.set("search", search);
+      if (debouncedSearch) params.set("search", debouncedSearch);
 
       const res = await fetch(`/api/stats/ventas?${params}`, {
         headers: { "x-branch-id": branchId },
@@ -510,7 +522,7 @@ export default function TabVentas({
     } finally {
       setLoading(false);
     }
-  }, [branchId, periodo, currentDate, metodo, search]);
+  }, [branchId, periodo, currentDate, metodo, debouncedSearch]);
 
   useEffect(() => {
     loadData();

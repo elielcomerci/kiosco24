@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Activity, useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { todayART } from "@/lib/utils";
 import { useRegisterShortcuts } from "@/components/ui/BranchWorkspace";
@@ -73,7 +73,7 @@ export default function EstadisticasPage() {
   );
 
   useEffect(() => {
-    if (PERIOD_TABS.includes(activeTab)) {
+    if (activeTab === "resumen") {
       load(periodo, currentDate);
     }
   }, [periodo, currentDate, activeTab, load]);
@@ -336,7 +336,7 @@ export default function EstadisticasPage() {
 
         {/* Tab content */}
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          {activeTab === "resumen" && (
+          <Activity mode={activeTab === "resumen" ? "visible" : "hidden"}>
             <TabResumen
               branchId={branchId}
               periodo={periodo}
@@ -347,20 +347,22 @@ export default function EstadisticasPage() {
               from={from}
               to={to}
             />
-          )}
-          {activeTab === "ventas" && (
+          </Activity>
+          <Activity mode={activeTab === "ventas" ? "visible" : "hidden"}>
             <TabVentas periodo={periodo} currentDate={currentDate} />
-          )}
-          {activeTab === "turnos" && (
+          </Activity>
+          <Activity mode={activeTab === "turnos" ? "visible" : "hidden"}>
             <TabTurnos periodo={periodo} currentDate={currentDate} />
-          )}
-          {activeTab === "empleados" && (
+          </Activity>
+          <Activity mode={activeTab === "empleados" ? "visible" : "hidden"}>
             <TabEmpleados periodo={periodo} currentDate={currentDate} />
-          )}
-          {activeTab === "stock" && <TabStock periodo={periodo} currentDate={currentDate} />}
-          {activeTab === "fiados" && (
+          </Activity>
+          <Activity mode={activeTab === "stock" ? "visible" : "hidden"}>
+            <TabStock periodo={periodo} currentDate={currentDate} />
+          </Activity>
+          <Activity mode={activeTab === "fiados" ? "visible" : "hidden"}>
             <TabFiados periodo={periodo} currentDate={currentDate} />
-          )}
+          </Activity>
         </div>
       </div>
 

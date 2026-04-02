@@ -2546,7 +2546,7 @@ function StockLoadingModal({
   };
 
   const fetchLatestProducts = async () => {
-    const response = await fetch("/api/productos", {
+    const response = await fetch("/api/productos?view=grid", {
       headers: { "x-branch-id": branchId },
     });
 

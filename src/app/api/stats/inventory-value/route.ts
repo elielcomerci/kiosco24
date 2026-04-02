@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { auth } from "@/lib/auth";
 import { getBranchContext } from "@/lib/branch";
-import { getInventoryValuation, type InventoryValuationScope } from "@/lib/inventory-valuation";
+import { getCachedInventoryValuation, type InventoryValuationScope } from "@/lib/inventory-valuation";
 
 export async function GET(req: Request) {
   const session = await auth();
@@ -30,7 +30,7 @@ export async function GET(req: Request) {
   }
 
   const scope: InventoryValuationScope = requestedScope;
-  const inventoryValue = await getInventoryValuation({
+  const inventoryValue = await getCachedInventoryValuation({
     scope,
     branchId,
     kioscoId,

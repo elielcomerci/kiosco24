@@ -160,6 +160,7 @@ export default function InventoryValuationPanel({ branchId }: { branchId: string
   const [inventoryError, setInventoryError] = useState<string | null>(null);
   const [expandedInventoryKeys, setExpandedInventoryKeys] = useState<string[]>([]);
   const [showAllProducts, setShowAllProducts] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
 
   const loadInventoryValue = useCallback(async (scope: InventoryScope) => {
     setInventoryLoading(true);
@@ -182,9 +183,25 @@ export default function InventoryValuationPanel({ branchId }: { branchId: string
     }
   }, [branchId]);
 
-  useEffect(() => {
-    loadInventoryValue(inventoryScope);
+  const handleOpenPanel = useCallback(() => {
+    setIsOpen(true);
+    if (!inventoryValue) {
+      void loadInventoryValue(inventoryScope);
+    }
+  }, [inventoryScope, inventoryValue, loadInventoryValue]);
+
+  const handleRefresh = useCallback(() => {
+    setIsOpen(true);
+    void loadInventoryValue(inventoryScope);
   }, [inventoryScope, loadInventoryValue]);
+
+  const handleScopeChange = useCallback((nextScope: InventoryScope) => {
+    setInventoryScope(nextScope);
+    if (!isOpen) {
+      return;
+    }
+    void loadInventoryValue(nextScope);
+  }, [isOpen, loadInventoryValue]);
 
   useEffect(() => {
     setExpandedInventoryKeys([]);
@@ -205,6 +222,54 @@ export default function InventoryValuationPanel({ branchId }: { branchId: string
     },
     [inventoryScope, inventoryValue, showAllProducts],
   );
+
+  if (!isOpen) {
+    return (
+      <div
+        className="card"
+        style={{
+          padding: "16px",
+          display: "grid",
+          gap: "12px",
+          background: "linear-gradient(180deg, rgba(56,189,248,0.08), rgba(15,23,42,0.9))",
+          border: "1px solid rgba(56,189,248,0.18)",
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "flex-start", flexWrap: "wrap" }}>
+          <div style={{ flex: "1 1 260px" }}>
+            <h3
+              style={{
+                fontSize: 11,
+                fontWeight: 700,
+                textTransform: "uppercase",
+                letterSpacing: "0.08em",
+                color: "var(--text-3)",
+                marginBottom: 8,
+              }}
+            >
+              Inventario valorizado
+            </h3>
+            <div style={{ fontSize: 13, color: "var(--text-2)", lineHeight: 1.5 }}>
+              El cálculo completo de capas, reservas y valuación está desactivado por defecto para no gastar CPU en cada apertura de la pestaña.
+            </div>
+            <div style={{ marginTop: 8, fontSize: 12, color: "var(--text-3)" }}>
+              Se calcula solo cuando lo pedís.
+            </div>
+          </div>
+
+          <button
+            type="button"
+            className="btn btn-primary"
+            style={{ whiteSpace: "nowrap" }}
+            onClick={handleOpenPanel}
+            disabled={inventoryLoading}
+          >
+            {inventoryValue ? "Ver valuación" : inventoryLoading ? "Cargando..." : "Cargar valuación"}
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -243,7 +308,7 @@ export default function InventoryValuationPanel({ branchId }: { branchId: string
                 : ""}
             </div>
           ) : null}
-        </div>
+          </div>
 
         <div style={{ display: "grid", gap: 8, justifyItems: "end" }}>
           {inventoryValue?.meta?.canViewKioscoScope ? (
@@ -264,7 +329,7 @@ export default function InventoryValuationPanel({ branchId }: { branchId: string
                 <button
                   key={option.value}
                   type="button"
-                  onClick={() => setInventoryScope(option.value)}
+                  onClick={() => handleScopeChange(option.value)}
                   style={{
                     border: "none",
                     cursor: "pointer",
@@ -283,6 +348,25 @@ export default function InventoryValuationPanel({ branchId }: { branchId: string
           ) : null}
 
           {inventoryLoading ? <div style={{ color: "var(--text-3)", fontSize: 13 }}>Actualizando...</div> : null}
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              style={{ fontSize: 12, padding: "6px 10px", borderRadius: 10 }}
+              onClick={() => setIsOpen(false)}
+            >
+              Ocultar
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              style={{ fontSize: 12, padding: "6px 10px", borderRadius: 10 }}
+              onClick={handleRefresh}
+              disabled={inventoryLoading}
+            >
+              Actualizar
+            </button>
+          </div>
         </div>
       </div>
 

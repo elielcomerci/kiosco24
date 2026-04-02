@@ -48,6 +48,7 @@ interface Product {
   id: string;
   name: string;
   price: number;
+  cost?: number | null;
   barcode?: string | null;
   emoji?: string | null;
   image?: string | null;
@@ -251,6 +252,106 @@ function createClientSaleId() {
   }
 
   return `sale-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function isPositiveFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0;
+}
+
+function computeStockFlags(availableStock: number, minStock?: number | null) {
+  return {
+    isNegativeStock: availableStock < 0,
+    isOutOfStock: availableStock === 0,
+    isBelowMinStock:
+      typeof minStock === "number" &&
+      minStock > 0 &&
+      availableStock > 0 &&
+      availableStock <= minStock,
+  };
+}
+
+function isSellableVariant(variant: Variant, allowNegativeStock: boolean) {
+  const availableStock = variant.availableStock ?? variant.stock ?? 0;
+  return (
+    isPositiveFiniteNumber(variant.price) &&
+    isPositiveFiniteNumber(variant.cost) &&
+    (allowNegativeStock || availableStock > 0)
+  );
+}
+
+function isSellableProduct(product: Product, allowNegativeStock: boolean) {
+  if (product.variants && product.variants.length > 0) {
+    return product.variants.some((variant) => isSellableVariant(variant, allowNegativeStock));
+  }
+
+  const availableStock = product.availableStock ?? product.stock ?? 0;
+  return (
+    isPositiveFiniteNumber(product.price) &&
+    isPositiveFiniteNumber(product.cost) &&
+    (allowNegativeStock || availableStock > 0)
+  );
+}
+
+function updateProductStockForTicketItem(product: Product, item: TicketItem, direction: 1 | -1): Product {
+  if (item.productId !== product.id) {
+    return product;
+  }
+
+  const quantityDelta = item.quantity * direction;
+
+  if (item.variantId && product.variants && product.variants.length > 0) {
+    const nextVariants = product.variants.map((variant) => {
+      if (variant.id !== item.variantId) {
+        return variant;
+      }
+
+      const nextStock = (variant.availableStock ?? variant.stock ?? 0) + quantityDelta;
+      return {
+        ...variant,
+        stock: nextStock,
+        availableStock: nextStock,
+        ...computeStockFlags(nextStock, variant.minStock),
+      };
+    });
+
+    return {
+      ...product,
+      variants: nextVariants,
+      isNegativeStock: nextVariants.some((variant) => variant.isNegativeStock),
+      isOutOfStock:
+        nextVariants.length > 0 &&
+        nextVariants.every((variant) => !variant.isNegativeStock && variant.isOutOfStock),
+      isBelowMinStock:
+        nextVariants.some((variant) => variant.isBelowMinStock) ||
+        nextVariants.some((variant) => !variant.isNegativeStock && variant.isOutOfStock),
+    };
+  }
+
+  const nextStock = (product.availableStock ?? product.stock ?? 0) + quantityDelta;
+  return {
+    ...product,
+    stock: nextStock,
+    availableStock: nextStock,
+    ...computeStockFlags(nextStock, product.minStock),
+  };
+}
+
+function applyTicketStockChange(products: Product[], items: TicketItem[], direction: 1 | -1) {
+  if (items.length === 0) {
+    return products;
+  }
+
+  return products.map((product) => {
+    let nextProduct = product;
+
+    for (const item of items) {
+      if (item.productId === product.id) {
+        nextProduct = updateProductStockForTicketItem(nextProduct, item, direction);
+      }
+    }
+
+    return nextProduct;
+  });
 }
 
 export default function CajaPage() {
@@ -755,18 +856,20 @@ export default function CajaPage() {
 
   const fetchProducts = useCallback(async () => {
     try {
-      const res = await fetch(`/api/productos`, {
-        headers: { "x-branch-id": branchId }
-      });
-      if (!res.ok) {
-        return;
-      }
-      const data = await res.json();
-      setProducts(data);
+      const [res, catRes] = await Promise.all([
+        fetch(`/api/productos?view=grid`, {
+          headers: { "x-branch-id": branchId },
+        }),
+        fetch(`/api/categorias`, {
+          headers: { "x-branch-id": branchId },
+        }),
+      ]);
 
-      const catRes = await fetch(`/api/categorias`, {
-        headers: { "x-branch-id": branchId }
-      });
+      if (res.ok) {
+        const data = await res.json();
+        setProducts(Array.isArray(data) ? data : []);
+      }
+
       if (catRes.ok) {
         const catData = await catRes.json();
         setCategories(Array.isArray(catData) ? catData : []);
@@ -813,9 +916,7 @@ export default function CajaPage() {
 
   const loadCajaData = useCallback(async () => {
     try {
-      await fetchProducts();
-      await fetchStats();
-      await fetchActiveShift();
+      await Promise.all([fetchProducts(), fetchStats(), fetchActiveShift()]);
     } catch {}
   }, [fetchActiveShift, fetchProducts, fetchStats]);
 
@@ -850,31 +951,6 @@ export default function CajaPage() {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [fetchActiveShift, status]);
-
-  useEffect(() => {
-    if (status !== "authenticated") return;
-
-    const refreshProducts = () => {
-      if (document.visibilityState === "hidden") {
-        return;
-      }
-      void fetchProducts();
-    };
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        refreshProducts();
-      }
-    };
-
-    window.addEventListener("focus", refreshProducts);
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-
-    return () => {
-      window.removeEventListener("focus", refreshProducts);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
-  }, [fetchProducts, status]);
 
   const resetReminderComposer = useCallback(() => {
     setReminderMessage("");
@@ -1289,6 +1365,7 @@ export default function CajaPage() {
             alert("La venta quedo registrada, pero la factura solo se puede emitir con conexion.");
           }
         }
+        setProducts((current) => applyTicketStockChange(current, ticket, -1));
         setTicket([]);
       setReceivedAmount("");
       setShowCashNumpad(false);
@@ -1336,8 +1413,16 @@ export default function CajaPage() {
     setConfirmedSale(null);
     setConfirmedInvoice(null);
     if (confirmedSale.id && isOnline) {
-      fetch(`/api/ventas/${confirmedSale.id}/anular`, { method: "POST" });
-      fetchStats();
+      fetch(`/api/ventas/${confirmedSale.id}/anular`, { method: "POST" })
+        .then((response) => {
+          if (!response.ok) {
+            return;
+          }
+
+          setProducts((current) => applyTicketStockChange(current, confirmedSale.items, 1));
+          fetchStats();
+        })
+        .catch(() => {});
     }
   };
 
@@ -1349,17 +1434,17 @@ export default function CajaPage() {
           return false;
         }
 
-        if (product.readyForSale !== false) {
+        if (isSellableProduct(product, allowNegativeStock)) {
           return true;
         }
 
-        if (product.isOutOfStock || product.isNegativeStock) {
+        if (product.isOutOfStock || product.isNegativeStock || product.isBelowMinStock) {
           return true;
         }
 
-        return product.variants?.some((variant) => variant.isOutOfStock || variant.isNegativeStock) ?? false;
+        return product.variants?.some((variant) => variant.isOutOfStock || variant.isNegativeStock || variant.isBelowMinStock) ?? false;
       }),
-    [products],
+    [products, allowNegativeStock],
   );
 
   const filteredProducts = useMemo(() => {
@@ -1831,7 +1916,7 @@ export default function CajaPage() {
             const inTicket = ticket.find((t) => t.productId === product.id && !t.variantId);
             const isSelected = i === selectedIndex && cajaSearch.length > 0;
             const stockBadge = getProductStockBadge(product);
-            const isUnavailable = product.readyForSale === false;
+            const isUnavailable = !isSellableProduct(product, allowNegativeStock);
              
             return (
               <button

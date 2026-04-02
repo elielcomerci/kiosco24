@@ -1957,35 +1957,82 @@ function ProductModal({
                       </>
                     )}
                     {!isInlineCreateOnly && (
-                      <div>
-                        <label style={{ fontSize: "10px", color: "var(--text-3)", textTransform: "uppercase", fontWeight: 600 }}>STOCK{soldByWeight ? " (kg)" : ""}</label>
-                        <input
-                          className="input"
-                          type={soldByWeight ? "text" : "number"}
-                          inputMode={soldByWeight ? "decimal" : "numeric"}
-                          step={soldByWeight ? "0.001" : "1"}
-                          placeholder={soldByWeight ? "0.000" : "Stock..."}
-                          value={(() => {
-                            const key = v.id || `index-${i}`;
-                            const adjustment = parseStockQuantityInput(variantStockAdjustments[key] || "", soldByWeight);
-                            if (adjustment !== null && adjustment > 0) {
-                              return formatStockQuantity(currentVariantStock + adjustment, soldByWeight);
-                            }
-                            return formatStockQuantity(v.stock, soldByWeight);
-                          })()}
-                          onChange={(e) => {
-                            const key = v.id || `index-${i}`;
-                            const val = e.target.value;
-                            setVariantStockAdjustments((prev) => ({ ...prev, [key]: val.startsWith("-") ? "" : val }));
-                          }}
-                          disabled={Boolean(v.id && v.hasTrackedLots)}
-                          style={{ textAlign: "right", borderColor: currentVariantStock < 0 ? "var(--red)" : undefined }}
-                        />
-                        {currentVariantStock < 0 && (
-                          <div style={{ fontSize: "10px", color: "var(--red)", marginTop: "3px", fontWeight: 600 }}>
-                            Actual: {formatStockQuantity(currentVariantStock, soldByWeight)}. Ingresá lo que entró.
+                      <div style={{ marginBottom: "8px" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                          <span style={{ fontSize: "9px", color: "var(--text-3)", fontWeight: 700, textTransform: "uppercase" }}>
+                            Stock Actual
+                          </span>
+                          <span style={{ 
+                            fontSize: "10px", 
+                            fontWeight: 700, 
+                            padding: "2px 6px", 
+                            borderRadius: "4px",
+                            background: currentVariantStock < 0 ? "rgba(239,68,68,0.14)" : "var(--surface-2)",
+                            color: currentVariantStock < 0 ? "var(--red)" : "var(--text-2)",
+                            border: currentVariantStock < 0 ? "1px solid rgba(239,68,68,0.24)" : "1px solid var(--border)",
+                          }}>
+                            {formatStockQuantity(currentVariantStock, soldByWeight)}
+                          </span>
+                        </div>
+                        
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px" }}>
+                          <div>
+                            <label style={{ fontSize: "8px", color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase", marginBottom: "4px", display: "block" }}>
+                              {soldByWeight ? "Peso que entra" : "Unidades que entran"}
+                            </label>
+                            <input
+                              className="input"
+                              type={soldByWeight ? "text" : "number"}
+                              inputMode={soldByWeight ? "decimal" : "numeric"}
+                              step={soldByWeight ? "0.001" : "1"}
+                              min={0}
+                              placeholder="0"
+                              value={variantStockAdjustments[v.id || `index-${i}`] || ""}
+                              onChange={(e) => {
+                                const key = v.id || `index-${i}`;
+                                setVariantStockAdjustments((prev) => ({ ...prev, [key]: e.target.value.startsWith("-") ? "" : e.target.value }));
+                              }}
+                              disabled={Boolean(v.id && v.hasTrackedLots)}
+                              style={{ textAlign: "right", fontSize: "14px", fontWeight: 600 }}
+                            />
                           </div>
-                        )}
+                          
+                          <div>
+                            <label style={{ fontSize: "8px", color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase", marginBottom: "4px", display: "block" }}>
+                              {soldByWeight ? "Peso final" : "Stock final"}
+                            </label>
+                            <div style={{ 
+                              padding: "8px", 
+                              borderRadius: "6px", 
+                              background: "var(--surface-2)",
+                              border: "1px solid var(--border)",
+                              textAlign: "right",
+                              minHeight: "36px",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "flex-end",
+                            }}>
+                              <span style={{ 
+                                fontSize: "18px", 
+                                fontWeight: 800,
+                                color: (() => {
+                                  const key = v.id || `index-${i}`;
+                                  const adj = parseStockQuantityInput(variantStockAdjustments[key] || "", soldByWeight);
+                                  return adj !== null && adj > 0 ? "var(--green)" : "var(--text-3)";
+                                })(),
+                              }}>
+                                {(() => {
+                                  const key = v.id || `index-${i}`;
+                                  const adj = parseStockQuantityInput(variantStockAdjustments[key] || "", soldByWeight);
+                                  if (adj !== null && adj > 0) {
+                                    return formatStockQuantity(currentVariantStock + adj, soldByWeight);
+                                  }
+                                  return formatStockQuantity(v.stock, soldByWeight) || "—";
+                                })()}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     )}
                     <div>
@@ -2033,48 +2080,104 @@ function ProductModal({
         ) : (
           <>
             {/* Stock Base */}
-            <div style={{ display: "grid", gridTemplateColumns: isInlineCreateOnly ? "1fr" : "1fr 1fr", gap: "10px", marginBottom: "12px" }}>
-              {!isInlineCreateOnly && (
-              <div>
-                <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase" }}>
-                  Stock{soldByWeight ? " (kg)" : ""}
-                </label>
-                <input
-                  className="input"
-                  type={soldByWeight ? "text" : "number"}
-                  inputMode={soldByWeight ? "decimal" : "numeric"}
-                  step={soldByWeight ? "0.001" : "1"}
-                  placeholder="—"
-                  value={projectedSimpleStock !== null ? formatStockQuantity(projectedSimpleStock, soldByWeight) : stock}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    // Si el usuario escribe, asumimos que quiere ajustar el stock
-                    setStockAdjustment(val.startsWith("-") ? "" : val);
-                  }}
-                  style={{ textAlign: "right", borderColor: originalSimpleStock < 0 ? "var(--red)" : undefined }}
-                  disabled={!isNew && productHasTrackedLots}
-                />
-                {originalSimpleStock < 0 && (
-                  <div style={{ fontSize: "11px", color: "var(--red)", marginTop: "4px", fontWeight: 600 }}>
-                    Actual: {formatStockQuantity(originalSimpleStock, soldByWeight)}. Ingresá lo que entró y usamos el total.
+            {!isInlineCreateOnly && (
+            <div style={{ marginBottom: "12px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                <span style={{ fontSize: "11px", color: "var(--text-3)", fontWeight: 700, textTransform: "uppercase" }}>
+                  Stock Actual
+                </span>
+                <span style={{ 
+                  fontSize: "12px", 
+                  fontWeight: 700, 
+                  padding: "4px 8px", 
+                  borderRadius: "6px",
+                  background: originalSimpleStock < 0 ? "rgba(239,68,68,0.14)" : "var(--surface-2)",
+                  color: originalSimpleStock < 0 ? "var(--red)" : "var(--text-2)",
+                  border: originalSimpleStock < 0 ? "1px solid rgba(239,68,68,0.24)" : "1px solid var(--border)",
+                }}>
+                  {formatStockQuantity(originalSimpleStock, soldByWeight)}
+                </span>
+              </div>
+              
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                <div>
+                  <label style={{ fontSize: "10px", color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase", marginBottom: "6px", display: "block" }}>
+                    {soldByWeight ? "Peso que entra" : "Unidades que entran"}
+                  </label>
+                  <input
+                    className="input"
+                    type={soldByWeight ? "text" : "number"}
+                    inputMode={soldByWeight ? "decimal" : "numeric"}
+                    step={soldByWeight ? "0.001" : "1"}
+                    min={0}
+                    placeholder="0"
+                    value={stockAdjustment}
+                    onChange={(e) => setStockAdjustment(e.target.value.startsWith("-") ? "" : e.target.value)}
+                    style={{ textAlign: "right", fontSize: "16px", fontWeight: 600 }}
+                    disabled={!isNew && productHasTrackedLots}
+                  />
+                  <div style={{ fontSize: "10px", color: "var(--text-3)", marginTop: "4px" }}>
+                    {soldByWeight ? "Ingresá en kg (ej: 1.5)" : "Se suma arriba del stock actual"}
                   </div>
-                )}
+                </div>
+                
+                <div>
+                  <label style={{ fontSize: "10px", color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase", marginBottom: "6px", display: "block" }}>
+                    {soldByWeight ? "Peso final" : "Stock después del ingreso"}
+                  </label>
+                  <div style={{ 
+                    padding: "12px", 
+                    borderRadius: "8px", 
+                    background: "var(--surface-2)",
+                    border: "1px solid var(--border)",
+                    textAlign: "right",
+                    minHeight: "44px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "flex-end",
+                  }}>
+                    <span style={{ 
+                      fontSize: "24px", 
+                      fontWeight: 800,
+                      color: projectedSimpleStock !== null ? "var(--green)" : "var(--text-3)",
+                    }}>
+                      {projectedSimpleStock !== null 
+                        ? formatStockQuantity(projectedSimpleStock, soldByWeight) 
+                        : (formatStockQuantity(originalSimpleStock, soldByWeight) || "—")}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: "10px", color: "var(--text-3)", marginTop: "4px" }}>
+                    {projectedSimpleStock !== null ? "Se suma arriba del stock actual" : "Sin cambios"}
+                  </div>
+                </div>
               </div>
+              
+              {originalSimpleStock < 0 && (
+                <div style={{ fontSize: "11px", color: "var(--text-2)", marginTop: "8px" }}>
+                  El producto está en negativo. Ingresá lo que llegó y el sistema calculará el stock final.
+                </div>
               )}
-              <div>
-                <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase" }}>Stock min.{soldByWeight ? " (kg)" : ""}</label>
-                <input
-                  className="input"
-                  type="number"
-                  inputMode={soldByWeight ? "decimal" : "numeric"}
-                  step={soldByWeight ? "0.001" : "1"}
-                  placeholder="—"
-                  value={minStock}
-                  onChange={(e) => setMinStock(e.target.value)}
-                  style={{ textAlign: "right" }}
-                />
-              </div>
             </div>
+            )}
+            
+            {/* Stock Min. */}
+            {!isInlineCreateOnly && (
+            <div style={{ marginBottom: "12px" }}>
+              <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase" }}>
+                Stock min.{soldByWeight ? " (kg)" : ""}
+              </label>
+              <input
+                className="input"
+                type="number"
+                inputMode={soldByWeight ? "decimal" : "numeric"}
+                step={soldByWeight ? "0.001" : "1"}
+                placeholder="—"
+                value={minStock}
+                onChange={(e) => setMinStock(e.target.value)}
+                style={{ textAlign: "right" }}
+              />
+            </div>
+            )}
             {!isNew && productHasTrackedLots && (
               <div style={{ marginTop: "-4px", marginBottom: "12px", fontSize: "12px", color: "var(--amber)" }}>
                 Este producto tiene vencimientos cargados. Ajustá el stock desde Corregir inventario para no romper el desglose por lotes.

@@ -55,8 +55,14 @@ export async function GET(req: NextRequest) {
     (g) => g.startsAt <= now && g.endsAt >= now
   );
 
+  console.log("[Subscription API] Kiosco:", branch.kioscoId);
+  console.log("[Subscription API] Subscription status:", subscription?.status);
+  console.log("[Subscription API] Access grants count:", branch.kiosco.accessGrants.length);
+  console.log("[Subscription API] Active grant:", activeGrant ? "FOUND" : "NONE");
+
   // Si hay activeGrant, no asignar trial - el usuario está en grace period
   if (activeGrant) {
+    console.log("[Subscription API] Returning with activeGrant");
     return NextResponse.json({
       subscription: subscription ? {
         id: subscription.id,

@@ -391,7 +391,6 @@ export async function GET(req: Request) {
         },
       },
       orderBy: { product: { name: "asc" } },
-      take: 100,
     })) as ProductGridInventory[];
 
     const products = inventory.map((record) => buildGridProduct(record, allowNegativeStock));

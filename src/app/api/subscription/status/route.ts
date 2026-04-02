@@ -5,6 +5,9 @@ import { NextRequest, NextResponse } from "next/server";
 
 // GET /api/subscription/status
 // Devuelve el estado de la suscripción y trial del kiosco
+// Reglas de trial:
+// - Solo suscripciones PENDING sin activeGrant reciben trial
+// - ACTIVE o ACTIVE_GRANT no reciben trial
 export async function GET(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) {
@@ -31,6 +34,12 @@ export async function GET(req: NextRequest) {
               managementUrl: true,
             },
           },
+          accessGrants: {
+            where: { revokedAt: null },
+            orderBy: { endsAt: "desc" },
+            take: 1,
+            select: { startsAt: true, endsAt: true },
+          },
         },
       },
     },
@@ -41,18 +50,37 @@ export async function GET(req: NextRequest) {
   }
 
   const subscription = branch.kiosco.subscription;
+  const now = new Date();
+  const activeGrant = branch.kiosco.accessGrants.find(
+    (g) => g.startsAt <= now && g.endsAt >= now
+  );
+
+  // Si hay activeGrant, no asignar trial - el usuario está en grace period
+  if (activeGrant) {
+    return NextResponse.json({
+      subscription: subscription ? {
+        id: subscription.id,
+        status: subscription.status,
+        trialStartsAt: subscription.trialStartsAt,
+        trialEndsAt: subscription.trialEndsAt,
+        managementUrl: subscription.managementUrl,
+      } : null,
+      hasActiveSubscription: false,
+      hasActiveGrant: true,
+    });
+  }
 
   // Si no hay suscripción, crear una en estado PENDING con trial
   if (!subscription) {
-    const now = new Date();
+    const trialStartsAt = now;
     const trialEndsAt = new Date(now.getTime() + 24 * 60 * 60 * 1000); // 24 horas
 
     const newSubscription = await prisma.subscription.create({
       data: {
         kioscoId: branch.kioscoId,
         status: "PENDING",
-        trialStartsAt: now,
-        trialEndsAt: trialEndsAt,
+        trialStartsAt,
+        trialEndsAt,
       },
       select: {
         id: true,
@@ -66,19 +94,35 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       subscription: newSubscription,
       hasActiveSubscription: false,
+      hasActiveGrant: false,
     });
   }
 
-  // Si la suscripción existe pero no tiene trial, asignarle uno
+  // Si la suscripción es ACTIVE, no tocar el trial
+  if (subscription.status === "ACTIVE") {
+    return NextResponse.json({
+      subscription: {
+        id: subscription.id,
+        status: subscription.status,
+        trialStartsAt: subscription.trialStartsAt,
+        trialEndsAt: subscription.trialEndsAt,
+        managementUrl: subscription.managementUrl,
+      },
+      hasActiveSubscription: true,
+      hasActiveGrant: false,
+    });
+  }
+
+  // Si la suscripción existe pero no tiene trial, y es PENDING, asignarle uno
   if (!subscription.trialStartsAt || !subscription.trialEndsAt) {
-    const now = new Date();
+    const trialStartsAt = now;
     const trialEndsAt = new Date(now.getTime() + 24 * 60 * 60 * 1000); // 24 horas
 
     const updatedSubscription = await prisma.subscription.update({
       where: { id: subscription.id },
       data: {
-        trialStartsAt: now,
-        trialEndsAt: trialEndsAt,
+        trialStartsAt,
+        trialEndsAt,
       },
       select: {
         id: true,
@@ -92,11 +136,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       subscription: updatedSubscription,
       hasActiveSubscription: false,
+      hasActiveGrant: false,
     });
   }
 
-  const hasActiveSubscription = subscription.status === "ACTIVE";
-
+  // Si llegamos acá, la suscripción tiene trial y no es ACTIVE
+  // (las ACTIVE ya retornaron antes)
   return NextResponse.json({
     subscription: {
       id: subscription.id,
@@ -105,6 +150,7 @@ export async function GET(req: NextRequest) {
       trialEndsAt: subscription.trialEndsAt,
       managementUrl: subscription.managementUrl,
     },
-    hasActiveSubscription,
+    hasActiveSubscription: false,
+    hasActiveGrant: false,
   });
 }

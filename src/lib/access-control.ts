@@ -187,12 +187,15 @@ function buildContext(input: {
   }
 
   // Verificar si está en trial activo
+  // Solo permitir acceso por trial si NO hay activeGrant y NO hay subscription ACTIVE
   const isInTrial = input.trialEndsAt && new Date(input.trialEndsAt) > new Date();
-
-  if (input.subscriptionStatus === "ACTIVE" || isInTrial) {
+  const hasActiveGrant = !!input.activeGrant;
+  const hasActiveSubscription = input.subscriptionStatus === "ACTIVE";
+  
+  if (hasActiveSubscription || hasActiveGrant || isInTrial) {
     return {
       allowed: true,
-      reason: isInTrial ? "TRIAL_ACTIVE" : "SUBSCRIPTION_ACTIVE",
+      reason: hasActiveSubscription ? "SUBSCRIPTION_ACTIVE" : hasActiveGrant ? "ACTIVE_GRACE" : "TRIAL_ACTIVE",
       isPlatformAdmin: false,
       kioscoId: input.kioscoId ?? null,
       kioscoName: input.kioscoName ?? null,
@@ -200,7 +203,7 @@ function buildContext(input: {
       subscriptionStatus: input.subscriptionStatus ?? null,
       managementUrl: input.managementUrl ?? null,
       trialEndsAt: input.trialEndsAt ?? null,
-      activeGrant: null,
+      activeGrant: input.activeGrant ?? null,
       manualOverride: input.manualOverride ?? null,
     };
   }

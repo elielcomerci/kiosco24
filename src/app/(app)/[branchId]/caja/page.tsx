@@ -440,8 +440,15 @@ export default function CajaPage() {
         console.log("[Trial] Data:", data);
         
         const { trialStartsAt, trialEndsAt, status } = data.subscription || {};
+        const { hasActiveSubscription, hasActiveGrant } = data;
         
-        const hasActiveSubscription = status === "ACTIVE";
+        // Si tiene suscripción activa o activeGrant, no mostrar trial
+        if (hasActiveSubscription || hasActiveGrant) {
+          console.log("[Trial] Usuario tiene suscripción activa o grace period - no mostrar trial");
+          setTrialInfo(null);
+          return;
+        }
+        
         const trial = calculateTrialInfo(
           trialStartsAt ? new Date(trialStartsAt) : null,
           trialEndsAt ? new Date(trialEndsAt) : null,

@@ -424,13 +424,21 @@ export default function CajaPage() {
   useEffect(() => {
     async function checkTrial() {
       try {
+        console.log("[Trial] Verificando estado de suscripción...");
         const res = await fetch("/api/subscription/status", {
           headers: { "x-branch-id": branchId },
         });
         
-        if (!res.ok) return;
+        console.log("[Trial] Respuesta:", res.status);
+        
+        if (!res.ok) {
+          console.error("[Trial] Error en respuesta:", res.status);
+          return;
+        }
         
         const data = await res.json();
+        console.log("[Trial] Data:", data);
+        
         const { trialStartsAt, trialEndsAt, status } = data.subscription || {};
         
         const hasActiveSubscription = status === "ACTIVE";
@@ -440,6 +448,8 @@ export default function CajaPage() {
           hasActiveSubscription
         );
         
+        console.log("[Trial] Calculado:", trial);
+        
         setTrialInfo({
           isInTrial: trial.isInTrial,
           remainingHours: trial.remainingHours,
@@ -448,6 +458,7 @@ export default function CajaPage() {
         
         // Mostrar modal de bienvenida si está en trial y no expiró
         if (trial.isInTrial && !trial.isExpired && !hasActiveSubscription) {
+          console.log("[Trial] Mostrando modal de bienvenida");
           setShowTrialWelcome(true);
         }
       } catch (error) {
@@ -588,14 +599,21 @@ export default function CajaPage() {
 
   // ─── Startup Logic: Onboarding & Shift ──────────────────────────────────
   const promptSubscriptionActivation = useCallback((message: string) => {
+    // Si está en trial, permitir continuar
+    if (trialInfo?.isInTrial && !trialInfo?.isExpired) {
+      console.log("[Trial] Permitiendo operar durante trial");
+      return;
+    }
+    
+    // Si el trial expiró o no hay trial, mostrar mensaje de activación
     const shouldOpen = window.confirm(
-      `${message}\n\nActiva la suscripcion para empezar a vender, cobrar y registrar movimientos.\n\n¿Quieres ir a Suscripcion ahora?`,
+      `${message}\n\nActiva la suscripcion para empezar a vender, cobrar y registrar movimientos.\n\n¿Quieres ir a Configuración ahora?`,
     );
 
     if (shouldOpen) {
-      router.push("/suscripcion");
+      router.push("/configuracion");
     }
-  }, [router]);
+  }, [router, trialInfo]);
 
   const explainShiftLock = useCallback(() => {
     alert(`La caja está a nombre de ${shiftResponsibleName}. Transferí o cerrá el turno para operar con este usuario.`);

@@ -12,7 +12,13 @@ import BackButton from "@/components/ui/BackButton";
 interface CreditCustomer {
   id: string;
   name: string;
+  phone: string | null;
   balance: number;
+}
+
+function phoneHref(phone: string): string {
+  const cleaned = phone.replace(/[^\d+]/g, "");
+  return `tel:${cleaned}`;
 }
 
 export default function FiadosPage() {
@@ -62,10 +68,13 @@ export default function FiadosPage() {
   }, [fetchCustomers]);
 
   const totalFiado = customers.reduce((sum, customer) => sum + customer.balance, 0);
+  const searchLower = search.toLowerCase();
 
   const filtered = customers.filter(
     (customer) =>
-      customer.name.toLowerCase().includes(search.toLowerCase()) &&
+      (customer.name.toLowerCase().includes(searchLower) ||
+        customer.phone?.toLowerCase().includes(searchLower) ||
+        false) &&
       customer.balance > 0
   );
 
@@ -181,8 +190,22 @@ export default function FiadosPage() {
                 className="card"
                 style={{ padding: "16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}
               >
-                <div>
+              <div>
                   <div style={{ fontWeight: 600, fontSize: "16px" }}>{customer.name}</div>
+                  {customer.phone ? (
+                    <a
+                      href={phoneHref(customer.phone)}
+                      style={{
+                        color: "var(--text-3)",
+                        fontSize: "13px",
+                        textDecoration: "none",
+                      }}
+                    >
+                      {customer.phone}
+                    </a>
+                  ) : (
+                    <div style={{ color: "var(--text-3)", fontSize: "13px" }}>Sin teléfono</div>
+                  )}
                   <div style={{ color: "var(--amber)", fontWeight: 700, marginTop: "4px" }}>
                     Debe {formatARS(customer.balance)}
                   </div>
@@ -218,6 +241,17 @@ export default function FiadosPage() {
                     {formatARS(cobrarCustomer.balance)}
                   </strong>
                 </p>
+                {cobrarCustomer.phone && (
+                  <p style={{ color: "var(--text-3)", fontSize: "13px", marginTop: "-6px" }}>
+                    Teléfono:{" "}
+                    <a
+                      href={phoneHref(cobrarCustomer.phone)}
+                      style={{ color: "var(--text-2)", textDecoration: "none" }}
+                    >
+                      {cobrarCustomer.phone}
+                    </a>
+                  </p>
+                )}
               </div>
 
               <div
@@ -304,6 +338,7 @@ export default function FiadosPage() {
               <thead>
                 <tr>
                   <th>Cliente</th>
+                  <th>Teléfono</th>
                   <th>Saldo</th>
                 </tr>
               </thead>
@@ -311,6 +346,18 @@ export default function FiadosPage() {
                 {filtered.map((customer) => (
                   <tr key={customer.id}>
                     <td>{customer.name}</td>
+                    <td>
+                      {customer.phone ? (
+                        <a
+                          href={phoneHref(customer.phone)}
+                          style={{ color: "var(--text-2)", textDecoration: "none" }}
+                        >
+                          {customer.phone}
+                        </a>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
                     <td>{formatARS(customer.balance)}</td>
                   </tr>
                 ))}

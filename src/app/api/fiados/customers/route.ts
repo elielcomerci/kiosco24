@@ -24,7 +24,7 @@ export async function GET(req: Request) {
   const customers = await prisma.creditCustomer.findMany({
     where: { branchId },
     orderBy: { updatedAt: "desc" },
-    select: { id: true, name: true, balance: true, updatedAt: true },
+    select: { id: true, name: true, phone: true, balance: true, updatedAt: true },
   });
 
   return NextResponse.json(customers);
@@ -38,10 +38,17 @@ export async function POST(req: Request) {
   const branchId = await getBranchId(req, session.user.id);
   if (!branchId) return NextResponse.json({ error: "No branch" }, { status: 404 });
 
-  const { name, phone } = await req.json();
+  const body = await req.json().catch(() => null);
+  const name = typeof body?.name === "string" ? body.name.trim() : "";
+  const phone = typeof body?.phone === "string" ? body.phone.trim() : "";
+
+  if (!name) {
+    return NextResponse.json({ error: "El nombre del cliente es obligatorio." }, { status: 400 });
+  }
 
   const customer = await prisma.creditCustomer.create({
-    data: { branchId, name, phone: phone ?? null },
+    data: { branchId, name, phone: phone || null },
+    select: { id: true, name: true, phone: true, balance: true, updatedAt: true },
   });
 
   return NextResponse.json(customer);

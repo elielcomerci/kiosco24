@@ -43,6 +43,7 @@ interface FiadosData {
   topDeudores: Array<{
     id: string;
     name: string;
+    phone: string | null;
     balance: number;
     diasDeuda: number | null;
   }>;
@@ -185,6 +186,14 @@ function TopDeudores({ topDeudores }: { topDeudores: FiadosData["topDeudores"] }
               <div style={{ fontWeight: 700, fontSize: 14, color: "var(--text-2)" }}>
                 {idx + 1}. {deudor.name}
               </div>
+              {deudor.phone && (
+                <a
+                  href={`tel:${deudor.phone.replace(/[^\d+]/g, "")}`}
+                  style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2, textDecoration: "none" }}
+                >
+                  {deudor.phone}
+                </a>
+              )}
               <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2 }}>
                 {formatDays(deudor.diasDeuda)}
               </div>

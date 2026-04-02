@@ -7,6 +7,7 @@ import ModalPortal from "@/components/ui/ModalPortal";
 interface Customer {
   id: string;
   name: string;
+  phone: string | null;
   balance: number;
 }
 
@@ -22,7 +23,9 @@ export default function CreditCustomerModal({ onClose, onSelect }: CreditCustome
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [newName, setNewName] = useState("");
+  const [newPhone, setNewPhone] = useState("");
   const [addingNew, setAddingNew] = useState(false);
+  const searchLower = search.toLowerCase();
 
   useEffect(() => {
     fetch("/api/fiados/customers", {
@@ -34,7 +37,9 @@ export default function CreditCustomerModal({ onClose, onSelect }: CreditCustome
   }, [branchId]);
 
   const filtered = customers.filter((c) =>
-    c.name.toLowerCase().includes(search.toLowerCase())
+    c.name.toLowerCase().includes(searchLower) ||
+    c.phone?.toLowerCase().includes(searchLower) ||
+    false
   );
 
   const handleAddNew = async () => {
@@ -45,7 +50,10 @@ export default function CreditCustomerModal({ onClose, onSelect }: CreditCustome
         "Content-Type": "application/json",
         "x-branch-id": branchId
       },
-      body: JSON.stringify({ name: newName.trim() }),
+      body: JSON.stringify({
+        name: newName.trim(),
+        phone: newPhone.trim() || null,
+      }),
     });
     const customer = await res.json();
     onSelect(customer);
@@ -76,14 +84,21 @@ export default function CreditCustomerModal({ onClose, onSelect }: CreditCustome
             <button
               key={c.id}
               className="btn btn-ghost"
-              style={{ justifyContent: "space-between" }}
+              style={{ justifyContent: "space-between", alignItems: "center" }}
               onClick={() => onSelect(c)}
             >
-              <span>{c.name}</span>
-              {c.balance > 0 && (
+              <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
+                <span>{c.name}</span>
+                {c.phone && (
+                  <span style={{ color: "var(--text-3)", fontSize: "12px" }}>{c.phone}</span>
+                )}
+              </span>
+              {c.balance > 0 ? (
                 <span style={{ color: "var(--amber)", fontSize: "13px" }}>
                   Debe ${c.balance.toLocaleString("es-AR")}
                 </span>
+              ) : (
+                <span style={{ color: "var(--text-3)", fontSize: "13px" }}>Sin deuda</span>
               )}
             </button>
           ))}
@@ -100,15 +115,29 @@ export default function CreditCustomerModal({ onClose, onSelect }: CreditCustome
           </button>
         ) : (
           <div style={{ display: "flex", gap: "8px" }}>
-            <input
-              className="input"
-              placeholder="Nombre del cliente"
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              autoFocus
-              onKeyDown={(e) => e.key === "Enter" && handleAddNew()}
-            />
-            <button className="btn btn-green" onClick={handleAddNew} disabled={!newName.trim()}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px", flex: 1 }}>
+              <input
+                className="input"
+                placeholder="Nombre del cliente"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                autoFocus
+                onKeyDown={(e) => e.key === "Enter" && handleAddNew()}
+              />
+              <input
+                className="input"
+                placeholder="Teléfono opcional"
+                value={newPhone}
+                onChange={(e) => setNewPhone(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleAddNew()}
+              />
+            </div>
+            <button
+              className="btn btn-green"
+              onClick={handleAddNew}
+              disabled={!newName.trim()}
+              style={{ alignSelf: "stretch" }}
+            >
               ✓
             </button>
           </div>

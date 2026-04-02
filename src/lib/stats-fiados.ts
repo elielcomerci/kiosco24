@@ -40,6 +40,7 @@ type FiadosStats = {
   topDeudores: Array<{
     id: string;
     name: string;
+    phone: string | null;
     balance: number;
     diasDeuda: number | null;
   }>;
@@ -50,7 +51,10 @@ const getFiadosStatsCached = unstable_cache(
     const where: any = { branchId };
 
     if (search) {
-      where.name = { contains: search, mode: "insensitive" };
+      where.OR = [
+        { name: { contains: search, mode: "insensitive" } },
+        { phone: { contains: search, mode: "insensitive" } },
+      ];
     }
 
     if (estado === "deudores") {
@@ -228,6 +232,7 @@ const getFiadosStatsCached = unstable_cache(
       .map((cliente) => ({
         id: cliente.id,
         name: cliente.name,
+        phone: cliente.phone,
         balance: cliente.balance,
         diasDeuda: cliente.diasDeuda,
       }));

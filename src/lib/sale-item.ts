@@ -75,7 +75,9 @@ export function parseWeightInputToGrams(value: string, assumeWholeNumbersAreKilo
     return null;
   }
 
-  const unit = gramsMatch[2] ?? (assumeWholeNumbersAreKilos ? "kg" : "g");
+  const unit = gramsMatch[2];
+  
+  // Si hay unidad explícita, usarla
   if (unit === "g" || unit === "gr") {
     return Math.round(numeric);
   }
@@ -84,6 +86,16 @@ export function parseWeightInputToGrams(value: string, assumeWholeNumbersAreKilo
     return Math.round(numeric * GRAMS_PER_KILO);
   }
 
+  // Sin unidad explícita: aplicar regla de decisión
+  // - Si assumeWholeNumbersAreKilos es true, TODO número es kilos
+  // - Si es false (default):
+  //   - Números con decimal (ej: 1.5, 0.250) → asumimos kilos (uso típico en balanza)
+  //   - Números enteros (ej: 250, 1000) → asumimos gramos
+  if (assumeWholeNumbersAreKilos) {
+    return Math.round(numeric * GRAMS_PER_KILO);
+  }
+
+  // Default: decimales = kilos, enteros = gramos
   if (normalized.includes(".")) {
     return Math.round(numeric * GRAMS_PER_KILO);
   }

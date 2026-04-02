@@ -580,6 +580,7 @@ export async function GET(req: Request) {
       presentation: record.product.presentation,
       supplierName: record.product.supplierName,
       notes: record.product.notes,
+      soldByWeight: record.product.soldByWeight,
       platformProductId: record.product.platformProductId,
       platformSyncMode,
       platformSourceUpdatedAt: record.product.platformSourceUpdatedAt,

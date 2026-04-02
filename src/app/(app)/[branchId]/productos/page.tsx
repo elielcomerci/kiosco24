@@ -982,12 +982,32 @@ function ProductModal({
     setVariantQuickAdds((prev) => ({ ...prev, [variantKey]: "" }));
   };
 
+  // Helper para obtener el stock final de una variante (incluyendo quickAdd pendiente)
+  const getVariantFinalStock = (variant: Variant, index: number) => {
+    if (isInlineCreateOnly) return null;
+    
+    const variantKey = variant.id || `index-${index}`;
+    const addition = parseStockQuantityInput(variantQuickAdds[variantKey] ?? "", stockUsesWeightUnits);
+    const currentVariantStock = variant.stock ?? 0;
+    
+    if (addition !== null && addition > 0) {
+      return currentVariantStock + addition;
+    }
+    
+    return parseStockQuantityInput(variant.stock?.toString() || "", stockUsesWeightUnits);
+  };
+
   const handleSave = async (openStockAfter = false) => {
     if (!name.trim()) return;
     setLoading(true);
     setSaveError(null);
 
-    const normalizedStock = hasVariants ? null : isInlineCreateOnly ? 0 : parseStockQuantityInput(stock, stockUsesWeightUnits);
+    // Si hay stock rapido pendiente de aplicar, usar el proyectado en lugar del stock actual
+    const finalStock = hasVariants ? null : isInlineCreateOnly ? 0 : (
+      parsedQuickStockAdd !== null && parsedQuickStockAdd > 0 && projectedSimpleStock !== null
+        ? projectedSimpleStock
+        : parseStockQuantityInput(stock, stockUsesWeightUnits)
+    );
     const normalizedMinStock = hasVariants ? null : parseStockQuantityInput(minStock, stockUsesWeightUnits);
 
     const payload = {
@@ -1004,19 +1024,19 @@ function ProductModal({
       categoryId: categoryId || null,
       price: isInlineCreateOnly ? null : toNum(price),
       cost: isInlineCreateOnly ? null : toNum(cost),
-      stock: normalizedStock,
+      stock: finalStock,
       minStock: normalizedMinStock,
       showInGrid,
       soldByWeight,
       ...(isOwner ? { platformSyncMode } : {}),
-      variants: hasVariants ? variants.map(v => ({
+      variants: hasVariants ? variants.map((v, i) => ({
         id: v.id,
         name: v.name.trim(),
         barcode: v.barcode?.trim() || null,
         internalCode: v.internalCode?.trim() || null,
         price: isInlineCreateOnly ? null : toNum(v.price?.toString() || ""),
         cost: isInlineCreateOnly ? null : toNum(v.cost?.toString() || ""),
-        stock: isInlineCreateOnly ? null : parseStockQuantityInput(v.stock?.toString() || "", stockUsesWeightUnits),
+        stock: isInlineCreateOnly ? null : getVariantFinalStock(v, i),
         minStock: parseStockQuantityInput(v.minStock?.toString() || "", stockUsesWeightUnits)
       })).filter(v => v.name) : []
     };

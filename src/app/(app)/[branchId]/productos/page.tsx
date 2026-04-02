@@ -645,7 +645,7 @@ function ProductModal({
   const [cost, setCost] = useState(product?.cost?.toString() || "");
   const initialSoldByWeight = product?.soldByWeight ?? draftSeed?.soldByWeight ?? false;
   const [stock, setStock] = useState(formatStockQuantity(product?.stock ?? null, initialSoldByWeight));
-  const [quickStockAdd, setQuickStockAdd] = useState("");
+  const [stockAdjustment, setStockAdjustment] = useState("");
   const [minStock, setMinStock] = useState(formatStockQuantity(product?.minStock ?? null, initialSoldByWeight));
   const [showInGrid, setShowInGrid] = useState(product?.showInGrid ?? true);
   const [soldByWeight, setSoldByWeight] = useState(initialSoldByWeight);
@@ -657,7 +657,7 @@ function ProductModal({
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [applyingSuggestion, setApplyingSuggestion] = useState(false);
   const [variants, setVariants] = useState<Variant[]>(product?.variants || []);
-  const [variantQuickAdds, setVariantQuickAdds] = useState<Record<string, string>>({});
+  const [variantStockAdjustments, setVariantStockAdjustments] = useState<Record<string, string>>({});
   const [hasVariants, setHasVariants] = useState((product?.variants?.length ?? 0) > 0);
   const [suggestion, setSuggestion] = useState<BarcodeSuggestion | null>(null);
   const [nameSuggestions, setNameSuggestions] = useState<BarcodeSuggestion[]>([]);
@@ -675,10 +675,11 @@ function ProductModal({
   const normalizedBarcode = normalizeBarcodeCode(barcode);
   const productHasTrackedLots = Boolean(product?.hasTrackedLots);
   const originalSimpleStock = product?.stock ?? 0;
-  const parsedQuickStockAdd = parseStockQuantityInput(quickStockAdd, soldByWeight);
+  const parsedStockAdjustment = parseStockQuantityInput(stockAdjustment, soldByWeight);
   const projectedSimpleStock =
-    parsedQuickStockAdd === null ? null : originalSimpleStock + parsedQuickStockAdd;
-  const stockUsesWeightUnits = soldByWeight;
+    parsedStockAdjustment !== null && parsedStockAdjustment > 0
+      ? originalSimpleStock + parsedStockAdjustment
+      : null;
   const lookupCode =
     !hasVariants &&
     canLookupBarcode(normalizedBarcode) &&
@@ -955,60 +956,19 @@ function ProductModal({
     };
   }, [applyingSuggestion, canFilterCatalog, isNew, normalizedCatalogQuery]);
 
-  const applyQuickSimpleStock = () => {
-    if (projectedSimpleStock === null || parsedQuickStockAdd === null || parsedQuickStockAdd <= 0) {
-      return;
-    }
-
-    setStock(formatStockQuantity(projectedSimpleStock, stockUsesWeightUnits));
-    setQuickStockAdd("");
-  };
-
-  const applyQuickVariantStock = (index: number, currentStock: number) => {
-    const variantKey = variants[index]?.id || `index-${index}`;
-    const addition = parseStockQuantityInput(variantQuickAdds[variantKey] ?? "", stockUsesWeightUnits);
-
-    if (addition === null || addition <= 0) {
-      return;
-    }
-
-    setVariants((prev) =>
-      prev.map((variant, variantIndex) =>
-        variantIndex === index
-          ? { ...variant, stock: currentStock + addition }
-          : variant,
-      ),
-    );
-    setVariantQuickAdds((prev) => ({ ...prev, [variantKey]: "" }));
-  };
-
-  // Helper para obtener el stock final de una variante (incluyendo quickAdd pendiente)
-  const getVariantFinalStock = (variant: Variant, index: number) => {
-    if (isInlineCreateOnly) return null;
-    
-    const variantKey = variant.id || `index-${index}`;
-    const addition = parseStockQuantityInput(variantQuickAdds[variantKey] ?? "", stockUsesWeightUnits);
-    const currentVariantStock = variant.stock ?? 0;
-    
-    if (addition !== null && addition > 0) {
-      return currentVariantStock + addition;
-    }
-    
-    return parseStockQuantityInput(variant.stock?.toString() || "", stockUsesWeightUnits);
-  };
-
   const handleSave = async (openStockAfter = false) => {
     if (!name.trim()) return;
     setLoading(true);
     setSaveError(null);
 
-    // Si hay stock rapido pendiente de aplicar, usar el proyectado en lugar del stock actual
-    const finalStock = hasVariants ? null : isInlineCreateOnly ? 0 : (
-      parsedQuickStockAdd !== null && parsedQuickStockAdd > 0 && projectedSimpleStock !== null
+    // Si hay ajuste pendiente, usar el stock proyectado (stock actual + lo que entró)
+    // Si no, usar el valor directo del campo stock
+    const normalizedStock = hasVariants ? null : isInlineCreateOnly ? 0 : (
+      projectedSimpleStock !== null
         ? projectedSimpleStock
-        : parseStockQuantityInput(stock, stockUsesWeightUnits)
+        : parseStockQuantityInput(stock, soldByWeight)
     );
-    const normalizedMinStock = hasVariants ? null : parseStockQuantityInput(minStock, stockUsesWeightUnits);
+    const normalizedMinStock = hasVariants ? null : parseStockQuantityInput(minStock, soldByWeight);
 
     const payload = {
       name: name.trim(),
@@ -1024,21 +984,30 @@ function ProductModal({
       categoryId: categoryId || null,
       price: isInlineCreateOnly ? null : toNum(price),
       cost: isInlineCreateOnly ? null : toNum(cost),
-      stock: finalStock,
+      stock: normalizedStock,
       minStock: normalizedMinStock,
       showInGrid,
       soldByWeight,
       ...(isOwner ? { platformSyncMode } : {}),
-      variants: hasVariants ? variants.map((v, i) => ({
-        id: v.id,
-        name: v.name.trim(),
-        barcode: v.barcode?.trim() || null,
-        internalCode: v.internalCode?.trim() || null,
-        price: isInlineCreateOnly ? null : toNum(v.price?.toString() || ""),
-        cost: isInlineCreateOnly ? null : toNum(v.cost?.toString() || ""),
-        stock: isInlineCreateOnly ? null : getVariantFinalStock(v, i),
-        minStock: parseStockQuantityInput(v.minStock?.toString() || "", stockUsesWeightUnits)
-      })).filter(v => v.name) : []
+      variants: hasVariants ? variants.map((v, i) => {
+        const key = v.id || `index-${i}`;
+        const adjustment = parseStockQuantityInput(variantStockAdjustments[key] || "", soldByWeight);
+        const currentVariantStock = v.stock ?? 0;
+        const finalVariantStock = adjustment !== null && adjustment > 0
+          ? currentVariantStock + adjustment
+          : parseStockQuantityInput(v.stock?.toString() || "", soldByWeight);
+        
+        return {
+          id: v.id,
+          name: v.name.trim(),
+          barcode: v.barcode?.trim() || null,
+          internalCode: v.internalCode?.trim() || null,
+          price: isInlineCreateOnly ? null : toNum(v.price?.toString() || ""),
+          cost: isInlineCreateOnly ? null : toNum(v.cost?.toString() || ""),
+          stock: isInlineCreateOnly ? null : finalVariantStock,
+          minStock: parseStockQuantityInput(v.minStock?.toString() || "", soldByWeight)
+        };
+      }).filter(v => v.name) : []
     };
 
     try {
@@ -1912,11 +1881,7 @@ function ProductModal({
         {hasVariants ? (
           <div style={{ marginBottom: "12px", display: "flex", flexDirection: "column", gap: "10px" }}>
             {variants.map((v, i) => {
-              const variantQuickKey = v.id || `index-${i}`;
-              const variantQuickAdd = parseStockQuantityInput(variantQuickAdds[variantQuickKey] ?? "", soldByWeight);
               const currentVariantStock = v.stock ?? 0;
-              const projectedVariantStock =
-                variantQuickAdd === null ? null : currentVariantStock + variantQuickAdd;
 
               return (
               <div key={i} style={{ border: "1px solid var(--border)", padding: "10px", borderRadius: "8px", background: "var(--surface)" }}>
@@ -1994,16 +1959,33 @@ function ProductModal({
                     {!isInlineCreateOnly && (
                       <div>
                         <label style={{ fontSize: "10px", color: "var(--text-3)", textTransform: "uppercase", fontWeight: 600 }}>STOCK{soldByWeight ? " (kg)" : ""}</label>
-                        <input 
-                          className="input" 
+                        <input
+                          className="input"
                           type={soldByWeight ? "text" : "number"}
                           inputMode={soldByWeight ? "decimal" : "numeric"}
                           step={soldByWeight ? "0.001" : "1"}
                           placeholder={soldByWeight ? "0.000" : "Stock..."}
-                          value={formatStockQuantity(v.stock, soldByWeight)}
-                          onChange={(e) => updateVariant(i, { stock: parseStockQuantityInput(e.target.value, soldByWeight) })}
+                          value={(() => {
+                            const key = v.id || `index-${i}`;
+                            const adjustment = parseStockQuantityInput(variantStockAdjustments[key] || "", soldByWeight);
+                            if (adjustment !== null && adjustment > 0) {
+                              return formatStockQuantity(currentVariantStock + adjustment, soldByWeight);
+                            }
+                            return formatStockQuantity(v.stock, soldByWeight);
+                          })()}
+                          onChange={(e) => {
+                            const key = v.id || `index-${i}`;
+                            const val = e.target.value;
+                            setVariantStockAdjustments((prev) => ({ ...prev, [key]: val.startsWith("-") ? "" : val }));
+                          }}
                           disabled={Boolean(v.id && v.hasTrackedLots)}
+                          style={{ textAlign: "right", borderColor: currentVariantStock < 0 ? "var(--red)" : undefined }}
                         />
+                        {currentVariantStock < 0 && (
+                          <div style={{ fontSize: "10px", color: "var(--red)", marginTop: "3px", fontWeight: 600 }}>
+                            Actual: {formatStockQuantity(currentVariantStock, soldByWeight)}. Ingresá lo que entró.
+                          </div>
+                        )}
                       </div>
                     )}
                     <div>
@@ -2020,51 +2002,6 @@ function ProductModal({
                       />
                     </div>
                  </div>
-                 {!isNew && !v.hasTrackedLots && currentVariantStock < 0 && (
-                   <div
-                     style={{
-                       marginTop: "8px",
-                       padding: "10px",
-                       borderRadius: "10px",
-                       border: "1px solid rgba(239,68,68,0.18)",
-                       background: "rgba(239,68,68,0.08)",
-                       display: "flex",
-                       flexDirection: "column",
-                       gap: "8px",
-                     }}
-                   >
-                     <div style={{ fontSize: "11px", fontWeight: 700, color: "var(--red)" }}>
-                       Esta variante esta en negativo ({currentVariantStock}).
-                     </div>
-                     <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
-                      <input
-                        className="input"
-                        type="number"
-                        inputMode={soldByWeight ? "decimal" : "numeric"}
-                        step={soldByWeight ? "0.001" : "1"}
-                        min={0}
-                        placeholder="Entraron ahora"
-                        value={variantQuickAdds[variantQuickKey] ?? ""}
-                        onChange={(e) => setVariantQuickAdds((prev) => ({ ...prev, [variantQuickKey]: e.target.value.startsWith("-") ? "" : e.target.value }))}
-                        style={{ width: "140px", textAlign: "right" }}
-                      />
-                      <span style={{ fontSize: "11px", color: projectedVariantStock !== null && projectedVariantStock >= 0 ? "var(--green)" : "var(--text-2)", fontWeight: 700 }}>
-                        {projectedVariantStock === null
-                          ? `Faltan ${formatStockQuantity(Math.abs(currentVariantStock), soldByWeight)} para volver a 0`
-                          : `Queda en ${formatStockQuantity(projectedVariantStock, soldByWeight)}`}
-                      </span>
-                       <button
-                         type="button"
-                         className="btn btn-sm btn-ghost"
-                         style={{ border: "1px solid var(--border)" }}
-                         onClick={() => applyQuickVariantStock(i, currentVariantStock)}
-                         disabled={projectedVariantStock === null || variantQuickAdd === null || variantQuickAdd <= 0}
-                       >
-                         Usar resultado
-                       </button>
-                     </div>
-                   </div>
-                 )}
                  {v.id && v.hasTrackedLots && (
                    <div style={{ marginTop: "8px", fontSize: "11px", color: "var(--amber)" }}>
                     Esta variante tiene vencimientos cargados. Ajustá su stock desde Corregir inventario.
@@ -2099,18 +2036,29 @@ function ProductModal({
             <div style={{ display: "grid", gridTemplateColumns: isInlineCreateOnly ? "1fr" : "1fr 1fr", gap: "10px", marginBottom: "12px" }}>
               {!isInlineCreateOnly && (
               <div>
-                <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase" }}>Stock{soldByWeight ? " (kg)" : ""}</label>
+                <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase" }}>
+                  Stock{soldByWeight ? " (kg)" : ""}
+                </label>
                 <input
                   className="input"
                   type={soldByWeight ? "text" : "number"}
                   inputMode={soldByWeight ? "decimal" : "numeric"}
                   step={soldByWeight ? "0.001" : "1"}
                   placeholder="—"
-                  value={stock}
-                  onChange={(e) => setStock(e.target.value)}
-                  style={{ textAlign: "right" }}
+                  value={projectedSimpleStock !== null ? formatStockQuantity(projectedSimpleStock, soldByWeight) : stock}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    // Si el usuario escribe, asumimos que quiere ajustar el stock
+                    setStockAdjustment(val.startsWith("-") ? "" : val);
+                  }}
+                  style={{ textAlign: "right", borderColor: originalSimpleStock < 0 ? "var(--red)" : undefined }}
                   disabled={!isNew && productHasTrackedLots}
                 />
+                {originalSimpleStock < 0 && (
+                  <div style={{ fontSize: "11px", color: "var(--red)", marginTop: "4px", fontWeight: 600 }}>
+                    Actual: {formatStockQuantity(originalSimpleStock, soldByWeight)}. Ingresá lo que entró y usamos el total.
+                  </div>
+                )}
               </div>
               )}
               <div>
@@ -2127,57 +2075,6 @@ function ProductModal({
                 />
               </div>
             </div>
-            {!isNew && !productHasTrackedLots && originalSimpleStock < 0 && (
-              <div
-                style={{
-                  marginTop: "-2px",
-                  marginBottom: "12px",
-                  padding: "12px",
-                  borderRadius: "12px",
-                  border: "1px solid rgba(239,68,68,0.18)",
-                  background: "rgba(239,68,68,0.08)",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "10px",
-                }}
-              >
-                <div>
-                  <div style={{ fontSize: "12px", fontWeight: 700, color: "var(--red)" }}>
-                    Este producto esta en negativo ({originalSimpleStock}).
-                  </div>
-                  <div style={{ fontSize: "12px", color: "var(--text-2)", marginTop: "4px", lineHeight: 1.5 }}>
-                    Carga lo que entro ahora y usamos el total.
-                  </div>
-                </div>
-                <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
-                  <input
-                    className="input"
-                    type={soldByWeight ? "text" : "number"}
-                    inputMode={soldByWeight ? "decimal" : "numeric"}
-                    step={soldByWeight ? "0.001" : "1"}
-                    min={0}
-                    placeholder="Entraron ahora"
-                    value={quickStockAdd}
-                    onChange={(e) => setQuickStockAdd(e.target.value.startsWith("-") ? "" : e.target.value)}
-                    style={{ width: "150px", textAlign: "right" }}
-                  />
-                  <span style={{ fontSize: "12px", color: projectedSimpleStock !== null && projectedSimpleStock >= 0 ? "var(--green)" : "var(--text-2)", fontWeight: 700 }}>
-                    {projectedSimpleStock === null
-                      ? `Faltan ${formatStockQuantity(Math.abs(originalSimpleStock), soldByWeight)} para volver a 0`
-                      : `Queda en ${formatStockQuantity(projectedSimpleStock, soldByWeight)}`}
-                  </span>
-                  <button
-                    type="button"
-                    className="btn btn-sm btn-ghost"
-                    style={{ border: "1px solid var(--border)" }}
-                    onClick={applyQuickSimpleStock}
-                    disabled={projectedSimpleStock === null || parsedQuickStockAdd === null || parsedQuickStockAdd <= 0}
-                  >
-                    Usar resultado
-                  </button>
-                </div>
-              </div>
-            )}
             {!isNew && productHasTrackedLots && (
               <div style={{ marginTop: "-4px", marginBottom: "12px", fontSize: "12px", color: "var(--amber)" }}>
                 Este producto tiene vencimientos cargados. Ajustá el stock desde Corregir inventario para no romper el desglose por lotes.

@@ -1244,7 +1244,7 @@ export default function CajaPage() {
     if (variant) setVariantSelector(null);
   }, [allowNegativeStock, ensureCanOperateCurrentShift, shouldWarnNegativeStock, ticket]);
 
-  // Long press = -1
+  // Long press = eliminar item del ticket
   const longPressTimer = useRef<NodeJS.Timeout | null>(null);
   const handleLongPressStart = (product: Product) => {
     if (!ensureCanOperateCurrentShift()) {
@@ -1252,18 +1252,7 @@ export default function CajaPage() {
     }
 
     longPressTimer.current = setTimeout(() => {
-      setTicket((prev) => {
-        const existing = prev.find((i) => i.productId === product.id);
-        const quantityStep = existing?.soldByWeight ? 50 : 1;
-        if (!existing || existing.quantity <= quantityStep) {
-          return prev.filter((i) => i.productId !== product.id);
-        }
-        return prev.map((i) =>
-          i.productId === product.id
-            ? { ...i, quantity: i.quantity - quantityStep }
-            : i
-        );
-      });
+      setTicket((prev) => prev.filter((i) => i.productId !== product.id));
     }, 400);
   };
   const handleLongPressEnd = () => {

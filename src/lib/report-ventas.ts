@@ -1,6 +1,7 @@
 import { unstable_cache } from "next/cache";
 
 import { prisma } from "@/lib/prisma";
+import { getSaleItemCostSubtotal, getSaleItemSubtotal } from "@/lib/sale-item";
 
 type ReportVentas = {
   branchName: string;
@@ -69,6 +70,7 @@ type SaleRow = {
     quantity: number;
     price: number;
     cost: number | null;
+    soldByWeight?: boolean;
   }>;
   shift: { employeeName: string } | null;
   createdByEmployee: { name: string } | null;
@@ -129,6 +131,7 @@ const getVentasReportCached = unstable_cache(
             quantity: true,
             price: true,
             cost: true,
+            soldByWeight: true,
           },
         },
           shift: { select: { employeeName: true } },
@@ -224,9 +227,15 @@ const getVentasReportCached = unstable_cache(
         const cost = item.cost;
         if (cost !== null) {
           hasCosts = true;
-          ganancia += (item.price - cost) * item.quantity;
+          ganancia +=
+            getSaleItemSubtotal(item) -
+            getSaleItemCostSubtotal({
+              quantity: item.quantity,
+              soldByWeight: item.soldByWeight,
+              cost,
+            });
         } else {
-          ganancia += item.price * item.quantity;
+          ganancia += getSaleItemSubtotal(item);
         }
       }
     }

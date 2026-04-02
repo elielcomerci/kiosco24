@@ -1,8 +1,11 @@
+import { formatSaleItemWeightLabel } from "@/lib/sale-item";
+
 export type TicketPreviewItem = {
   name: string;
   quantity: number;
   unitPrice: number;
   subtotal: number;
+  soldByWeight?: boolean;
 };
 
 export type TicketPreviewData = {
@@ -74,7 +77,11 @@ export function generateWhatsAppTicketText(ticket: TicketPreviewData) {
   lines.push("");
 
   for (const item of ticket.items) {
-    lines.push(`${item.name} x${item.quantity} .... ${formatArsPlain(item.subtotal)}`);
+    lines.push(
+      item.soldByWeight
+        ? `${item.name} ${formatSaleItemWeightLabel(item)} x ${formatArsPlain(item.unitPrice)} /kg .... ${formatArsPlain(item.subtotal)}`
+        : `${item.name} x${item.quantity} .... ${formatArsPlain(item.subtotal)}`
+    );
   }
 
   lines.push("");

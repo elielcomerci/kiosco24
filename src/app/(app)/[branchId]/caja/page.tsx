@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useSession } from "next-auth/react";
 import { useParams, useRouter } from "next/navigation";
 import { formatARS, getCashSuggestions } from "@/lib/utils";
+import { formatSaleItemWeightLabel, getSaleItemSubtotal, parseWeightInputToGrams } from "@/lib/sale-item";
 import NumPad from "@/components/ui/NumPad";
 import ConfirmationScreen from "@/components/caja/ConfirmationScreen";
 import GastoModal from "@/components/caja/GastoModal";
@@ -59,6 +60,7 @@ interface Product {
   showInGrid?: boolean;
   readyForSale?: boolean;
   allowNegativeStock?: boolean;
+  soldByWeight?: boolean;
   isNegativeStock?: boolean;
   isOutOfStock?: boolean;
   isBelowMinStock?: boolean;
@@ -78,6 +80,7 @@ interface TicketItem {
   name: string;
   price: number;
   quantity: number;
+  soldByWeight?: boolean;
   cost?: number;
   maxStock?: number; // Para validación
 }
@@ -413,6 +416,7 @@ export default function CajaPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [variantSelector, setVariantSelector] = useState<{ product: Product } | null>(null);
+  const [weightSelector, setWeightSelector] = useState<{ product: Product; variant?: Variant; draft: string } | null>(null);
   const [isTicketExpanded, setIsTicketExpanded] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
   
@@ -460,7 +464,7 @@ export default function CajaPage() {
 
   const isOnline = useOnlineStatus();
   const allowNegativeStock = products[0]?.allowNegativeStock ?? false;
-  const total = ticket.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const total = ticket.reduce((sum, item) => sum + getSaleItemSubtotal(item), 0);
   const cashSuggestions = getCashSuggestions(total);
   const activeShiftId = activeShift?.id ?? null;
   const shiftResponsibleName = activeShift?.employee?.name || activeShift?.employeeName || "Dueño";
@@ -1143,13 +1147,16 @@ export default function CajaPage() {
     return previousQuantity <= availableStock && nextQuantity > availableStock;
   }, [allowNegativeStock]);
 
-  const confirmNegativeStock = (itemName: string, availableStock: number, nextQuantity: number) => {
+  const formatStockAmount = (amount: number, soldByWeight = false) =>
+    soldByWeight ? `${(amount / 1000).toFixed(3)} kg` : String(amount);
+
+  const confirmNegativeStock = (itemName: string, availableStock: number, nextQuantity: number, soldByWeight = false) => {
     const projectedStock = availableStock - nextQuantity;
     return window.confirm(
       `${itemName} no tiene stock cargado suficiente.\n\n` +
-      `Stock disponible: ${availableStock}.\n` +
-      `En el ticket: ${nextQuantity}.\n` +
-      `Quedaria en ${projectedStock}.\n\n` +
+      `Stock disponible: ${formatStockAmount(availableStock, soldByWeight)}.\n` +
+      `En el ticket: ${formatStockAmount(nextQuantity, soldByWeight)}.\n` +
+      `Quedaria en ${formatStockAmount(projectedStock, soldByWeight)}.\n\n` +
       "Confirma solo si el producto ya esta en el local y falta cargarlo.",
     );
   };
@@ -1162,6 +1169,14 @@ export default function CajaPage() {
     // Si el producto tiene variantes y NO se pasó una variante específica, abrir selector
     if (product.variants && product.variants.length > 0 && !variant) {
       setVariantSelector({ product });
+      return;
+    }
+
+    if (product.soldByWeight) {
+      if (variant) {
+        setVariantSelector(null);
+      }
+      setWeightSelector({ product, variant, draft: "" });
       return;
     }
 
@@ -1181,7 +1196,7 @@ export default function CajaPage() {
       return;
     }
 
-    if (shouldWarnNegativeStock(targetStock, previousQuantity, nextQuantity) && !confirmNegativeStock(targetName, targetStock, nextQuantity)) {
+    if (shouldWarnNegativeStock(targetStock, previousQuantity, nextQuantity) && !confirmNegativeStock(targetName, targetStock, nextQuantity, Boolean(product.soldByWeight))) {
       return;
     }
 
@@ -1239,12 +1254,13 @@ export default function CajaPage() {
     longPressTimer.current = setTimeout(() => {
       setTicket((prev) => {
         const existing = prev.find((i) => i.productId === product.id);
-        if (!existing || existing.quantity <= 1) {
+        const quantityStep = existing?.soldByWeight ? 50 : 1;
+        if (!existing || existing.quantity <= quantityStep) {
           return prev.filter((i) => i.productId !== product.id);
         }
         return prev.map((i) =>
           i.productId === product.id
-            ? { ...i, quantity: i.quantity - 1 }
+            ? { ...i, quantity: i.quantity - quantityStep }
             : i
         );
       });
@@ -1255,6 +1271,82 @@ export default function CajaPage() {
   };
 
   // ─── REPETIR ─────────────────────────────────────────────────────────────
+  const confirmWeightSelection = () => {
+    if (!weightSelector) {
+      return;
+    }
+
+    const quantity = parseWeightInputToGrams(weightSelector.draft);
+    if (quantity === null || quantity <= 0) {
+      alert("Ingresá un peso válido.");
+      return;
+    }
+
+    const { product, variant } = weightSelector;
+    const targetName = variant ? `${product.name} - ${variant.name}` : product.name;
+    const targetStock = getSelectionAvailableStock(product, variant);
+    const existing = ticket.find((item) => (variant ? item.variantId === variant.id : item.productId === product.id));
+    const previousQuantity = existing?.quantity ?? 0;
+    const nextQuantity = previousQuantity + quantity;
+    const unitPrice =
+      variant && typeof variant.price === "number" && Number.isFinite(variant.price)
+        ? variant.price
+        : product.price;
+    const unitCost =
+      variant && typeof variant.cost === "number" && Number.isFinite(variant.cost)
+        ? variant.cost
+        : product.cost ?? undefined;
+
+    if (!allowNegativeStock && targetStock <= 0) {
+      alert(`${targetName} no tiene stock disponible`);
+      return;
+    }
+
+    if (!allowNegativeStock && nextQuantity > targetStock) {
+      alert(`No hay más stock de ${targetName}`);
+      return;
+    }
+
+    if (
+      shouldWarnNegativeStock(targetStock, previousQuantity, nextQuantity) &&
+      !confirmNegativeStock(targetName, targetStock, nextQuantity, Boolean(product.soldByWeight))
+    ) {
+      return;
+    }
+
+    setTicket((prev) => {
+      const existingIndex = prev.findIndex((item) =>
+        variant ? item.variantId === variant.id : item.productId === product.id,
+      );
+
+      if (existingIndex >= 0) {
+        const nextTicket = [...prev];
+        nextTicket[existingIndex] = {
+          ...nextTicket[existingIndex],
+          quantity: nextTicket[existingIndex].quantity + quantity,
+        };
+        return nextTicket;
+      }
+
+      setIsTicketExpanded(false);
+      return [
+        ...prev,
+        {
+          productId: product.id,
+          variantId: variant?.id,
+          name: targetName,
+          price: unitPrice,
+          quantity,
+          soldByWeight: true,
+          cost: unitCost,
+          maxStock: allowNegativeStock ? undefined : targetStock,
+        },
+      ];
+    });
+
+    setWeightSelector(null);
+  };
+
   const handleRepetir = () => {
     if (!ensureCanOperateCurrentShift()) {
       return;
@@ -1497,9 +1589,10 @@ export default function CajaPage() {
     if (!ticketItem) return;
 
     const availableStock = getItemAvailableStock(ticketItem);
-    const nextQuantity = ticketItem.quantity + delta;
+    const quantityStep = ticketItem.soldByWeight ? 50 : 1;
+    const nextQuantity = ticketItem.quantity + delta * quantityStep;
 
-    if (!allowNegativeStock && delta > 0 && ticketItem.maxStock !== undefined && ticketItem.quantity >= ticketItem.maxStock) {
+    if (!allowNegativeStock && delta > 0 && ticketItem.maxStock !== undefined && nextQuantity > ticketItem.maxStock) {
       alert("Stock mÃ¡ximo alcanzado");
       return;
     }
@@ -1508,7 +1601,7 @@ export default function CajaPage() {
       delta > 0 &&
       availableStock !== null &&
       shouldWarnNegativeStock(availableStock, ticketItem.quantity, nextQuantity) &&
-      !confirmNegativeStock(ticketItem.name, availableStock, nextQuantity)
+      !confirmNegativeStock(ticketItem.name, availableStock, nextQuantity, Boolean(ticketItem.soldByWeight))
     ) {
       return;
     }
@@ -1517,12 +1610,12 @@ export default function CajaPage() {
       const newTicket = [...prev];
       const item = newTicket[index];
 
-      if (!allowNegativeStock && delta > 0 && item.maxStock !== undefined && item.quantity >= item.maxStock) {
+      if (!allowNegativeStock && delta > 0 && item.maxStock !== undefined && nextQuantity > item.maxStock) {
         alert("Stock máximo alcanzado");
         return prev;
       }
 
-      newTicket[index] = { ...item, quantity: item.quantity + delta };
+      newTicket[index] = { ...item, quantity: item.quantity + delta * quantityStep };
       if (newTicket[index].quantity <= 0) newTicket.splice(index, 1);
       return newTicket;
     });
@@ -1531,10 +1624,10 @@ export default function CajaPage() {
   const [editingQty, setEditingQty] = useState<{ index: number; draft: string } | null>(null);
 
   const commitQtyEdit = (index: number, rawValue: string) => {
-    const parsed = parseInt(rawValue, 10);
     const ticketItem = ticket[index];
+    const parsed = ticketItem?.soldByWeight ? parseWeightInputToGrams(rawValue) : parseInt(rawValue, 10);
     setEditingQty(null);
-    if (!rawValue.trim() || isNaN(parsed) || parsed <= 0) {
+    if (!rawValue.trim() || parsed === null || Number.isNaN(parsed) || parsed <= 0) {
       setTicket((prev) => prev.filter((_, i) => i !== index));
       return;
     }
@@ -1546,7 +1639,7 @@ export default function CajaPage() {
       allowNegativeStock &&
       availableStock !== null &&
       shouldWarnNegativeStock(availableStock, ticketItem.quantity, parsed) &&
-      !confirmNegativeStock(ticketItem.name, availableStock, parsed)
+      !confirmNegativeStock(ticketItem.name, availableStock, parsed, Boolean(ticketItem.soldByWeight))
     ) {
       return;
     }
@@ -1974,6 +2067,24 @@ export default function CajaPage() {
 
                 <div className="product-btn-body">
                   <span className="product-btn-name">{product.name}</span>
+                  {product.soldByWeight && (
+                    <span
+                      style={{
+                        justifySelf: "start",
+                        padding: "3px 7px",
+                        borderRadius: "999px",
+                        fontSize: "10px",
+                        fontWeight: 800,
+                        letterSpacing: "0.04em",
+                        textTransform: "uppercase",
+                        color: "#f8fafc",
+                        background: "linear-gradient(180deg, rgba(245,158,11,.92), rgba(217,119,6,.92))",
+                        border: "1px solid rgba(251,191,36,.45)",
+                      }}
+                    >
+                      Por peso
+                    </span>
+                  )}
                   <span className="product-btn-price">{formatARS(product.price)}</span>
                   {stockBadge && (
                     <span
@@ -2010,7 +2121,7 @@ export default function CajaPage() {
                       justifyContent: "center",
                     }}
                   >
-                    {inTicket.quantity}
+                    {inTicket.soldByWeight ? Math.round(inTicket.quantity) : inTicket.quantity}
                   </span>
                 )}
               </button>
@@ -2075,11 +2186,17 @@ export default function CajaPage() {
               const availableStock = getItemAvailableStock(item);
               const projectedStock = availableStock === null ? null : availableStock - item.quantity;
               const itemNeedsNegativeStock = allowNegativeStock && projectedStock !== null && projectedStock < 0;
+              const projectedStockLabel = item.soldByWeight && projectedStock !== null
+                ? `${(projectedStock / 1000).toFixed(3)} kg`
+                : projectedStock;
 
               return (
               <div key={idx} className="ticket-item" style={{ padding: "10px 12px" }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <span style={{ fontWeight: 600, fontSize: "13px", display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.name}</span>
+                  <span style={{ display: "block", fontSize: "11px", color: "var(--text-3)", marginTop: "2px" }}>
+                    {item.soldByWeight ? formatSaleItemWeightLabel(item) : `x${item.quantity}`}
+                  </span>
                   {itemNeedsNegativeStock && (
                     <div
                       style={{
@@ -2094,7 +2211,7 @@ export default function CajaPage() {
                         border: "1px solid rgba(239,68,68,0.24)",
                       }}
                     >
-                      Queda {projectedStock}
+                      Queda {projectedStockLabel}
                     </div>
                   )}
                 </div>
@@ -2108,8 +2225,8 @@ export default function CajaPage() {
                   </button>
                   {editingQty?.index === idx ? (
                     <input
-                      type="number"
-                      inputMode="numeric"
+                      type={item.soldByWeight ? "text" : "number"}
+                      inputMode={item.soldByWeight ? "decimal" : "numeric"}
                       value={editingQty.draft}
                       autoFocus
                       onClick={(e) => e.stopPropagation()}
@@ -2138,11 +2255,16 @@ export default function CajaPage() {
                     <span
                       onClick={(e) => {
                         e.stopPropagation();
-                        if (!operationsDisabled) setEditingQty({ index: idx, draft: String(item.quantity) });
+                        if (!operationsDisabled) {
+                          setEditingQty({
+                            index: idx,
+                            draft: item.soldByWeight ? (item.quantity / 1000).toFixed(3) : String(item.quantity),
+                          });
+                        }
                       }}
-                      title="Tocá para editar cantidad"
+                      title={item.soldByWeight ? "Toca para editar peso" : "Tocá para editar cantidad"}
                       style={{
-                        minWidth: "42px",
+                        minWidth: item.soldByWeight ? "58px" : "42px",
                         textAlign: "center",
                         fontWeight: 700,
                         cursor: operationsDisabled ? "default" : "text",
@@ -2154,7 +2276,7 @@ export default function CajaPage() {
                         flexShrink: 0,
                       }}
                     >
-                      {item.quantity}
+                      {item.soldByWeight ? formatSaleItemWeightLabel(item) : item.quantity}
                     </span>
                   )}
                   <button
@@ -2165,7 +2287,7 @@ export default function CajaPage() {
                     +
                   </button>
                   <span style={{ minWidth: "60px", textAlign: "right", fontWeight: 600, fontSize: "13px", flexShrink: 0 }}>
-                    {formatARS(item.price * item.quantity)}
+                    {formatARS(getSaleItemSubtotal(item))}
                   </span>
                 </div>
               </div>
@@ -2578,6 +2700,152 @@ export default function CajaPage() {
             <button className="btn btn-ghost" style={{ width: "100%", marginTop: "16px" }} onClick={() => setVariantSelector(null)}>
               Cancelar
             </button>
+            </div>
+          </div>
+        </ModalPortal>
+      )}
+
+      {weightSelector && (
+        <ModalPortal>
+          <div className="modal-overlay animate-fade-in" onClick={() => setWeightSelector(null)} style={{ zIndex: 10001 }}>
+            <div
+              className="modal animate-slide-up"
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                maxWidth: "460px",
+                width: "95%",
+                maxHeight: "88vh",
+                overflowY: "auto",
+                padding: "18px",
+                display: "flex",
+                flexDirection: "column",
+                gap: "14px",
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
+                <div>
+                  <h2 style={{ fontSize: "20px", fontWeight: 800, marginBottom: "4px" }}>Pesar producto</h2>
+                  <div style={{ color: "var(--text-3)", fontSize: "13px" }}>
+                    {weightSelector.variant ? `${weightSelector.product.name} - ${weightSelector.variant.name}` : weightSelector.product.name}
+                  </div>
+                </div>
+                <button className="btn btn-ghost" onClick={() => setWeightSelector(null)} style={{ padding: "8px 12px" }}>
+                  Cerrar
+                </button>
+              </div>
+
+              <div
+                style={{
+                  borderRadius: "18px",
+                  overflow: "hidden",
+                  background: "var(--surface-2)",
+                  border: "1px solid var(--border)",
+                  minHeight: "220px",
+                  display: "flex",
+                  alignItems: "stretch",
+                  justifyContent: "center",
+                }}
+              >
+                {weightSelector.product.image ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={weightSelector.product.image}
+                    alt={weightSelector.product.name}
+                    style={{ width: "100%", height: "220px", objectFit: "cover", display: "block" }}
+                  />
+                ) : (
+                  <div style={{ width: "100%", minHeight: "220px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "8px", color: "var(--text-2)" }}>
+                    <div style={{ fontSize: "44px" }}>{weightSelector.product.emoji || "🧾"}</div>
+                    <div style={{ fontSize: "13px" }}>Sin foto disponible</div>
+                  </div>
+                )}
+              </div>
+
+              <div style={{ display: "grid", gap: "10px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
+                  <div>
+                    <div style={{ fontSize: "12px", color: "var(--text-3)", textTransform: "uppercase", fontWeight: 700 }}>Precio por kilo</div>
+                    <div style={{ fontSize: "20px", fontWeight: 800, color: "var(--primary)" }}>
+                      {formatARS(
+                        typeof weightSelector.variant?.price === "number" && Number.isFinite(weightSelector.variant.price)
+                          ? weightSelector.variant.price
+                          : weightSelector.product.price,
+                      )}
+                      /kg
+                    </div>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ fontSize: "12px", color: "var(--text-3)", textTransform: "uppercase", fontWeight: 700 }}>Disponible</div>
+                    <div style={{ fontSize: "18px", fontWeight: 700 }}>
+                      {(() => {
+                        const availableStock = getSelectionAvailableStock(weightSelector.product, weightSelector.variant);
+                        return weightSelector.product.soldByWeight
+                          ? `${(availableStock / 1000).toFixed(3)} kg`
+                          : availableStock;
+                      })()}
+                    </div>
+                  </div>
+                </div>
+
+                <label style={{ display: "grid", gap: "8px" }}>
+                  <span style={{ fontSize: "12px", color: "var(--text-3)", textTransform: "uppercase", fontWeight: 700 }}>
+                    Peso a vender
+                  </span>
+                  <input
+                    className="input"
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="250 g, 0.25 kg, 1/4"
+                    value={weightSelector.draft}
+                    onChange={(e) => setWeightSelector((current) => current ? { ...current, draft: e.target.value } : current)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        confirmWeightSelection();
+                      }
+                      if (e.key === "Escape") {
+                        setWeightSelector(null);
+                      }
+                    }}
+                    autoFocus
+                  />
+                </label>
+
+                <div
+                  style={{
+                    padding: "12px 14px",
+                    borderRadius: "14px",
+                    background: "var(--surface-2)",
+                    border: "1px solid var(--border)",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: "12px",
+                    fontSize: "14px",
+                  }}
+                >
+                  <span style={{ color: "var(--text-2)" }}>Subtotal estimado</span>
+                  <strong>
+                    {(() => {
+                      const quantity = parseWeightInputToGrams(weightSelector.draft);
+                      if (quantity === null || quantity <= 0) return "—";
+                      const unitPrice =
+                        typeof weightSelector.variant?.price === "number" && Number.isFinite(weightSelector.variant.price)
+                          ? weightSelector.variant.price
+                          : weightSelector.product.price;
+                      return formatARS((unitPrice * quantity) / 1000);
+                    })()}
+                  </strong>
+                </div>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "10px" }}>
+                <button className="btn btn-ghost" onClick={() => setWeightSelector(null)}>
+                  Cancelar
+                </button>
+                <button className="btn btn-green" onClick={confirmWeightSelection}>
+                  Agregar al ticket
+                </button>
+              </div>
             </div>
           </div>
         </ModalPortal>

@@ -3,6 +3,7 @@
 import { formatARS } from "@/lib/utils";
 import { formatDateForHuman, getInvoiceTypeLabel } from "@/lib/fiscal";
 import type { InvoicePreviewData } from "@/lib/invoice-format";
+import { formatSaleItemWeightLabel } from "@/lib/sale-item";
 
 function getReceiverLegend(receiverIvaConditionLabel: string | null) {
   if (!receiverIvaConditionLabel) return null;
@@ -80,7 +81,9 @@ export default function InvoicePreview({ invoice }: { invoice: InvoicePreviewDat
             <div style={{ minWidth: 0 }}>
               <div style={{ fontWeight: 600 }}>{item.name}</div>
               <div style={{ color: "var(--text-3)", fontSize: "12px" }}>
-                {item.quantity} x {formatARS(item.unitPrice)}
+                {item.soldByWeight
+                  ? `${formatSaleItemWeightLabel(item)} x ${formatARS(item.unitPrice)} /kg`
+                  : `${item.quantity} x ${formatARS(item.unitPrice)}`}
               </div>
             </div>
             <div style={{ fontWeight: 700 }}>{formatARS(item.subtotal)}</div>

@@ -82,6 +82,7 @@ type ProductGridInventory = {
     presentation: string | null;
     supplierName: string | null;
     notes: string | null;
+    soldByWeight: boolean;
     categoryId: string | null;
     category: {
       showInGrid: boolean;
@@ -186,6 +187,7 @@ function buildGridProduct(record: ProductGridInventory, allowNegativeStock: bool
     presentation: record.product.presentation,
     supplierName: record.product.supplierName,
     notes: record.product.notes,
+    soldByWeight: record.product.soldByWeight,
     categoryId: record.product.categoryId,
     price,
     cost,
@@ -364,6 +366,7 @@ export async function GET(req: Request) {
             presentation: true,
             supplierName: true,
             notes: true,
+            soldByWeight: true,
             categoryId: true,
             category: {
               select: {
@@ -649,6 +652,7 @@ export async function POST(req: Request) {
     presentation,
     supplierName,
     notes,
+    soldByWeight,
     categoryId,
     price,
     cost,
@@ -737,6 +741,7 @@ export async function POST(req: Request) {
         presentation: normalizedPresentation,
         supplierName: normalizedSupplierName,
         notes: normalizedNotes,
+        soldByWeight: typeof soldByWeight === "boolean" ? soldByWeight : false,
         categoryId: resolvedCategory.categoryId,
         platformProductId: platformProduct?.id ?? null,
         platformSyncMode: normalizedPlatformSyncMode,

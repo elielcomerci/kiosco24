@@ -1,5 +1,6 @@
 import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { getSaleItemCostSubtotal, getSaleItemSubtotal } from "@/lib/sale-item";
 import { artDayRange } from "@/lib/utils";
 
 const ART_OFFSET_MS = 3 * 60 * 60 * 1000;
@@ -80,14 +81,15 @@ const getPeriodoStatsCached = unstable_cache(
           total: true,
           paymentMethod: true,
           createdAt: true,
-          items: {
-            select: {
-              name: true,
-              quantity: true,
-              price: true,
-              cost: true,
+            items: {
+              select: {
+                name: true,
+                quantity: true,
+                price: true,
+                cost: true,
+                soldByWeight: true,
+              },
             },
-          },
         },
       }),
       prisma.expense.groupBy({
@@ -105,14 +107,15 @@ const getPeriodoStatsCached = unstable_cache(
           total: true,
           paymentMethod: true,
           createdAt: true,
-          items: {
-            select: {
-              name: true,
-              quantity: true,
-              price: true,
-              cost: true,
+            items: {
+              select: {
+                name: true,
+                quantity: true,
+                price: true,
+                cost: true,
+                soldByWeight: true,
+              },
             },
-          },
         },
       }),
       prisma.expense.aggregate({
@@ -142,16 +145,22 @@ const getPeriodoStatsCached = unstable_cache(
           productoMap[item.name] = { cantidad: 0, total: 0 };
         }
         productoMap[item.name].cantidad += item.quantity;
-        productoMap[item.name].total += item.price * item.quantity;
+        productoMap[item.name].total += getSaleItemSubtotal(item);
 
         if (item.cost !== null) {
           hasCosts = true;
           mapaCostsPresent[saleDateART] = true;
-          const profit = (item.price - item.cost) * item.quantity;
+          const profit =
+            getSaleItemSubtotal(item) -
+            getSaleItemCostSubtotal({
+              quantity: item.quantity,
+              soldByWeight: item.soldByWeight,
+              cost: item.cost,
+            });
           gananciasBrutas += profit;
           mapaGanancia[saleDateART] = (mapaGanancia[saleDateART] ?? 0) + profit;
         } else {
-          mapaGanancia[saleDateART] = (mapaGanancia[saleDateART] ?? 0) + item.price * item.quantity;
+          mapaGanancia[saleDateART] = (mapaGanancia[saleDateART] ?? 0) + getSaleItemSubtotal(item);
         }
       }
     }
@@ -215,9 +224,15 @@ const getPeriodoStatsCached = unstable_cache(
       for (const item of sale.items) {
         if (item.cost !== null) {
           prevHasCosts = true;
-          prevGananciasBrutas += (item.price - item.cost) * item.quantity;
+          prevGananciasBrutas +=
+            getSaleItemSubtotal(item) -
+            getSaleItemCostSubtotal({
+              quantity: item.quantity,
+              soldByWeight: item.soldByWeight,
+              cost: item.cost,
+            });
         } else {
-          prevGananciasBrutas += item.price * item.quantity;
+          prevGananciasBrutas += getSaleItemSubtotal(item);
         }
       }
     }

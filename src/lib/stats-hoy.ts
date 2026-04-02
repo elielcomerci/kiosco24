@@ -1,5 +1,6 @@
 import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { getSaleItemCostSubtotal, getSaleItemSubtotal } from "@/lib/sale-item";
 
 type HoyStats = {
   enCaja: number;
@@ -30,6 +31,7 @@ export const getHoyStats = unstable_cache(
               price: true,
               cost: true,
               quantity: true,
+              soldByWeight: true,
             },
           },
         },
@@ -74,9 +76,15 @@ export const getHoyStats = unstable_cache(
       for (const item of sale.items) {
         if (item.cost !== null) {
           hasCosts = true;
-          ganancia += (item.price - item.cost) * item.quantity;
+          ganancia +=
+            getSaleItemSubtotal(item) -
+            getSaleItemCostSubtotal({
+              quantity: item.quantity,
+              soldByWeight: item.soldByWeight,
+              cost: item.cost,
+            });
         } else {
-          ganancia += item.price * item.quantity;
+          ganancia += getSaleItemSubtotal(item);
         }
       }
     }

@@ -1,11 +1,13 @@
 import type { Prisma } from "@/lib/prisma";
 import { getPaymentMethodLabel, type TicketPreviewData } from "@/lib/ticket-format";
 import { buildTicketMetaSnapshot, formatTicketNumberValue, parseTicketMetaSnapshot, type TicketSettingsShape } from "@/lib/ticketing";
+import { getSaleItemSubtotal } from "@/lib/sale-item";
 
 type SaleItemLike = {
   name: string;
   quantity: number;
   price: number;
+  soldByWeight?: boolean | null;
 };
 
 type SaleForTicketLike = {
@@ -42,7 +44,7 @@ export function buildTicketPreviewData(
         ? buildTicketMetaSnapshot(fallback.branch, fallback.settings)
         : parseTicketMetaSnapshot(null);
 
-  const subtotal = sale.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const subtotal = sale.items.reduce((sum, item) => sum + getSaleItemSubtotal(item), 0);
   const change =
     sale.paymentMethod === "CASH" && sale.receivedAmount !== null
       ? Math.max(0, sale.receivedAmount - sale.total)
@@ -63,7 +65,8 @@ export function buildTicketPreviewData(
       name: item.name,
       quantity: item.quantity,
       unitPrice: item.price,
-      subtotal: item.price * item.quantity,
+      subtotal: getSaleItemSubtotal(item),
+      soldByWeight: Boolean(item.soldByWeight),
     })),
     subtotal,
     discount: null,

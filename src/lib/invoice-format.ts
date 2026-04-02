@@ -7,6 +7,7 @@ import {
   getReceiverIvaConditionOption,
   parseEmitterSnapshot,
 } from "@/lib/fiscal";
+import { formatSaleItemWeightLabel, getSaleItemSubtotal } from "@/lib/sale-item";
 import type { TicketPrintMode } from "@/lib/ticketing";
 
 export type InvoicePreviewItem = {
@@ -14,6 +15,7 @@ export type InvoicePreviewItem = {
   quantity: number;
   unitPrice: number;
   subtotal: number;
+  soldByWeight?: boolean;
 };
 
 export type InvoicePreviewData = {
@@ -76,6 +78,7 @@ export function buildInvoicePreviewData(
         name: string;
         quantity: number;
         price: number;
+        soldByWeight?: boolean | null;
       }>;
       creditCustomer?: { name: string | null } | null;
     };
@@ -121,7 +124,8 @@ export function buildInvoicePreviewData(
       name: item.name,
       quantity: item.quantity,
       unitPrice: item.price,
-      subtotal: item.quantity * item.price,
+      subtotal: getSaleItemSubtotal(item),
+      soldByWeight: Boolean(item.soldByWeight),
     })),
     total: invoice.impTotal,
     netAmount: invoice.impNeto,
@@ -140,7 +144,11 @@ export function generateWhatsAppInvoiceText(invoice: InvoicePreviewData) {
     ...(invoice.emitterCuit ? [`CUIT: ${invoice.emitterCuit}`] : []),
     ...(invoice.issuedAt ? [`Fecha: ${formatDateForHuman(new Date(invoice.issuedAt))}`] : []),
     "",
-    ...invoice.items.map((item) => `${item.name} x${item.quantity} .... ${formatARS(item.subtotal)}`),
+    ...invoice.items.map((item) =>
+      item.soldByWeight
+        ? `${item.name} ${formatSaleItemWeightLabel(item)} x ${formatARS(item.unitPrice)} /kg .... ${formatARS(item.subtotal)}`
+        : `${item.name} x${item.quantity} .... ${formatARS(item.subtotal)}`
+    ),
     "",
     `*TOTAL: ${formatARS(invoice.total)}*`,
   ];

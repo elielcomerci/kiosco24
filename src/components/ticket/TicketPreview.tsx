@@ -3,6 +3,7 @@
 import TicketQr from "@/components/ticket/TicketQr";
 import { formatARS } from "@/lib/utils";
 import { formatTicketIssuedAt, type TicketPreviewData } from "@/lib/ticket-format";
+import { formatSaleItemWeightLabel } from "@/lib/sale-item";
 
 export default function TicketPreview({
   ticket,
@@ -58,10 +59,10 @@ export default function TicketPreview({
           <div key={`${item.name}-${index}`} className="ticket-preview__item">
             <div className="ticket-preview__item-top">
               <span>{item.name}</span>
-              <span>x{item.quantity}</span>
+              <span>{item.soldByWeight ? formatSaleItemWeightLabel(item) : `x${item.quantity}`}</span>
             </div>
             <div className="ticket-preview__item-bottom">
-              <span>{formatARS(item.unitPrice)} c/u</span>
+              <span>{item.soldByWeight ? `${formatARS(item.unitPrice)} /kg` : `${formatARS(item.unitPrice)} c/u`}</span>
               <strong>{formatARS(item.subtotal)}</strong>
             </div>
           </div>

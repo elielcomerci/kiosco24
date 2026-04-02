@@ -1,12 +1,14 @@
 import { unstable_cache } from "next/cache";
 
 import { prisma } from "@/lib/prisma";
+import { getSaleItemSubtotal } from "@/lib/sale-item";
 import { artDayRange } from "@/lib/utils";
 
 type ResumenVentaItem = {
   name: string;
   quantity: number;
   price: number;
+  soldByWeight?: boolean;
 };
 
 type ResumenVenta = {
@@ -54,6 +56,7 @@ const getResumenVentasCached = unstable_cache(
             name: true,
             quantity: true,
             price: true,
+            soldByWeight: true,
           },
         },
         shift: { select: { employeeName: true } },
@@ -72,7 +75,7 @@ const getResumenVentasCached = unstable_cache(
         name: item.name || "Producto manual",
         quantity: item.quantity,
         price: item.price,
-        total: item.price * item.quantity,
+        total: getSaleItemSubtotal(item),
       })),
     }));
   },

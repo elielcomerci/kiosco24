@@ -3,6 +3,7 @@ import { guardOperationalAccess } from "@/lib/access-control";
 import { getBranchId } from "@/lib/branch";
 import { allocateSaleItemCosts } from "@/lib/inventory-cost-consumption";
 import { consumeTrackedLotsFefo, getOpenStockLots, summarizeTrackedLots } from "@/lib/inventory-expiry";
+import { getSaleItemSubtotal } from "@/lib/sale-item";
 import { PaymentMethod, Prisma, prisma } from "@/lib/prisma";
 import { todayRange } from "@/lib/utils";
 import { UserRole } from "@prisma/client";
@@ -17,6 +18,7 @@ type RawSaleItem = {
   price?: number;
   quantity?: number;
   cost?: number | null;
+  soldByWeight?: boolean;
 };
 
 class RouteError extends Error {
@@ -84,6 +86,7 @@ async function buildSaleSnapshot(
     name: string;
     price: number;
     quantity: number;
+    soldByWeight: boolean;
     cost: number | null;
   }> = [];
 
@@ -121,6 +124,7 @@ async function buildSaleSnapshot(
                 select: {
                   id: true,
                   name: true,
+                  soldByWeight: true,
                 },
               },
             },
@@ -164,6 +168,7 @@ async function buildSaleSnapshot(
         name: `${variantInventory.variant.product.name} - ${variantInventory.variant.name}`,
         price: roundMoney(salePrice),
         quantity,
+        soldByWeight: Boolean(variantInventory.variant.product.soldByWeight),
         cost: typeof saleCost === "number" ? roundMoney(saleCost) : null,
       });
 
@@ -192,6 +197,7 @@ async function buildSaleSnapshot(
             select: {
               id: true,
               name: true,
+              soldByWeight: true,
               variants: {
                 select: { id: true },
                 take: 1,
@@ -219,6 +225,7 @@ async function buildSaleSnapshot(
         name: inventory.product.name,
         price: roundMoney(inventory.price),
         quantity,
+        soldByWeight: Boolean(inventory.product.soldByWeight),
         cost: typeof inventory.cost === "number" ? roundMoney(inventory.cost) : null,
       });
 
@@ -250,6 +257,7 @@ async function buildSaleSnapshot(
       name,
       price: roundMoney(price),
       quantity,
+      soldByWeight: Boolean(rawItem?.soldByWeight),
       cost: normalizedCost,
     });
   }
@@ -317,7 +325,7 @@ async function buildSaleSnapshot(
   }
 
   const total = roundMoney(
-    saleItems.reduce((sum, item) => sum + item.price * item.quantity, 0),
+    saleItems.reduce((sum, item) => sum + getSaleItemSubtotal(item), 0),
   );
 
   return {
@@ -530,6 +538,7 @@ export async function POST(req: Request) {
           productId: item.productId,
           variantId: item.variantId,
           quantity: item.quantity,
+          soldByWeight: item.soldByWeight,
         });
       }
 

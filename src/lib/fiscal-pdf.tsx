@@ -4,6 +4,7 @@ import { put } from "@vercel/blob";
 import QRCode from "qrcode";
 
 import { AFIP_DOCUMENT_TYPES, formatDateForHuman, getEmitterIvaLabel, getSaleConditionLabel, type FiscalEmitterSnapshot } from "@/lib/fiscal";
+import { formatSaleItemWeightLabel } from "@/lib/sale-item";
 import type { TicketPrintMode } from "@/lib/ticketing";
 
 type InvoicePdfInput = {
@@ -25,6 +26,7 @@ type InvoicePdfInput = {
     quantity: number;
     unitPrice: number;
     subtotal: number;
+    soldByWeight?: boolean;
   }>;
 };
 
@@ -373,11 +375,9 @@ function InvoicePdfDocument({
             <View key={`${item.name}-${index}`} wrap={false}>
               <View style={styles.row}>
                 <Text style={styles.itemMeta}>
-                  {new Intl.NumberFormat("es-AR", {
-                    minimumFractionDigits: 3,
-                    maximumFractionDigits: 3,
-                  }).format(item.quantity)}{" "}
-                  x {formatArsPlain(item.unitPrice)}
+                  {item.soldByWeight
+                    ? `${formatSaleItemWeightLabel(item)} x ${formatArsPlain(item.unitPrice)} /kg`
+                    : `${item.quantity} x ${formatArsPlain(item.unitPrice)}`}
                 </Text>
                 <Text style={styles.itemMeta}>{formatArsPlain(item.subtotal)}</Text>
               </View>

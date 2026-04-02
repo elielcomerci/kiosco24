@@ -2,11 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { formatARS } from "@/lib/utils";
+import { formatSaleItemWeightLabel, getSaleItemSubtotal } from "@/lib/sale-item";
 
 interface TicketItem {
   name: string;
   price: number;
   quantity: number;
+  soldByWeight?: boolean;
 }
 
 interface ConfirmationScreenProps {
@@ -114,10 +116,14 @@ export default function ConfirmationScreen({
         {sale.items.map((item, index) => (
           <div key={index} className="ticket-item">
             <span style={{ fontSize: "14px" }}>
-              {item.quantity > 1 ? `${item.quantity}x ` : ""}
+              {item.soldByWeight
+                ? `${formatSaleItemWeightLabel(item)} `
+                : item.quantity > 1
+                  ? `${item.quantity}x `
+                  : ""}
               {item.name}
             </span>
-            <span style={{ fontWeight: 600 }}>{formatARS(item.price * item.quantity)}</span>
+            <span style={{ fontWeight: 600 }}>{formatARS(getSaleItemSubtotal(item))}</span>
           </div>
         ))}
 

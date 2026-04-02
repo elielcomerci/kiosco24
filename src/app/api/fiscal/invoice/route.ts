@@ -8,6 +8,7 @@ import { buildEmitterSnapshot, getAfipDateNumber, getReceiverName, normalizeDocN
 import { sanitizeReceiverName } from "@/lib/fiscal-invoices";
 import { getAfipInstance } from "@/lib/fiscal-server";
 import { buildInvoicePreviewData } from "@/lib/invoice-format";
+import { getSaleItemSubtotal } from "@/lib/sale-item";
 import { getPaymentMethodLabel } from "@/lib/ticket-format";
 import { getDefaultTicketSettings } from "@/lib/ticketing";
 import { FiscalVatCondition, InvoiceStatus, Prisma, prisma } from "@/lib/prisma";
@@ -102,13 +103,14 @@ export async function POST(req: Request) {
         },
       },
       items: {
-        select: {
-          name: true,
-          quantity: true,
-          price: true,
+          select: {
+            name: true,
+            quantity: true,
+            price: true,
+            soldByWeight: true,
+          },
         },
       },
-    },
   });
 
   if (!sale) {
@@ -273,7 +275,8 @@ export async function POST(req: Request) {
           name: item.name,
           quantity: item.quantity,
           unitPrice: item.price,
-          subtotal: item.quantity * item.price,
+          subtotal: getSaleItemSubtotal(item),
+          soldByWeight: item.soldByWeight,
         })),
       });
 
@@ -333,6 +336,7 @@ export async function POST(req: Request) {
                 name: true,
                 quantity: true,
                 price: true,
+                soldByWeight: true,
               },
             },
           },
@@ -390,6 +394,7 @@ export async function POST(req: Request) {
                 name: true,
                 quantity: true,
                 price: true,
+                soldByWeight: true,
               },
             },
           },

@@ -71,6 +71,7 @@ interface Product {
   availableStock?: number | null;
   minStock: number | null;
   showInGrid: boolean;
+  soldByWeight: boolean;
   readyForSale?: boolean;
   allowNegativeStock?: boolean;
   platformProductId?: string | null;
@@ -118,6 +119,7 @@ type ProductModalDraft = {
   presentation?: string | null;
   supplierName?: string | null;
   categoryId?: string | null;
+  soldByWeight?: boolean;
 };
 
 type PricingMode = "SHARED" | "BRANCH";
@@ -632,6 +634,7 @@ function ProductModal({
   const [quickStockAdd, setQuickStockAdd] = useState("");
   const [minStock, setMinStock] = useState(product?.minStock?.toString() || "");
   const [showInGrid, setShowInGrid] = useState(product?.showInGrid ?? true);
+  const [soldByWeight, setSoldByWeight] = useState(product?.soldByWeight ?? draftSeed?.soldByWeight ?? false);
   const [loading, setLoading] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -986,6 +989,7 @@ function ProductModal({
       stock: hasVariants ? null : isInlineCreateOnly ? 0 : toNum(stock),
       minStock: hasVariants ? null : toNum(minStock),
       showInGrid,
+      soldByWeight,
       ...(isOwner ? { platformSyncMode } : {}),
       variants: hasVariants ? variants.map(v => ({
         id: v.id,
@@ -2293,6 +2297,53 @@ function ProductModal({
           </div>
         )}
 
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "12px 16px",
+            background: "var(--surface-2)",
+            borderRadius: "var(--radius)",
+            border: "1px solid var(--border)",
+            marginBottom: "12px",
+          }}
+        >
+          <div>
+            <div style={{ fontWeight: 600 }}>Vender por peso</div>
+            <div style={{ fontSize: "12px", color: "var(--text-3)" }}>
+              El precio y el costo se toman por kilo, y la venta se carga en gramos.
+            </div>
+          </div>
+          <button
+            style={{
+              width: "44px",
+              height: "24px",
+              borderRadius: "99px",
+              background: soldByWeight ? "var(--green)" : "var(--border)",
+              border: "none",
+              cursor: "pointer",
+              transition: "background 0.2s",
+              position: "relative",
+              flexShrink: 0,
+            }}
+            onClick={() => setSoldByWeight((v) => !v)}
+          >
+            <span
+              style={{
+                position: "absolute",
+                top: "2px",
+                left: soldByWeight ? "22px" : "2px",
+                width: "20px",
+                height: "20px",
+                borderRadius: "50%",
+                background: "white",
+                transition: "left 0.2s",
+              }}
+            />
+          </button>
+        </div>
+
         {/* Actions */}
         {saveError && (
           <div style={{ fontSize: "12px", color: "var(--red)", marginBottom: "8px" }}>
@@ -2486,6 +2537,7 @@ function StockLoadingModal({
       name: barcodeSeed ? "" : trimmedSearch,
       barcode: barcodeSeed,
       supplierName: supplierName.trim() || null,
+      soldByWeight: false,
     };
   };
 
@@ -5522,6 +5574,25 @@ export default function ProductosPage() {
                 <ProductThumb image={p.image} emoji={p.emoji} name={p.name} size={56} radius={16} previewable />
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 700, fontSize: "calc(15px * var(--device-font-scale, 1))", color: "var(--text)" }}>{p.name}</div>
+                  {p.soldByWeight && (
+                    <span
+                      style={{
+                        display: "inline-flex",
+                        marginTop: "6px",
+                        padding: "3px 7px",
+                        borderRadius: "999px",
+                        fontSize: "10px",
+                        fontWeight: 800,
+                        letterSpacing: "0.04em",
+                        textTransform: "uppercase",
+                        color: "#f8fafc",
+                        background: "linear-gradient(180deg, rgba(245,158,11,.92), rgba(217,119,6,.92))",
+                        border: "1px solid rgba(251,191,36,.45)",
+                      }}
+                    >
+                      Por peso
+                    </span>
+                  )}
                   <div style={{ fontSize: "12px", color: "var(--text-3)" }}>
                     {[p.internalCode, p.barcode, p.supplierName].filter(Boolean).join(" · ") || "Sin codigo extra"}
                   </div>
@@ -5596,6 +5667,25 @@ export default function ProductosPage() {
                     {p.name}
                     {!p.showInGrid && <span style={{ fontSize: "10px", color: "var(--text-3)", marginLeft: "6px" }}>oculto</span>}
                   </div>
+                  {p.soldByWeight && (
+                    <span
+                      style={{
+                        display: "inline-flex",
+                        marginTop: "6px",
+                        padding: "3px 7px",
+                        borderRadius: "999px",
+                        fontSize: "10px",
+                        fontWeight: 800,
+                        letterSpacing: "0.04em",
+                        textTransform: "uppercase",
+                        color: "#f8fafc",
+                        background: "linear-gradient(180deg, rgba(245,158,11,.92), rgba(217,119,6,.92))",
+                        border: "1px solid rgba(251,191,36,.45)",
+                      }}
+                    >
+                      Por peso
+                    </span>
+                  )}
                   <div style={{ fontSize: "12px", color: "var(--text-3)" }}>
                     {[p.internalCode, p.barcode, p.supplierName].filter(Boolean).join(" · ") || "Sin codigo extra"}
                   </div>

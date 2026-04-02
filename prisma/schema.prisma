@@ -234,6 +234,7 @@ model Product {
   presentation      String?
   supplierName      String?
   notes             String?           @db.Text
+  soldByWeight      Boolean           @default(false)
   categoryId        String?
   category          Category?         @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   platformProductId String?
@@ -608,6 +609,7 @@ model SaleItem {
   name      String
   price     Float
   quantity  Int
+  soldByWeight Boolean @default(false)
   cost      Float?
   lotConsumptions SaleLotConsumption[]
   costAllocations SaleCostAllocation[]

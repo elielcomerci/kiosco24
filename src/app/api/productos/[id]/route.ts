@@ -369,6 +369,7 @@ export async function PATCH(
     presentation,
     supplierName,
     notes,
+    soldByWeight,
     categoryId,
     price,
     cost,
@@ -610,6 +611,7 @@ export async function PATCH(
       ...(presentation !== undefined && { presentation: normalizedPresentation }),
       ...(supplierName !== undefined && { supplierName: normalizedSupplierName }),
       ...(notes !== undefined && { notes: normalizedNotes }),
+      ...(soldByWeight !== undefined && { soldByWeight: Boolean(soldByWeight) }),
       ...(categoryId !== undefined && {
         categoryId: resolvedCategory.categoryId,
       }),

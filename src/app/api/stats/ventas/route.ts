@@ -3,6 +3,7 @@ import { getBranchId } from "@/lib/branch";
 import { prisma } from "@/lib/prisma";
 import { unstable_cache } from "next/cache";
 import { NextResponse } from "next/server";
+import { getSaleItemSubtotal } from "@/lib/sale-item";
 import { artDayRange, todayART } from "@/lib/utils";
 
 // GET /api/stats/ventas?periodo=dia|semana|mes&isoDate=YYYY-MM-DD&metodo=XXX&empleadoId=XXX&search=XXX
@@ -82,6 +83,7 @@ const getVentasStats = unstable_cache(
             name: true,
             quantity: true,
             price: true,
+            soldByWeight: true,
           },
         },
         createdByEmployee: { select: { name: true } },
@@ -123,7 +125,7 @@ const getVentasStats = unstable_cache(
           productoMap[item.name] = { name: item.name, cantidad: 0, total: 0 };
         }
         productoMap[item.name].cantidad += item.quantity;
-        productoMap[item.name].total += item.price * item.quantity;
+        productoMap[item.name].total += getSaleItemSubtotal(item);
       }
 
       if (sale.paymentMethod === "CREDIT") {

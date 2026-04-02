@@ -3,12 +3,24 @@ import { InventoryCostLayerSourceType, Prisma, type PrismaClient } from "@prisma
 type CostTx = Prisma.TransactionClient;
 type CostClient = Prisma.TransactionClient | PrismaClient;
 
+const GRAMS_PER_KILO = 1000;
+
+function roundMoney(value: number) {
+  return Math.round(value * 100) / 100;
+}
+
+function getAllocationTotalCost(quantity: number, unitCost: number, soldByWeight: boolean) {
+  const effectiveQuantity = soldByWeight ? quantity / GRAMS_PER_KILO : quantity;
+  return roundMoney(effectiveQuantity * unitCost);
+}
+
 type SaleAllocationInput = {
   saleItemId: string;
   branchId: string;
   productId: string;
   variantId?: string | null;
   quantity: number;
+  soldByWeight?: boolean;
 };
 
 async function syncLayerAllocationCosts(tx: CostTx, layerId: string, unitCost: number) {
@@ -17,6 +29,11 @@ async function syncLayerAllocationCosts(tx: CostTx, layerId: string, unitCost: n
     select: {
       id: true,
       quantity: true,
+      saleItem: {
+        select: {
+          soldByWeight: true,
+        },
+      },
     },
   });
 
@@ -25,7 +42,7 @@ async function syncLayerAllocationCosts(tx: CostTx, layerId: string, unitCost: n
       where: { id: allocation.id },
       data: {
         unitCost,
-        totalCost: allocation.quantity * unitCost,
+        totalCost: getAllocationTotalCost(allocation.quantity, unitCost, Boolean(allocation.saleItem?.soldByWeight)),
       },
     });
   }
@@ -61,6 +78,11 @@ export async function resolveNegativeReservationsWithLayer(tx: CostTx, layerId: 
       id: true,
       saleItemId: true,
       quantityPending: true,
+      saleItem: {
+        select: {
+          soldByWeight: true,
+        },
+      },
     },
   });
 
@@ -85,7 +107,7 @@ export async function resolveNegativeReservationsWithLayer(tx: CostTx, layerId: 
         variantId: layer.variantId,
         quantity: allocatedQuantity,
         unitCost: layer.unitCost,
-        totalCost: allocatedQuantity * layer.unitCost,
+        totalCost: getAllocationTotalCost(allocatedQuantity, layer.unitCost, Boolean(reservation.saleItem?.soldByWeight)),
       },
     });
 
@@ -115,7 +137,7 @@ export async function allocateSaleItemCosts(
   tx: CostTx,
   input: SaleAllocationInput,
 ) {
-  const { saleItemId, branchId, productId, variantId, quantity } = input;
+  const { saleItemId, branchId, productId, variantId, quantity, soldByWeight = false } = input;
 
   if (quantity <= 0) {
     return {
@@ -176,7 +198,7 @@ export async function allocateSaleItemCosts(
         variantId: variantId ?? null,
         quantity: quantityToAllocate,
         unitCost: layer.unitCost,
-        totalCost: quantityToAllocate * layer.unitCost,
+        totalCost: getAllocationTotalCost(quantityToAllocate, layer.unitCost, soldByWeight),
       },
     });
 

@@ -14,23 +14,13 @@ export function formatARS(amount: number): string {
  * Argentina timezone offset string (UTC-3, no DST)
  */
 const ART_OFFSET = "-03:00";
+const ART_OFFSET_MS = 3 * 60 * 60 * 1000;
 
 /**
  * Get an ISO date string (YYYY-MM-DD) for today in Argentina time.
  */
 export function todayART(): string {
-  // Use Intl to get the local date components in ART
-  const now = new Date();
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Argentina/Buenos_Aires",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(now);
-  const y = parts.find((p) => p.type === "year")?.value;
-  const m = parts.find((p) => p.type === "month")?.value;
-  const d = parts.find((p) => p.type === "day")?.value;
-  return `${y}-${m}-${d}`;
+  return new Date(Date.now() - ART_OFFSET_MS).toISOString().slice(0, 10);
 }
 
 /**

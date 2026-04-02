@@ -1,74 +1,32 @@
 import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
-import { NextResponse } from "next/server";
-import { todayRange } from "@/lib/utils";
 import { getBranchId } from "@/lib/branch";
-import { Prisma } from "@prisma/client";
-
-type SaleWithItemsAndShift = Prisma.SaleGetPayload<{
-  include: {
-    items: true;
-    shift: { select: { employeeName: true } };
-  };
-}>;
-
-type SaleSummaryResponse = {
-  id: string;
-  total: number;
-  paymentMethod: string;
-  voided: boolean;
-  createdAt: Date;
-  employeeName: string;
-  items: {
-    name: string;
-    quantity: number;
-    price: number;
-    total: number;
-  }[];
-};
+import { getResumenVentas } from "@/lib/resumen-ventas";
+import { todayART } from "@/lib/utils";
+import { NextResponse } from "next/server";
 
 // GET /api/resumen/ventas
-// Retorna las ventas detalladas del día
+// Retorna las ventas detalladas del dia
 export async function GET(req: Request) {
   const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const isOwner = session.user.role === "OWNER";
   const isManager = session.user.employeeRole === "MANAGER";
   const isCashier = session.user.role === "EMPLOYEE" && session.user.employeeRole === "CASHIER";
-  
+
   if (!isOwner && !isManager && !isCashier) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const branchId = await getBranchId(req, session.user.id);
-  if (!branchId) return NextResponse.json({ error: "No branch" }, { status: 404 });
+  if (!branchId) {
+    return NextResponse.json({ error: "No branch" }, { status: 404 });
+  }
 
-  const { start, end } = todayRange();
+  const isoDate = todayART();
+  const data = await getResumenVentas(branchId, isoDate);
 
-  const sales = await prisma.sale.findMany({
-    where: { branchId, createdAt: { gte: start, lte: end } },
-    include: {
-      items: true,
-      shift: { select: { employeeName: true } }
-    },
-    orderBy: { createdAt: "desc" },
-  });
-
-  const formattedSales: SaleSummaryResponse[] = sales.map((s: SaleWithItemsAndShift) => ({
-    id: s.id,
-    total: s.total,
-    paymentMethod: s.paymentMethod,
-    voided: s.voided,
-    createdAt: s.createdAt,
-    employeeName: s.shift?.employeeName || "Dueño",
-    items: s.items.map((i) => ({
-      name: i.name || "Producto manual",
-      quantity: i.quantity,
-      price: i.price,
-      total: i.price * i.quantity
-    }))
-  }));
-
-  return NextResponse.json(formattedSales);
+  return NextResponse.json(data);
 }

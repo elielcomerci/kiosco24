@@ -43,7 +43,7 @@ export function formatSaleItemWeightLabel(item: WeightLabelLike) {
   return `${formatQuantityKg(item.quantity)} kg`;
 }
 
-export function parseWeightInputToGrams(value: string) {
+export function parseWeightInputToGrams(value: string, assumeWholeNumbersAreKilos = false) {
   const normalized = value.trim().toLowerCase().replace(",", ".");
   if (!normalized) {
     return null;
@@ -75,18 +75,18 @@ export function parseWeightInputToGrams(value: string) {
     return null;
   }
 
-  const unit = gramsMatch[2] ?? "kg";
+  const unit = gramsMatch[2] ?? (assumeWholeNumbersAreKilos ? "kg" : "g");
   if (unit === "g" || unit === "gr") {
     return Math.round(numeric);
   }
 
-  if (!gramsMatch[2]) {
-    if (normalized.includes(".")) {
-      return Math.round(numeric * GRAMS_PER_KILO);
-    }
-
-    return Math.round(numeric);
+  if (unit === "kg") {
+    return Math.round(numeric * GRAMS_PER_KILO);
   }
 
-  return Math.round(numeric * GRAMS_PER_KILO);
+  if (normalized.includes(".")) {
+    return Math.round(numeric * GRAMS_PER_KILO);
+  }
+
+  return Math.round(numeric);
 }

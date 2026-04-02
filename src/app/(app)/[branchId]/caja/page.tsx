@@ -19,6 +19,9 @@ import ModalPortal from "@/components/ui/ModalPortal";
 import TicketModal from "@/components/ticket/TicketModal";
 import InvoiceModal from "@/components/fiscal/InvoiceModal";
 import type { InvoicePreviewData } from "@/lib/invoice-format";
+import TrialWelcomeModal from "@/components/trial/TrialWelcomeModal";
+import TrialBanner from "@/components/trial/TrialBanner";
+import { calculateTrialInfo, getTrialMessage } from "@/lib/trial-manager";
 
 import { savePendingSale } from "@/lib/offline/db";
 import { useOnlineStatus } from "@/lib/offline/sync";
@@ -311,8 +314,37 @@ export default function CajaPage() {
   const [variantSelector, setVariantSelector] = useState<{ product: Product } | null>(null);
   const [isTicketExpanded, setIsTicketExpanded] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  
+  // Trial states
+  const [showTrialWelcome, setShowTrialWelcome] = useState(false);
+  const [trialDismissed, setTrialDismissed] = useState(false);
+  const [trialInfo, setTrialInfo] = useState<{
+    isInTrial: boolean;
+    remainingHours: number;
+    isExpired: boolean;
+  } | null>(null);
+  
   const searchInputRef = useRef<HTMLInputElement>(null);
   const handleBarcodeScanRef = useRef<(code: string) => void>(() => {});
+  
+  // Trial handlers
+  const handleTrialExplore = useCallback(() => {
+    setShowTrialWelcome(false);
+  }, []);
+  
+  const handleTrialActivate = useCallback(() => {
+    setShowTrialWelcome(false);
+    router.push("/configuracion");
+  }, [router]);
+  
+  const handleTrialBannerDismiss = useCallback(() => {
+    setTrialDismissed(true);
+  }, []);
+  
+  const handleTrialBannerActivate = useCallback(() => {
+    router.push("/configuracion");
+  }, [router]);
+  
   const keyboardScanBufferRef = useRef("");
   const keyboardScanStartedAtRef = useRef(0);
   const keyboardScanLastKeyAtRef = useRef(0);
@@ -387,6 +419,44 @@ export default function CajaPage() {
       });
     }
   }, [activeShift]);
+
+  // ─── Trial Logic ───────────────────────────────────────────────────────
+  useEffect(() => {
+    async function checkTrial() {
+      try {
+        const res = await fetch("/api/subscription/status", {
+          headers: { "x-branch-id": branchId },
+        });
+        
+        if (!res.ok) return;
+        
+        const data = await res.json();
+        const { trialStartsAt, trialEndsAt, status } = data.subscription || {};
+        
+        const hasActiveSubscription = status === "ACTIVE";
+        const trial = calculateTrialInfo(
+          trialStartsAt ? new Date(trialStartsAt) : null,
+          trialEndsAt ? new Date(trialEndsAt) : null,
+          hasActiveSubscription
+        );
+        
+        setTrialInfo({
+          isInTrial: trial.isInTrial,
+          remainingHours: trial.remainingHours,
+          isExpired: trial.isExpired,
+        });
+        
+        // Mostrar modal de bienvenida si está en trial y no expiró
+        if (trial.isInTrial && !trial.isExpired && !hasActiveSubscription) {
+          setShowTrialWelcome(true);
+        }
+      } catch (error) {
+        console.error("[Trial] Error checking status:", error);
+      }
+    }
+    
+    checkTrial();
+  }, [branchId]);
 
   // ─── Keyboard Shortcuts ───────────────────────────────────────────────────
   const resetKeyboardScannerState = useCallback(() => {
@@ -2389,6 +2459,24 @@ export default function CajaPage() {
             </div>
           </div>
         </ModalPortal>
+      )}
+
+      {/* Trial Welcome Modal */}
+      {showTrialWelcome && trialInfo && (
+        <TrialWelcomeModal
+          remainingHours={trialInfo.remainingHours}
+          onExplore={handleTrialExplore}
+          onActivate={handleTrialActivate}
+        />
+      )}
+
+      {/* Trial Banner */}
+      {trialInfo?.isInTrial && !trialInfo.isExpired && !showTrialWelcome && !trialDismissed && (
+        <TrialBanner
+          remainingHours={trialInfo.remainingHours}
+          onActivate={handleTrialBannerActivate}
+          onDismiss={handleTrialBannerDismiss}
+        />
       )}
     </div>
   );

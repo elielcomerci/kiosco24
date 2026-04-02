@@ -858,6 +858,8 @@ model Subscription {
   status          SubscriptionStatus @default(PENDING)
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
+  trialStartsAt DateTime?  @map("trial_starts_at")
+  trialEndsAt   DateTime?  @map("trial_ends_at")
 }
 
 model SubscriptionPriceOverride {

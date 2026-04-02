@@ -15,41 +15,8 @@ import {
 import { optimizeBrandingImage } from "@/lib/image-upload";
 import type { TicketPreviewData } from "@/lib/ticket-format";
 import { getTicketPrintModeLabel, type TicketPrintMode } from "@/lib/ticketing";
-
-interface Employee {
-  id: string;
-  name: string;
-  role: "CASHIER" | "MANAGER";
-  branches: { id: string; name: string }[];
-  hasPin: boolean;
-  active: boolean;
-  suspendedUntil: string | null; // ISO string for form state
-}
-
-interface Category {
-  id: string;
-  name: string;
-  color: string | null;
-  showInGrid?: boolean;
-}
-
-interface Branch {
-  id: string;
-  name: string;
-  address: string | null;
-  phone: string | null;
-  logoUrl: string | null;
-  primaryColor: string | null;
-  bgColor: string | null;
-  allowNegativeStock: boolean;
-  mpUserId: string | null;
-  mpStoreId: string | null;
-  mpPosId: string | null;
-  accessKey: string | null;
-}
-
-type PricingMode = "SHARED" | "BRANCH";
-type FiscalEnvironment = "TEST" | "PROD";
+import ConfigTabsContainer from "./ConfigTabsContainer";
+import type { Employee, Category, Branch, PricingMode, FiscalEnvironment } from "./types";
 
 // ─── Employee Form Modal ───────────────────────────────────────────────────────
 function EmployeeModal({

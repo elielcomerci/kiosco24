@@ -92,55 +92,89 @@ export default function ZapAdSlot({ zone, branchId }: ZapAdSlotProps) {
     case 'text_only':
       return (
         <div 
-            onClick={handleAction}
-            className="group relative flex flex-col md:flex-row items-center justify-between p-4 md:p-5 rounded-2xl cursor-pointer mb-6 transform hover:-translate-y-1 transition-all duration-300 ease-out shadow-sm hover:shadow-lg overflow-hidden border border-white/20"
-            style={{ 
-              background: `linear-gradient(135deg, ${bgColor}ee 0%, ${bgColor}bb 100%)`,
-              backdropFilter: 'blur(10px)'
-            }}
+          onClick={handleAction}
+          style={{ 
+             background: `linear-gradient(135deg, ${bgColor}ee 0%, ${bgColor}dd 100%)`,
+             backdropFilter: 'blur(10px)',
+             border: '1px solid rgba(255,255,255,0.2)',
+             boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+             borderRadius: '16px',
+             padding: '16px 20px',
+             marginBottom: '24px',
+             cursor: 'pointer',
+             display: 'flex',
+             flexDirection: 'row',
+             alignItems: 'center',
+             justifyContent: 'space-between',
+             gap: '16px',
+             transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+          }}
+          onMouseEnter={(e) => {
+             e.currentTarget.style.transform = 'translateY(-2px)';
+             e.currentTarget.style.boxShadow = '0 6px 24px rgba(0,0,0,0.2)';
+          }}
+          onMouseLeave={(e) => {
+             e.currentTarget.style.transform = 'translateY(0)';
+             e.currentTarget.style.boxShadow = '0 4px 20px rgba(0,0,0,0.15)';
+          }}
         >
-            {/* Shimmer effect on hover */}
-            <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-700 bg-gradient-to-r from-transparent via-white/20 to-transparent -skew-x-12 translate-x-[-150%] group-hover:translate-x-[150%]" />
-            
-            <div className="flex items-center gap-4 w-full z-10">
-                <div 
-                  className="hidden sm:flex items-center justify-center w-10 h-10 rounded-full shadow-inner"
-                  style={{ backgroundColor: `${textColor}15` }}
-                >
-                  <span className="text-xl filter drop-shadow-sm">⚡</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flex: 1, flexWrap: 'wrap' }}>
+                <div style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center', 
+                  width: '40px', 
+                  height: '40px', 
+                  borderRadius: '50%',
+                  backgroundColor: `${textColor}15`,
+                  boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.1)',
+                  flexShrink: 0
+                }}>
+                  <span style={{ fontSize: '20px' }}>⚡</span>
                 </div>
-                <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1 flex-wrap">
-                      <p style={{ color: textColor }} className="text-sm sm:text-base font-black m-0 leading-tight tracking-tight">
+                
+                <div style={{ flex: 1, minWidth: '200px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
+                      <p style={{ color: textColor, margin: 0, fontSize: '15px', fontWeight: 800, lineHeight: 1.2 }}>
                           {ad.content.title}
                       </p>
                       {discountBadge && (
-                          <span className="text-[10px] sm:text-xs font-black px-2 py-0.5 rounded-full text-white shrink-0 shadow-sm" style={{ backgroundColor: textColor }}>
+                          <span style={{ 
+                              backgroundColor: textColor, 
+                              color: bgColor,
+                              fontSize: '11px', 
+                              fontWeight: 900, 
+                              padding: '2px 8px', 
+                              borderRadius: '99px',
+                              boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                          }}>
                               {discountBadge}
                           </span>
                       )}
                     </div>
                     {ad.content.description && (
-                        <p className="text-xs sm:text-sm m-0 mt-1 leading-relaxed opacity-90 font-medium" style={{ color: `${textColor}cc` }}>
+                        <p style={{ color: textColor, opacity: 0.9, margin: 0, fontSize: '13px', fontWeight: 500, lineHeight: 1.4 }}>
                             {ad.content.description}
                         </p>
                     )}
                 </div>
-                {ad.content.ctaText && (
-                    <div 
-                        className="hidden sm:flex px-4 py-2 rounded-xl text-sm font-bold text-white shadow-md group-hover:shadow-lg transition-all"
-                        style={{ backgroundColor: textColor }}
-                    >
-                        {ad.content.ctaText}
-                    </div>
-                )}
             </div>
-            {/* Mobile CTA */}
+
             {ad.content.ctaText && (
-                <div 
-                    className="sm:hidden w-full mt-3 px-4 py-2 rounded-xl text-sm text-center font-bold text-white shadow-sm"
-                    style={{ backgroundColor: textColor }}
-                >
+                <div style={{
+                    backgroundColor: textColor,
+                    color: bgColor,
+                    padding: '8px 16px',
+                    borderRadius: '10px',
+                    fontSize: '13px',
+                    fontWeight: 800,
+                    whiteSpace: 'nowrap',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    alignSelf: 'center'
+                }}>
                     {ad.content.ctaText}
                 </div>
             )}
@@ -151,41 +185,93 @@ export default function ZapAdSlot({ zone, branchId }: ZapAdSlotProps) {
       return (
         <div 
           onClick={handleAction}
-          className="group relative overflow-hidden rounded-2xl cursor-pointer mb-6 transform hover:scale-[1.02] transition-all duration-300 ease-in-out shadow-md hover:shadow-xl border border-white/10"
           style={{ 
-            background: `linear-gradient(to right, ${bgColor}, ${bgColor}ee)`,
+             background: `linear-gradient(to right, ${bgColor}, ${bgColor}ee)`,
+             border: '1px solid rgba(255,255,255,0.1)',
+             boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+             borderRadius: '16px',
+             padding: '24px',
+             marginBottom: '24px',
+             cursor: 'pointer',
+             display: 'flex',
+             flexDirection: 'row',
+             alignItems: 'center',
+             justifyContent: 'space-between',
+             gap: '20px',
+             position: 'relative',
+             overflow: 'hidden',
+             transition: 'transform 0.2s ease',
           }}
+          onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.01)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
         >
-           <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none" />
-           <div className="p-5 sm:p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5 relative z-10">
-              <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-2 flex-wrap">
-                      <span className="text-[10px] sm:text-xs font-black tracking-widest uppercase px-2 py-1 rounded-md text-white bg-black/20 backdrop-blur-sm shadow-inner" style={{ color: textColor }}>
-                          ZAP PREMIUM
-                      </span>
-                      {discountBadge && (
-                          <span className="text-[10px] sm:text-xs font-black px-2 py-1 rounded-md text-white shadow-sm" style={{ backgroundColor: textColor }}>
-                              {discountBadge}
-                          </span>
-                      )}
-                  </div>
-                  <h3 style={{ color: textColor }} className="text-lg sm:text-xl font-black m-0 mb-1.5 tracking-tight drop-shadow-sm">
-                      {ad.content.title}
-                  </h3>
-                  {ad.content.description && (
-                      <p className="text-sm sm:text-base m-0 max-w-lg font-medium opacity-90" style={{ color: `${textColor}dd` }}>
-                          {ad.content.description}
-                      </p>
-                  )}
-              </div>
-              <div className="w-full sm:w-auto mt-2 sm:mt-0">
-                  <button 
-                      className="w-full sm:w-auto px-6 py-3 rounded-xl text-sm font-black text-white transition-all group-hover:brightness-110 group-hover:scale-105 border-none cursor-pointer shadow-lg active:scale-95"
-                      style={{ backgroundColor: textColor }}
-                  >
-                      {ad.content.ctaText || "Activar ahora"} →
-                  </button>
-              </div>
+           <div style={{
+               position: 'absolute',
+               top: 0,
+               right: 0,
+               width: '250px',
+               height: '250px',
+               background: 'rgba(255,255,255,0.1)',
+               borderRadius: '50%',
+               filter: 'blur(40px)',
+               transform: 'translate(50%, -50%)',
+               pointerEvents: 'none'
+           }} />
+
+           <div style={{ flex: 1, zIndex: 1, minWidth: '220px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', flexWrap: 'wrap' }}>
+                    <span style={{ 
+                        color: textColor,
+                        backgroundColor: 'rgba(0,0,0,0.2)',
+                        backdropFilter: 'blur(4px)',
+                        fontSize: '11px',
+                        fontWeight: 900,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.05em',
+                        padding: '4px 8px',
+                        borderRadius: '6px',
+                        boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.2)'
+                    }}>
+                        ZAP PREMIUM
+                    </span>
+                    {discountBadge && (
+                        <span style={{ 
+                            backgroundColor: textColor, 
+                            color: bgColor,
+                            fontSize: '11px', 
+                            fontWeight: 900, 
+                            padding: '4px 8px', 
+                            borderRadius: '6px',
+                            boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                        }}>
+                            {discountBadge}
+                        </span>
+                    )}
+                </div>
+                <h3 style={{ color: textColor, fontSize: '20px', fontWeight: 900, margin: '0 0 6px 0', textShadow: '0 1px 2px rgba(0,0,0,0.1)' }}>
+                    {ad.content.title}
+                </h3>
+                {ad.content.description && (
+                    <p style={{ color: textColor, opacity: 0.9, fontSize: '15px', fontWeight: 500, margin: 0, maxWidth: '500px', lineHeight: 1.4 }}>
+                        {ad.content.description}
+                    </p>
+                )}
+           </div>
+
+           <div style={{ zIndex: 1 }}>
+               <button style={{
+                   backgroundColor: textColor,
+                   color: bgColor,
+                   border: 'none',
+                   padding: '12px 24px',
+                   borderRadius: '12px',
+                   fontSize: '14px',
+                   fontWeight: 900,
+                   cursor: 'pointer',
+                   boxShadow: '0 8px 16px rgba(0,0,0,0.15)',
+               }}>
+                   {ad.content.ctaText || "Activar ahora"} →
+               </button>
            </div>
         </div>
       )

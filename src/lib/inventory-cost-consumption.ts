@@ -1,5 +1,6 @@
 import { InventoryCostLayerSourceType, Prisma, type PrismaClient } from "@prisma/client";
 
+
 type CostTx = Prisma.TransactionClient;
 type CostClient = Prisma.TransactionClient | PrismaClient;
 

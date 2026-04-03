@@ -1,5 +1,3 @@
-import { unstable_cache } from "next/cache";
-
 import { prisma } from "@/lib/prisma";
 
 type StockStats = {
@@ -95,8 +93,7 @@ function roundMoney(value: number): number {
   return Math.round(value);
 }
 
-const getStockStatsCached = unstable_cache(
-  async (
+export const getStockStats = async (
     branchId: string,
     targetBranchIdsKey: string,
     scope: "branch" | "kiosco",
@@ -380,9 +377,4 @@ const getStockStatsCached = unstable_cache(
       reposicionesRecientes: reposiciones,
       productosTop,
     };
-  },
-  ["stats-stock"],
-  { revalidate: 30 }
-);
-
-export { getStockStatsCached as getStockStats };
+};

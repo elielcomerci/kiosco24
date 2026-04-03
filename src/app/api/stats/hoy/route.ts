@@ -14,10 +14,6 @@ export async function GET(req: Request) {
   const canSeeProfit = session.user.role === "OWNER" || session.user.employeeRole === "MANAGER";
   const isCashier = session.user.employeeRole === "CASHIER";
 
-  if (isCashier) {
-    return NextResponse.json({ error: "No tenés permiso para ver estadísticas." }, { status: 403 });
-  }
-
   const branchId = await getBranchId(req, session.user.id);
   if (!branchId) {
     return NextResponse.json({ enCaja: 0, ganancia: 0, hasCosts: false });

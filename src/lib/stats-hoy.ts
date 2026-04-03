@@ -1,4 +1,4 @@
-import { unstable_cache } from "next/cache";
+
 import { prisma } from "@/lib/prisma";
 import { getSaleItemCostSubtotal, getSaleItemSubtotal } from "@/lib/sale-item";
 
@@ -18,8 +18,7 @@ type HoyStats = {
   totalRetiros: number;
 };
 
-export const getHoyStats = unstable_cache(
-  async (branchId: string, shiftId: string, openingAmount = 0): Promise<HoyStats> => {
+export const getHoyStats = async (branchId: string, shiftId: string, openingAmount = 0): Promise<HoyStats> => {
     const [allSales, expenses, withdrawals] = await Promise.all([
       prisma.sale.findMany({
         where: { shiftId, voided: false },
@@ -118,7 +117,4 @@ export const getHoyStats = unstable_cache(
       totalGastos: Math.round(expensesTotal),
       totalRetiros: Math.round(withdrawalsTotal),
     };
-  },
-  ["stats-hoy"],
-  { revalidate: 15 }
-);
+};

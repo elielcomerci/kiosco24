@@ -1,4 +1,3 @@
-import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { artDayRange } from "@/lib/utils";
 
@@ -39,8 +38,7 @@ type TurnosStats = {
   }>;
 };
 
-const getTurnosStatsCached = unstable_cache(
-  async (
+export const getTurnosStats = async (
     branchId: string,
     periodo: Periodo,
     isoDate: string,
@@ -239,9 +237,4 @@ const getTurnosStatsCached = unstable_cache(
       },
       diferenciasPorTurno,
     };
-  },
-  ["stats-turnos"],
-  { revalidate: 30 }
-);
-
-export { getTurnosStatsCached as getTurnosStats };
+};

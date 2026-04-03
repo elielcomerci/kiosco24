@@ -1,4 +1,3 @@
-import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getSaleItemCostSubtotal, getSaleItemSubtotal } from "@/lib/sale-item";
 import { artDayRange } from "@/lib/utils";
@@ -30,8 +29,7 @@ type PeriodoStats = {
   };
 };
 
-const getPeriodoStatsCached = unstable_cache(
-  async (branchId: string, periodo: Periodo, isoDate: string): Promise<PeriodoStats> => {
+export const getPeriodoStats = async (branchId: string, periodo: Periodo, isoDate: string): Promise<PeriodoStats> => {
     const { start: dayStart, end: dayEnd } = artDayRange(isoDate);
 
     let start: Date;
@@ -262,12 +260,7 @@ const getPeriodoStatsCached = unstable_cache(
         hasCosts: prevHasCosts,
       },
     };
-  },
-  ["stats-periodo"],
-  { revalidate: 30 }
-);
-
-export { getPeriodoStatsCached as getPeriodoStats };
+};
 
 function toARTDateString(date: Date): string {
   return new Date(date.getTime() - ART_OFFSET_MS).toISOString().slice(0, 10);

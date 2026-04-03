@@ -1,5 +1,4 @@
 import { RestockEventType, RestockValuationStatus } from "@prisma/client";
-import { unstable_cache } from "next/cache";
 
 import { prisma } from "@/lib/prisma";
 
@@ -659,17 +658,11 @@ export async function getInventoryValuation(input: {
   };
 }
 
-export const getCachedInventoryValuation = unstable_cache(
-  async (input: {
-    scope: InventoryValuationScope;
-    branchId?: string | null;
-    kioscoId?: string | null;
-  }) => getInventoryValuation(input),
-  ["inventory-valuation"],
-  {
-    revalidate: 60,
-  },
-);
+export const getCachedInventoryValuation = async (input: {
+  scope: InventoryValuationScope;
+  branchId?: string | null;
+  kioscoId?: string | null;
+}) => getInventoryValuation(input);
 
 export async function getBranchInventoryValuation(branchId: string) {
   return getCachedInventoryValuation({ scope: "branch", branchId });

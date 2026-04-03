@@ -1,4 +1,3 @@
-import { unstable_cache } from "next/cache";
 
 import { prisma } from "@/lib/prisma";
 import { getSaleItemSubtotal } from "@/lib/sale-item";
@@ -36,8 +35,7 @@ type SaleRow = {
   shift: { employeeName: string } | null;
 };
 
-const getResumenVentasCached = unstable_cache(
-  async (branchId: string, isoDate: string): Promise<ResumenVenta[]> => {
+export const getResumenVentas = async (branchId: string, isoDate: string): Promise<ResumenVenta[]> => {
     const { start, end } = artDayRange(isoDate);
 
     const sales = await prisma.sale.findMany({
@@ -78,9 +76,4 @@ const getResumenVentasCached = unstable_cache(
         total: getSaleItemSubtotal(item),
       })),
     }));
-  },
-  ["resumen-ventas"],
-  { revalidate: 30 }
-);
-
-export { getResumenVentasCached as getResumenVentas };
+};

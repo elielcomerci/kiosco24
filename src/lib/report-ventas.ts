@@ -1,4 +1,3 @@
-import { unstable_cache } from "next/cache";
 
 import { prisma } from "@/lib/prisma";
 import { getSaleItemCostSubtotal, getSaleItemSubtotal } from "@/lib/sale-item";
@@ -107,8 +106,7 @@ function roundMoney(value: number): number {
   return Math.round(value);
 }
 
-const getVentasReportCached = unstable_cache(
-  async (branchId: string, from: string, to: string): Promise<ReportVentas> => {
+export const getVentasReport = async (branchId: string, from: string, to: string): Promise<ReportVentas> => {
     const startDate = new Date(from);
     const endDate = new Date(to);
     endDate.setHours(23, 59, 59, 999);
@@ -311,9 +309,4 @@ const getVentasReportCached = unstable_cache(
         difference: s.difference,
       })),
     };
-  },
-  ["reports-ventas"],
-  { revalidate: 30 }
-);
-
-export { getVentasReportCached as getVentasReport };
+};

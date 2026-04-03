@@ -1,4 +1,3 @@
-import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { todayART } from "@/lib/utils";
 
@@ -46,8 +45,7 @@ type FiadosStats = {
   }>;
 };
 
-const getFiadosStatsCached = unstable_cache(
-  async (branchId: string, search: string, estado: string): Promise<FiadosStats> => {
+export const getFiadosStats = async (branchId: string, search: string, estado: string): Promise<FiadosStats> => {
     const where: any = { branchId };
 
     if (search) {
@@ -250,9 +248,4 @@ const getFiadosStatsCached = unstable_cache(
       movimientosRecientes: movimientosRecientes.slice(0, 20),
       topDeudores,
     };
-  },
-  ["stats-fiados"],
-  { revalidate: 30 }
-);
-
-export { getFiadosStatsCached as getFiadosStats };
+};

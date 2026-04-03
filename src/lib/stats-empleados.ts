@@ -1,4 +1,3 @@
-import { unstable_cache } from "next/cache";
 
 import { prisma } from "@/lib/prisma";
 import { artDayRange } from "@/lib/utils";
@@ -88,8 +87,7 @@ function toARTHour(date: Date): number {
   return new Date(date.getTime() - ART_OFFSET_MS).getUTCHours();
 }
 
-const getEmpleadosStatsCached = unstable_cache(
-  async (
+export const getEmpleadosStats = async (
     branchId: string,
     periodo: string,
     isoDate: string,
@@ -424,9 +422,4 @@ const getEmpleadosStatsCached = unstable_cache(
         total: Math.round(ventasPorDiaTotals[idx]),
       })),
     };
-  },
-  ["stats-empleados"],
-  { revalidate: 30 }
-);
-
-export { getEmpleadosStatsCached as getEmpleadosStats };
+};

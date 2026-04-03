@@ -1465,6 +1465,7 @@ body {
   word-break: break-word;
   display: -webkit-box;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -1890,10 +1891,7 @@ body[data-text-scale] .product-btn-price,
     border-radius: 0;
   }
   
-  .pos-sidebar.has-content,
-  .pos-sidebar.collapsed {
-    /* Sin efectos en desktop */
-  }
+
 
   /* El panel de tickets expandible se vuelve flexible y libre en PC */
   .desktop-ticket-scroll {

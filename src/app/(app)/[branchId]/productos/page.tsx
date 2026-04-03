@@ -615,6 +615,7 @@ function ProductModal({
   onCategoriesChange,
   isOwner,
   allowOpenStockAfter = true,
+  onOpenCorrection,
 }: {
   product: Product | null;
   draft?: ProductModalDraft | null;

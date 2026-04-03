@@ -70,7 +70,12 @@ export default function ZapAdSlot({ zone, branchId }: ZapAdSlotProps) {
 
   if (loading || !ad) return null
 
-  const handleAction = () => {
+  const handleAction = (e?: React.MouseEvent) => {
+      if (e) {
+          e.preventDefault();
+          e.stopPropagation();
+      }
+
       console.log('Ad clicked:', ad);
       const urlToOpen = ad.action?.url;
 
@@ -85,7 +90,6 @@ export default function ZapAdSlot({ zone, branchId }: ZapAdSlotProps) {
           return;
       }
 
-      // Si no hay acción configurada, mostramos un pequeño aviso para evitar confusión (alguien puede haber olvidado configurar la URL)
       console.warn('El anuncio fue clickeado pero no tiene una URL o acción configurada.', ad);
   }
 
@@ -271,7 +275,7 @@ export default function ZapAdSlot({ zone, branchId }: ZapAdSlotProps) {
            </div>
 
            <div style={{ zIndex: 1 }}>
-               <button style={{
+               <button type="button" style={{
                    backgroundColor: textColor,
                    color: bgColor,
                    border: 'none',

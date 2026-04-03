@@ -9,6 +9,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff",
     flexDirection: "column",
     padding: 0,
+    position: "relative",
   },
 
   // ── Header ──
@@ -25,6 +26,7 @@ const styles = StyleSheet.create({
     height: 44,
     borderRadius: 8,
     objectFit: "contain",
+    backgroundColor: "#ffffff",
   },
   headerText: {
     color: "#ffffff",
@@ -37,6 +39,22 @@ const styles = StyleSheet.create({
   divider: {
     height: 3,
     width: "100%",
+  },
+
+  // ── Background Image ──
+  bgContainer: {
+    position: "absolute",
+    top: 75,
+    left: 0,
+    right: 0,
+    bottom: 44,
+    zIndex: -1,
+  },
+  bgImage: {
+    width: "100%",
+    height: "100%",
+    objectFit: "cover",
+    opacity: 0.15, // Watermark effect so text is readable
   },
 
   // ── Promo section ──
@@ -74,6 +92,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 28,
     paddingBottom: 18,
+    flex: 1,
+    justifyContent: "center",
   },
   qrLabel: {
     fontSize: 10,
@@ -101,7 +121,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    marginTop: "auto",
+    marginTop: "auto", // Push to bottom
   },
   footerText: {
     fontSize: 11,
@@ -123,15 +143,10 @@ export interface PDFCouponItem {
 export interface MostazaCouponPDFProps {
   coupons: PDFCouponItem[];
   brandColor?: string;
-  /** Optional logo shown in the header bar */
   logoUrl?: string;
-  /** Optional custom photo shown as full-width banner */
   heroImageUrl?: string;
-  /** Line 1: branch name / headline shown in the header */
   line1?: string;
-  /** Line 2: promo name / offer description */
   line2?: string;
-  /** Line 3: detail / what's included / fine print */
   line3?: string;
 }
 
@@ -166,15 +181,26 @@ export function MostazaCouponPDF({
 }: MostazaCouponPDFProps) {
   const textColor = isDark(brandColor) ? "#ffffff" : "#1a202c";
 
+  // Ensure absolute URLs if a relative path was passed to logoUrl mapping.
+  // We use `{ uri: url }` object for all image sources so react-pdf knows how to fetch base64 data URIs.
+  const getSource = (url?: string) => (url ? { uri: url } : undefined);
+
   return (
     <Document>
       {coupons.map((coupon, i) => (
         <Page key={i} size={[340, 520]} style={styles.page}>
+          
+          {/* ── Background Image ────────────────────────────────────── */}
+          {heroImageUrl ? (
+            <View style={styles.bgContainer}>
+              <Image source={getSource(heroImageUrl)} style={styles.bgImage} />
+            </View>
+          ) : null}
 
           {/* ── Header ─────────────────────────────────────────────── */}
           <View style={[styles.header, { backgroundColor: brandColor }]}>
             {logoUrl ? (
-              <Image source={logoUrl} style={styles.logoImg} />
+              <Image source={getSource(logoUrl)} style={styles.logoImg} />
             ) : null}
             <Text style={[styles.headerText, { color: textColor }]}>
               {line1}
@@ -183,15 +209,6 @@ export function MostazaCouponPDF({
 
           {/* ── Top divider ─────────────────────────────────────────── */}
           <View style={[styles.divider, { backgroundColor: brandColor, opacity: 0.3 }]} />
-
-          {/* ── Hero image ──────────────────────────────────────────── */}
-          {heroImageUrl ? (
-            <Image
-              source={heroImageUrl}
-              style={{ width: "100%", height: 160, objectFit: "cover" }}
-            />
-          ) : null}
-
 
           {/* ── Promo description ───────────────────────────────────── */}
           {(line2 || line3) ? (
@@ -213,7 +230,7 @@ export function MostazaCouponPDF({
           {/* ── QR + Code ───────────────────────────────────────────── */}
           <View style={styles.qrSection}>
             <Text style={styles.qrLabel}>Escaneá o presentá este código</Text>
-            <Image source={coupon.qrDataUrl} style={styles.qrImage} />
+            <Image source={getSource(coupon.qrDataUrl)} style={styles.qrImage} />
             <Text style={[styles.code, { color: brandColor }]}>{coupon.code}</Text>
           </View>
 

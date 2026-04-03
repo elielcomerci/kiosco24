@@ -236,42 +236,29 @@ export async function POST(req: Request) {
         const currentStock = inventory?.stock ?? 0;
         const nextStock = normalizedMode === "corregir" ? item.totalQuantity : currentStock + item.totalQuantity;
 
-        await tx.inventoryRecord.updateMany({
+        await tx.inventoryRecord.upsert({
           where: {
+            productId_branchId: {
+              productId: item.productId,
+              branchId,
+            },
+          },
+          create: {
             productId: item.productId,
             branchId,
+            stock: nextStock,
+            minStock: 0,
+            showInGrid: true,
+            price: item.salePrice ?? 0,
+            cost: item.unitCost ?? null,
           },
-          data: {
+          update: {
             stock: nextStock,
             ...(pricingPatch ?? {}),
           },
         });
 
         if (pricingPatch) {
-          const existingRecord = await tx.inventoryRecord.findUnique({
-            where: {
-              productId_branchId: {
-                productId: item.productId,
-                branchId,
-              },
-            },
-            select: { id: true },
-          });
-
-          if (!existingRecord) {
-            await tx.inventoryRecord.create({
-              data: {
-                productId: item.productId,
-                branchId,
-                price: item.salePrice ?? 0,
-                cost: item.unitCost ?? null,
-                stock: nextStock,
-                minStock: 0,
-                showInGrid: true,
-              },
-            });
-          }
-
           pricingChanges.set(item.productId, {
             ...(item.salePrice !== null ? { price: item.salePrice } : {}),
             ...(item.unitCost !== null ? { cost: item.unitCost } : {}),

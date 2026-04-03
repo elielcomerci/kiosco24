@@ -1,0 +1,6 @@
+﻿check_stock.ts(11,7): error TS2561: Object literal may only specify known properties, but 'kioscos' does not exist in type 'UserInclude<DefaultArgs>'. Did you mean to write 'kiosco'?
+check_stock.ts(23,42): error TS2339: Property 'kioscos' does not exist on type '{ id: string; name: string | null; email: string; password: string | null; emailVerified: Date | null; image: string | null; role: UserRole; createdAt: Date; updatedAt: Date; }'.
+check_stock.ts(23,58): error TS7006: Parameter 'k' implicitly has an 'any' type.
+check_stock.ts(23,76): error TS7006: Parameter 'b' implicitly has an 'any' type.
+check_stock.ts(29,44): error TS2339: Property 'kioscos' does not exist on type '{ id: string; name: string | null; email: string; password: string | null; emailVerified: Date | null; image: string | null; role: UserRole; createdAt: Date; updatedAt: Date; }'.
+check_stock.ts(29,56): error TS7006: Parameter 'k' implicitly has an 'any' type.

@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { SessionProvider } from "next-auth/react";
 import { redirect } from "next/navigation";
+import { SessionWatcher } from "@/components/session-watcher";
 
 // Server Component — protege todas las rutas del grupo (app)
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -11,7 +12,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   }
 
   return (
-    <SessionProvider session={session}>
+    <SessionProvider session={session} refetchInterval={5 * 60}>
+      <SessionWatcher />
       <div className="app-layout">
         <div className="app-content">{children}</div>
       </div>

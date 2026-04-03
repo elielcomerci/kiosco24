@@ -415,7 +415,7 @@ export default function ResumenPage() {
         )}
       </div>
 
-      <ZapAdSlot zone="resumen" />
+      <ZapAdSlot zone="resumen" branchId={String(branchId)} />
 
       {/* ── Saldo MercadoPago ────────────────────────────────────────────── */}
 

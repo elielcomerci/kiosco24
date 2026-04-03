@@ -36,9 +36,10 @@ interface ZapAd {
 
 interface ZapAdSlotProps {
   zone: string
+  branchId: string
 }
 
-export default function ZapAdSlot({ zone }: ZapAdSlotProps) {
+export default function ZapAdSlot({ zone, branchId }: ZapAdSlotProps) {
   const [ad, setAd] = useState<ZapAd | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -47,7 +48,7 @@ export default function ZapAdSlot({ zone }: ZapAdSlotProps) {
 
     const fetchAd = async () => {
       try {
-        const res = await fetch(`/api/partner/ads?zone=${encodeURIComponent(zone)}`)
+        const res = await fetch(`/api/partner/ads?zone=${encodeURIComponent(zone)}&branchId=${encodeURIComponent(branchId)}`)
         if (!res.ok) throw new Error('Error fetch ads')
 
         const responseJson = await res.json()

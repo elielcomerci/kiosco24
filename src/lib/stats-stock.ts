@@ -210,10 +210,16 @@ export const getStockStats = async (
       }
     >();
 
+    const negativeByProductBranch = new Map<string, number>();
+    for (const res of negativeReservations as NegativeReservationRow[]) {
+      const key = `${res.productId}-${res.branchId}`;
+      negativeByProductBranch.set(key, (negativeByProductBranch.get(key) ?? 0) + res.quantityPending);
+    }
+
     for (const inv of inventoryRecords as InventoryRecordRow[]) {
-      const stock = inv.stock ?? 0;
-      const minStock = inv.minStock ?? 0;
       const key = `${inv.productId}-${inv.branchId}`;
+      const stock = (inv.stock ?? 0) - (negativeByProductBranch.get(key) ?? 0);
+      const minStock = inv.minStock ?? 0;
 
       if (stock > 0) {
         productosConStock++;
@@ -265,10 +271,11 @@ export const getStockStats = async (
     const alertas: StockStats["alertas"] = [];
 
     for (const inv of inventoryRecords as InventoryRecordRow[]) {
-      const stock = inv.stock ?? 0;
+      const key = `${inv.productId}-${inv.branchId}`;
+      const stock = (inv.stock ?? 0) - (negativeByProductBranch.get(key) ?? 0);
       const minStock = inv.minStock ?? 0;
 
-      if (stock === 0) {
+      if (stock <= 0) {
         alertas.push({
           tipo: "sin_stock",
           productoId: inv.productId,

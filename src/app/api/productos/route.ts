@@ -106,15 +106,17 @@ function isPositiveFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value) && value > 0;
 }
 
-function buildGridProduct(record: ProductGridInventory, allowNegativeStock: boolean) {
-  const baseAvailableStock = record.stock;
+function buildGridProduct(record: ProductGridInventory, allowNegativeStock: boolean, negativeReservationsByKey: Map<string, number> = new Map()) {
+  const baseNegative = negativeReservationsByKey.get(lotKey(record.product.id)) ?? 0;
+  const baseAvailableStock = record.stock - baseNegative;
   const baseFlags = getStockFlags(baseAvailableStock, record.minStock);
   const basePrice = isPositiveFiniteNumber(record.price) ? record.price : 0;
   const baseCost = isPositiveFiniteNumber(record.cost) ? record.cost : null;
 
   const variants = record.product.variants.map((variant) => {
     const variantInventory = variant.inventory[0];
-    const variantStock = variantInventory?.stock ?? 0;
+    const variantNegative = negativeReservationsByKey.get(lotKey(record.product.id, variant.id)) ?? 0;
+    const variantStock = (variantInventory?.stock ?? 0) - variantNegative;
     const variantPrice =
       isPositiveFiniteNumber(variantInventory?.price) ? variantInventory.price : basePrice;
     const variantCost =
@@ -191,7 +193,7 @@ function buildGridProduct(record: ProductGridInventory, allowNegativeStock: bool
     categoryId: record.product.categoryId,
     price,
     cost,
-    stock: record.stock,
+    stock: record.stock - baseNegative,
     availableStock: baseAvailableStock,
     minStock: record.minStock,
     showInGrid: record.showInGrid,
@@ -396,7 +398,18 @@ export async function GET(req: Request) {
       orderBy: { product: { name: "asc" } },
     })) as ProductGridInventory[];
 
-    const products = inventory.map((record) => buildGridProduct(record, allowNegativeStock));
+    const negativeReservations = await prisma.negativeStockReservation.findMany({
+      where: { branchId, quantityPending: { gt: 0 }, resolvedAt: null },
+      select: { productId: true, variantId: true, quantityPending: true },
+    });
+
+    const negativeReservationsByKey = negativeReservations.reduce((map, reservation) => {
+      const key = lotKey(reservation.productId, reservation.variantId);
+      map.set(key, (map.get(key) ?? 0) + reservation.quantityPending);
+      return map;
+    }, new Map<string, number>());
+
+    const products = inventory.map((record) => buildGridProduct(record, allowNegativeStock, negativeReservationsByKey));
     return NextResponse.json(products);
   }
 
@@ -451,6 +464,17 @@ export async function GET(req: Request) {
     },
   });
 
+  const negativeReservations = await prisma.negativeStockReservation.findMany({
+    where: { branchId, quantityPending: { gt: 0 }, resolvedAt: null },
+    select: { productId: true, variantId: true, quantityPending: true },
+  });
+
+  const negativeReservationsByKey = negativeReservations.reduce((map, reservation) => {
+    const key = lotKey(reservation.productId, reservation.variantId);
+    map.set(key, (map.get(key) ?? 0) + reservation.quantityPending);
+    return map;
+  }, new Map<string, number>());
+
   const lotsByKey = lots.reduce<Map<string, StockLotSummaryItem[]>>((map, lot) => {
     const key = lotKey(lot.productId, lot.variantId);
     const current = map.get(key) ?? [];
@@ -464,7 +488,8 @@ export async function GET(req: Request) {
     const baseSummary = summarizeTrackedLots(record.stock, baseLots, expiryAlertDays);
     const mappedVariants = record.product.variants.map((variant) => {
       const variantInventory = variant.inventory[0];
-      const variantStock = variantInventory?.stock ?? 0;
+      const variantNegative = negativeReservationsByKey.get(lotKey(record.product.id, variant.id)) ?? 0;
+      const variantStock = (variantInventory?.stock ?? 0) - variantNegative;
       const variantPrice =
         typeof variantInventory?.price === "number" && Number.isFinite(variantInventory.price)
           ? variantInventory.price
@@ -474,8 +499,8 @@ export async function GET(req: Request) {
           ? variantInventory.cost
           : record.cost;
       const variantLots = lotsByKey.get(lotKey(record.product.id, variant.id)) ?? [];
-      const variantSummary = summarizeTrackedLots(variantStock, variantLots, expiryAlertDays);
-      const variantAvailableStock = variantSummary.availableStock ?? variantStock;
+      const variantSummary = summarizeTrackedLots(variantInventory?.stock ?? 0, variantLots, expiryAlertDays);
+      const variantAvailableStock = (variantSummary.availableStock ?? variantInventory?.stock ?? 0) - variantNegative;
       const variantFlags = getStockFlags(variantAvailableStock, variantInventory?.minStock ?? 0);
       const variantReadyForSale =
         record.showInGrid &&
@@ -505,7 +530,8 @@ export async function GET(req: Request) {
       };
     });
 
-    const baseAvailableStock = baseSummary.availableStock ?? record.stock;
+    const baseNegative = negativeReservationsByKey.get(lotKey(record.product.id)) ?? 0;
+    const baseAvailableStock = (baseSummary.availableStock ?? record.stock) - baseNegative;
     const baseFlags = getStockFlags(baseAvailableStock, record.minStock);
     const variantPrices = mappedVariants
       .map((variant) => (typeof variant.price === "number" && variant.price > 0 ? variant.price : null))
@@ -593,7 +619,7 @@ export async function GET(req: Request) {
       costMin,
       costMax,
       hasVariablePrices: priceMin !== priceMax,
-      stock: record.stock,
+      stock: record.stock - baseNegative,
       availableStock: baseAvailableStock,
       minStock: record.minStock,
       showInGrid: record.showInGrid,

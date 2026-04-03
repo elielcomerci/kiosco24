@@ -123,6 +123,16 @@ export default async function BranchLayout({
           ) : null}
           {(session.user.role === "OWNER" || session.user.employeeRole === "MANAGER") ? (
             <a
+              href={`/${effectiveBranchId}/promociones`}
+              className="app-header-icon-link"
+              title="Promociones"
+              aria-label="Promociones"
+            >
+              {"\uD83C\uDFF7\uFE0F"}
+            </a>
+          ) : null}
+          {(session.user.role === "OWNER" || session.user.employeeRole === "MANAGER") ? (
+            <a
               href={`/${effectiveBranchId}/configuracion`}
               className="app-header-icon-link"
               title="Configuracion"

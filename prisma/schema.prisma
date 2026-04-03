@@ -162,6 +162,8 @@ model Branch {
   fiscalSettings           BranchFiscalSettings?
   invoices                 Invoice[]
   shiftReminders           ShiftReminder[]
+  promotions               Promotion[]
+  coupons                  Coupon[]
 
   @@index([kioscoId])
 }
@@ -250,6 +252,7 @@ model Product {
   variants          Variant[]
   restocks          RestockItem[]
   stockLots         StockLot[]
+  combos            ComboPromotion[]
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
 
@@ -417,6 +420,7 @@ model Variant {
   negativeStockReservations NegativeStockReservation[]
   restocks  RestockItem[]
   stockLots StockLot[]
+  combos    ComboPromotion[]
 
   @@index([productId])
   @@index([barcode])
@@ -557,6 +561,7 @@ model Sale {
   creditCustomer      CreditCustomer? @relation(fields: [creditCustomerId], references: [id], onDelete: SetNull)
   voided              Boolean         @default(false)
   voidedAt            DateTime?
+  promoApplications   SalePromoApplication[]
   createdAt           DateTime        @default(now())
 
   @@unique([branchId, clientSaleId])
@@ -956,4 +961,102 @@ enum ScrapedProductReviewAction {
 enum MpIncomingPaymentChannel {
   MERCADOPAGO
   TRANSFER
+}
+
+// ── Motor de Promociones ──────────────────────────────────────────────────────
+
+enum PromoType {
+  COMBO
+  ZONA_ROJA
+  HAPPY_HOUR
+  DIA_TEMATICO
+}
+
+enum PromoDiscountKind {
+  PERCENTAGE  // discountValue = porcentaje (ej. 15 para 15%)
+  FIXED_PRICE // discountValue = precio fijo del combo (ej. 2000)
+}
+
+model Promotion {
+  id           String            @id @default(cuid())
+  branchId     String
+  branch       Branch            @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  type         PromoType
+  name         String
+  active       Boolean           @default(true)
+  discountKind PromoDiscountKind
+  discountValue Float
+  // Para HAPPY_HOUR / DIA_TEMATICO
+  startHour    Int?              // 0–23
+  endHour      Int?              // 0–23
+  weekdays     Int[]             // [0=Dom .. 6=Sab]; vacío = todos los días
+  // Para ZONA_ROJA
+  daysBeforeExpiry Int?          // umbral: activar descuento si vence en ≤ N días
+  // Cupón de retorno emitido por ventas que usan esta promo
+  returnCouponThreshold    Float? // mínimo de total de venta para emitir cupón
+  returnCouponValidityHours Int?  @default(72)
+  combos       ComboPromotion[]
+  coupons      Coupon[]
+  applications SalePromoApplication[]
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  @@index([branchId, type, active])
+  @@index([branchId, active])
+}
+
+model ComboPromotion {
+  id          String    @id @default(cuid())
+  promotionId String
+  promotion   Promotion @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+  productId   String
+  product     Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variantId   String?
+  variant     Variant?  @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  quantity    Int       @default(1)
+
+  @@index([promotionId])
+  @@index([productId])
+  @@index([variantId])
+}
+
+model Coupon {
+  id              String            @id @default(cuid())
+  code            String            @unique
+  branchId        String
+  branch          Branch            @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  promotionId     String?
+  promotion       Promotion?        @relation(fields: [promotionId], references: [id], onDelete: SetNull)
+  discountKind    PromoDiscountKind
+  discountValue   Float
+  isUsed          Boolean           @default(false)
+  usedAt          DateTime?
+  usedInSaleId    String?           // Venta donde el cliente CANJEÓ el cupón
+  emittedBySaleId String?           // Venta que EMITIÓ este cupón (para reversión en anulación)
+  expiresAt       DateTime
+  emittedAt       DateTime          @default(now())
+  overrideById    String?           // employeeId del encargado que forzó el uso
+  overrideNote    String?
+  applications    SalePromoApplication[]
+
+  @@index([branchId, isUsed, expiresAt])
+  @@index([code])
+  @@index([emittedBySaleId])
+}
+
+model SalePromoApplication {
+  id             String     @id @default(cuid())
+  saleId         String
+  sale           Sale       @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  type           PromoType
+  promotionId    String?
+  promotion      Promotion? @relation(fields: [promotionId], references: [id], onDelete: SetNull)
+  couponId       String?
+  coupon         Coupon?    @relation(fields: [couponId], references: [id], onDelete: SetNull)
+  description    String
+  discountAmount Float
+  appliedAt      DateTime   @default(now())
+
+  @@index([saleId])
+  @@index([couponId])
 }

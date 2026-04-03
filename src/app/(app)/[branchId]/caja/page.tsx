@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useSession } from "next-auth/react";
 import { useParams, useRouter } from "next/navigation";
 import { formatARS, getCashSuggestions } from "@/lib/utils";
+import useSWR from "swr";
+import { applyPromoEngine, type ActivePromotion } from "@/lib/promo-engine";
 import { formatSaleItemWeightLabel, getSaleItemSubtotal, parseWeightInputToGrams } from "@/lib/sale-item";
 import NumPad from "@/components/ui/NumPad";
 import ConfirmationScreen from "@/components/caja/ConfirmationScreen";
@@ -399,6 +401,7 @@ export default function CajaPage() {
   const [showCredit, setShowCredit] = useState(false);
   const [showCashNumpad, setShowCashNumpad] = useState(false);
   const [receivedAmount, setReceivedAmount] = useState("");
+  const [couponRecord, setCouponRecord] = useState<{ id: string; discountKind: "PERCENTAGE" | "FIXED_PRICE"; discountValue: number; code?: string; promotion?: { type: string; combos?: { productId: string; variantId: string | null; quantity: number }[] } } | null>(null);
   
   const [activeShift, setActiveShift] = useState<ActiveShift | null>(null);
   const [showOpenShift, setShowOpenShift] = useState(false);
@@ -432,6 +435,7 @@ export default function CajaPage() {
   
   const searchInputRef = useRef<HTMLInputElement>(null);
   const handleBarcodeScanRef = useRef<(code: string) => void>(() => {});
+  const allowNegativeStock = products[0]?.allowNegativeStock ?? false;
   
   // Trial handlers
   const handleTrialExplore = useCallback(() => {
@@ -464,8 +468,29 @@ export default function CajaPage() {
   const scheduledReminderIdRef = useRef<string | null>(null);
 
   const isOnline = useOnlineStatus();
-  const allowNegativeStock = products[0]?.allowNegativeStock ?? false;
-  const total = ticket.reduce((sum, item) => sum + getSaleItemSubtotal(item), 0);
+  const { data: promotions } = useSWR<ActivePromotion[]>(`/api/promociones?active=true`, (url: string) => fetch(url).then(r => r.json()));
+
+  const promoResult = useMemo(() => {
+    if (!promotions && !couponRecord) return null;
+    return applyPromoEngine({
+      items: ticket.map((i) => ({
+        ...i,
+        productId: i.productId ?? null,
+        variantId: i.variantId ?? null,
+        name: i.name,
+        price: i.price,
+        quantity: i.quantity,
+        soldByWeight: Boolean(i.soldByWeight),
+        cost: i.cost ?? null,
+      })),
+      promotions: promotions ?? [],
+      coupon: couponRecord,
+      expiryInfo: [], // Zona Roja days calculation for later
+    });
+  }, [ticket, promotions, couponRecord]);
+
+  const rawTotal = ticket.reduce((sum, item) => sum + getSaleItemSubtotal(item), 0);
+  const total = promoResult ? promoResult.total : rawTotal;
   const cashSuggestions = getCashSuggestions(total);
   const activeShiftId = activeShift?.id ?? null;
   const shiftResponsibleName = activeShift?.employee?.name || activeShift?.employeeName || "Dueño";
@@ -1364,6 +1389,7 @@ export default function CajaPage() {
       createdByEmployeeId: employeeId,
       clientSaleId,
       branchId,
+      couponCode: couponRecord?.code,
     };
 
     try {
@@ -1449,6 +1475,7 @@ export default function CajaPage() {
         }
         setProducts((current) => applyTicketStockChange(current, ticket, -1));
         setTicket([]);
+        setCouponRecord(null);
       setReceivedAmount("");
       setShowCashNumpad(false);
       fetchStats();
@@ -1560,12 +1587,42 @@ export default function CajaPage() {
       }
     }
 
-    // Not found
-    window.setTimeout(() => {
-      alert(`Codigo ${result} no encontrado.`);
-    }, 0);
-    return;
-    alert(`Código ${result} no encontrado.`);
+    // Not found locally? It might be a Coupon!
+    fetch("/api/cupones/validar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: result }),
+    })
+      .then(async (res) => {
+        if (!res.ok) throw new Error();
+        const data = await res.json();
+        if (data.valid) {
+          setCouponRecord({ ...data.coupon, code: result });
+          
+          if (data.coupon?.promotion?.type === "COMBO" && data.coupon.promotion.combos) {
+            // Apply items to cart iteratively
+            data.coupon.promotion.combos.forEach((cItem: { productId: string; variantId: string | null; quantity: number }) => {
+              const p = visibleProducts.find((vp) => vp.id === cItem.productId);
+              if (p) {
+                const v = p.variants?.find((vv) => vv.id === cItem.variantId);
+                // Si el item precisa cantidad > 1, usamos un tickteo en bucle temporal, o aplicamos un delta
+                // Ya que `handleProductTap` usa el estado anterior (prev), iterar no rompe la consistencia.
+                for (let i = 0; i < cItem.quantity; i++) {
+                  handleProductTap(p, v);
+                }
+              }
+            });
+            alert("¡Combo aplicado con éxito! Revisá tu carrito.");
+          } else {
+            alert("¡Cupón aplicado con éxito al carrito!");
+          }
+        } else {
+          alert(`Código ${result} no encontrado o cupón inválido.`);
+        }
+      })
+      .catch(() => {
+        alert(`Código ${result} no encontrado.`);
+      });
   }, [handleProductTap, visibleProducts]);
   handleBarcodeScanRef.current = handleBarcodeScan;
 
@@ -2187,7 +2244,11 @@ export default function CajaPage() {
               return (
               <div key={idx} className="ticket-item" style={{ padding: "10px 12px" }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <span style={{ fontWeight: 600, fontSize: "13px", display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.name}</span>
+                  <span style={{ fontWeight: 600, fontSize: "13px", display: "flex", alignItems: "center", gap: "6px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {item.name}
+                    {promoResult?.adjustedItems[idx]?.appliedPromoType === 'COMBO' && <span style={{ background: "linear-gradient(90deg, #ec4899, #8b5cf6)", color: "#fff", fontSize: "9px", fontWeight: 800, padding: "2px 5px", borderRadius: "4px", flexShrink: 0 }}>COMBO</span>}
+                    {promoResult?.adjustedItems[idx]?.appliedPromoType === 'ZONA_ROJA' && <span style={{ background: "var(--red)", color: "#fff", fontSize: "9px", fontWeight: 800, padding: "2px 5px", borderRadius: "4px", flexShrink: 0 }}>ROJA</span>}
+                  </span>
                   <span style={{ display: "block", fontSize: "11px", color: "var(--text-3)", marginTop: "2px" }}>
                     {item.soldByWeight ? formatSaleItemWeightLabel(item) : `x${item.quantity}`}
                   </span>
@@ -2280,8 +2341,15 @@ export default function CajaPage() {
                   >
                     +
                   </button>
-                  <span style={{ minWidth: "60px", textAlign: "right", fontWeight: 600, fontSize: "13px", flexShrink: 0 }}>
-                    {formatARS(getSaleItemSubtotal(item))}
+                  <span style={{ minWidth: "60px", textAlign: "right", fontWeight: 600, fontSize: "13px", flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
+                    {promoResult?.adjustedItems[idx] && promoResult.adjustedItems[idx].price < item.price ? (
+                      <>
+                        <span style={{ textDecoration: "line-through", color: "var(--text-3)", fontSize: "10px", fontWeight: 500 }}>{formatARS(getSaleItemSubtotal(item))}</span>
+                        <span style={{ color: "var(--primary)" }}>{formatARS(promoResult.adjustedItems[idx].price * (item.soldByWeight ? item.quantity / 1000 : item.quantity))}</span>
+                      </>
+                    ) : (
+                      formatARS(getSaleItemSubtotal(item))
+                    )}
                   </span>
                 </div>
               </div>
@@ -2295,6 +2363,23 @@ export default function CajaPage() {
                 >
                   ↩ Repetir última venta
                 </button>
+              </div>
+            )}
+            
+            {promoResult && promoResult.totalDiscount > 0 && (
+              <div style={{ marginTop: "4px", marginBottom: "12px", padding: "10px 12px", background: "rgba(34, 197, 94, 0.08)", borderRadius: "var(--radius)", border: "1px solid rgba(34, 197, 94, 0.2)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                  <span style={{ fontSize: "12px", fontWeight: 700, color: "var(--primary)" }}>Promociones aplicadas:</span>
+                  <span style={{ fontSize: "14px", fontWeight: 900, color: "var(--primary)" }}>- {formatARS(promoResult.totalDiscount)}</span>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
+                  {promoResult.applications.map((app, i) => (
+                    <div key={i} style={{ display: "flex", justifyContent: "space-between", color: "var(--primary)", fontSize: "11px", fontWeight: 500 }}>
+                      <span style={{ opacity: 0.8 }}>✓ {app.description}</span>
+                      <span style={{ opacity: 0.9 }}>- {formatARS(app.discountAmount)}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 

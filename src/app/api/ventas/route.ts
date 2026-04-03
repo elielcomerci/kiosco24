@@ -10,6 +10,7 @@ import { UserRole } from "@prisma/client";
 import { NextResponse } from "next/server";
 
 import { canOperateShift, createShiftForbiddenResponse, getActiveShift } from "@/lib/shift-access";
+import { loadAndApplyPromos, persistPromoResult } from "@/lib/promo-loader";
 
 type RawSaleItem = {
   productId?: string | null;
@@ -382,6 +383,8 @@ export async function POST(req: Request) {
     const receivedAmount = normalizeReceivedAmount(paymentMethod, body?.receivedAmount);
     const requestedCreditCustomerId =
       typeof body?.creditCustomerId === "string" && body.creditCustomerId ? body.creditCustomerId : null;
+    const couponCode =
+      typeof body?.couponCode === "string" && body.couponCode.trim() ? body.couponCode.trim() : null;
 
     const activeShift = await getActiveShift(branchId);
     if (!activeShift) {
@@ -398,16 +401,10 @@ export async function POST(req: Request) {
     const sale = await prisma.$transaction(async (tx) => {
       if (clientSaleId) {
         const existingSale = await tx.sale.findFirst({
-          where: {
-            branchId,
-            clientSaleId,
-          },
+          where: { branchId, clientSaleId },
           include: { items: true },
         });
-
-        if (existingSale) {
-          return existingSale;
-        }
+        if (existingSale) return existingSale;
       }
 
       const branchSettings = await tx.branch.findUnique({
@@ -416,12 +413,24 @@ export async function POST(req: Request) {
       });
       const allowNegativeStock = branchSettings?.allowNegativeStock ?? false;
 
-      const { saleItems, total, inventoryAdjustments } = await buildSaleSnapshot(
+      const { saleItems: rawItems, inventoryAdjustments } = await buildSaleSnapshot(
         tx,
         branchId,
         items,
         allowNegativeStock,
       );
+
+      // ── Motor de Promociones ──────────────────────────────────────────────
+      const promoResult = await loadAndApplyPromos(tx, branchId, rawItems, couponCode, new Date());
+
+      if (promoResult.couponError) {
+        throw new RouteError(promoResult.couponError);
+      }
+
+      // Los items con precios ajustados por promos son los que se persisten
+      const saleItems = promoResult.adjustedItems;
+      const total = promoResult.total;
+      // ─────────────────────────────────────────────────────────────────────
 
       if (receivedAmount !== null && receivedAmount < total) {
         throw new RouteError("El efectivo recibido no alcanza para cubrir el total.");
@@ -434,10 +443,7 @@ export async function POST(req: Request) {
         }
 
         const customer = await tx.creditCustomer.findFirst({
-          where: {
-            id: requestedCreditCustomerId,
-            branchId,
-          },
+          where: { id: requestedCreditCustomerId, branchId },
           select: { id: true },
         });
 
@@ -449,28 +455,17 @@ export async function POST(req: Request) {
       }
 
       for (const adjustment of inventoryAdjustments) {
-        if (adjustment.unlimited) {
-          continue;
-        }
+        if (adjustment.unlimited) continue;
 
         if (adjustment.type === "variant") {
           const updated = allowNegativeStock
             ? await tx.variantInventory.updateMany({
-                where: {
-                  id: adjustment.id,
-                },
-                data: {
-                  stock: { decrement: adjustment.requestedQuantity },
-                },
+                where: { id: adjustment.id },
+                data: { stock: { decrement: adjustment.requestedQuantity } },
               })
             : await tx.variantInventory.updateMany({
-                where: {
-                  id: adjustment.id,
-                  stock: { gte: adjustment.requestedQuantity },
-                },
-                data: {
-                  stock: { decrement: adjustment.requestedQuantity },
-                },
+                where: { id: adjustment.id, stock: { gte: adjustment.requestedQuantity } },
+                data: { stock: { decrement: adjustment.requestedQuantity } },
               });
 
           if (updated.count !== 1) {
@@ -479,21 +474,12 @@ export async function POST(req: Request) {
         } else {
           const updated = allowNegativeStock
             ? await tx.inventoryRecord.updateMany({
-                where: {
-                  id: adjustment.id,
-                },
-                data: {
-                  stock: { decrement: adjustment.requestedQuantity },
-                },
+                where: { id: adjustment.id },
+                data: { stock: { decrement: adjustment.requestedQuantity } },
               })
             : await tx.inventoryRecord.updateMany({
-                where: {
-                  id: adjustment.id,
-                  stock: { gte: adjustment.requestedQuantity },
-                },
-                data: {
-                  stock: { decrement: adjustment.requestedQuantity },
-                },
+                where: { id: adjustment.id, stock: { gte: adjustment.requestedQuantity } },
+                data: { stock: { decrement: adjustment.requestedQuantity } },
               });
 
           if (updated.count !== 1) {
@@ -512,17 +498,16 @@ export async function POST(req: Request) {
           shiftId: activeShift.id,
           creditCustomerId,
           createdByEmployeeId,
-          items: {
-            create: saleItems,
-          },
+          items: { create: saleItems },
         },
         include: { items: true },
       });
 
+      // ── Persistir resultado de promos (cupón + auditoría + cupón de retorno)
+      const { returnCouponCode } = await persistPromoResult(tx, createdSale.id, branchId, promoResult);
+
       for (const item of createdSale.items) {
-        if (!item.productId || item.quantity <= 0) {
-          continue;
-        }
+        if (!item.productId || item.quantity <= 0) continue;
 
         await consumeTrackedLotsFefo(tx, {
           branchId,
@@ -549,7 +534,7 @@ export async function POST(req: Request) {
         });
       }
 
-      return createdSale;
+      return { ...createdSale, promoSummary: promoResult, returnCouponCode };
     });
 
     return NextResponse.json(sale);

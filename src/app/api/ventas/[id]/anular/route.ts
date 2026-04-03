@@ -127,6 +127,26 @@ export async function POST(
       where: { id: sale.id },
       data: { voided: true, voidedAt: new Date() },
     });
+
+    // ── Reversión de cupones ────────────────────────────────────────────────
+    // 1. Reactivar el cupón que fue canjeado en esta venta
+    const couponApp = await tx.salePromoApplication.findFirst({
+      where: { saleId: sale.id, couponId: { not: null } },
+      select: { couponId: true },
+    });
+    if (couponApp?.couponId) {
+      await tx.coupon.update({
+        where: { id: couponApp.couponId },
+        data: { isUsed: false, usedAt: null, usedInSaleId: null },
+      });
+    }
+
+    // 2. Invalidar el cupón de retorno emitido POR esta venta (si no fue usado aún)
+    //    Usa emittedBySaleId — no usedInSaleId, que puede apuntar a otra venta de canje
+    await tx.coupon.updateMany({
+      where: { emittedBySaleId: sale.id, isUsed: false },
+      data: { expiresAt: new Date() },
+    });
   });
 
   return NextResponse.json({ ok: true });

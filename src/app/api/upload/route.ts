@@ -20,7 +20,7 @@ function sanitizeSegment(value: string, fallback: string) {
 }
 
 function getSafeFolder(rawFolder: string | null) {
-  const allowedFolders = new Set(["products", "branding", "uploads", "receipts"]);
+  const allowedFolders = new Set(["products", "branding", "uploads", "receipts", "coupons"]);
   return rawFolder && allowedFolders.has(rawFolder) ? rawFolder : "uploads";
 }
 
@@ -84,8 +84,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
     }
 
-    if (!file.type.startsWith("image/")) {
-      return NextResponse.json({ error: "Solo se permiten imagenes." }, { status: 400 });
+    if (!file.type.startsWith("image/") && file.type !== "application/pdf") {
+      return NextResponse.json({ error: "Solo se permiten imágenes o documentos PDF." }, { status: 400 });
     }
 
     if (file.size > MAX_FILE_SIZE_BYTES) {
@@ -96,7 +96,7 @@ export async function POST(req: Request) {
     const originalName = file.name || `image.${extensionFromType}`;
     const hasExtension = /\.[a-zA-Z0-9]+$/.test(originalName);
     const baseName = originalName.replace(/\.[^.]+$/, "");
-    const safeBaseName = sanitizeSegment(baseName, "image");
+    const safeBaseName = sanitizeSegment(baseName, file.type === "application/pdf" ? "document" : "image");
     const safeExtension = sanitizeSegment(hasExtension ? originalName.split(".").pop() || extensionFromType : extensionFromType, extensionFromType);
     const pathname = `${folder}/${safeBaseName}.${safeExtension}`;
     const r2Config = getR2Config();

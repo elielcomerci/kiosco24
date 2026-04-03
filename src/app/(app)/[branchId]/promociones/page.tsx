@@ -75,6 +75,7 @@ export default async function PromocionesPage({
         branchName={branch.name}
         branchLogoUrl={branch.logoUrl ?? null}
         branchPrimaryColor={branch.primaryColor ?? "#22c55e"}
+        isOwner={session.user.role === "OWNER"}
       />
     </div>
   );

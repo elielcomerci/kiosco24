@@ -51,12 +51,14 @@ export default function PromocionesClient({
   branchName,
   branchLogoUrl,
   branchPrimaryColor,
+  isOwner,
 }: {
   branchId: string;
   products: ProductCatalogItem[];
   branchName: string;
   branchLogoUrl: string | null;
   branchPrimaryColor: string;
+  isOwner: boolean;
 }) {
   const { data: promotions, error, mutate } = useSWR<Promotion[]>(`/api/promociones`, fetcher);
   
@@ -240,6 +242,7 @@ export default function PromocionesClient({
           branchName={branchName}
           branchLogoUrl={branchLogoUrl}
           branchPrimaryColor={branchPrimaryColor}
+          isOwner={isOwner}
           onClose={() => setShowCouponGenFor(null)}
         />
       )}

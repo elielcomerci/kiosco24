@@ -6,6 +6,7 @@ import BackButton from "@/components/ui/BackButton";
 import PrintablePage from "@/components/print/PrintablePage";
 import { useRegisterShortcuts } from "@/components/ui/BranchWorkspace";
 import { formatARS } from "@/lib/utils";
+import ZapAdSlot from "@/components/ads/ZapAdSlot";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -413,6 +414,8 @@ export default function ResumenPage() {
           </p>
         )}
       </div>
+
+      <ZapAdSlot zone="resumen" />
 
       {/* ── Saldo MercadoPago ────────────────────────────────────────────── */}
 

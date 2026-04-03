@@ -13,6 +13,7 @@ export default function CouponGeneratorModal({
   branchName,
   branchLogoUrl,
   branchPrimaryColor,
+  isOwner,
   onClose,
 }: {
   branchId: string;
@@ -21,6 +22,7 @@ export default function CouponGeneratorModal({
   branchName: string;
   branchLogoUrl: string | null;
   branchPrimaryColor: string;
+  isOwner: boolean;
   onClose: () => void;
 }) {
   // Build default combo detail string
@@ -53,8 +55,9 @@ export default function CouponGeneratorModal({
   const [brandColor, setBrandColor] = useState(branchPrimaryColor);
   const [heroImageDataUrl, setHeroImageDataUrl] = useState<string | null>(null);
 
-  const [status, setStatus] = useState<"idle" | "generating" | "success" | "error">("idle");
+  const [status, setStatus] = useState<"idle" | "generating" | "success" | "error" | "sending_zap">("idle");
   const [errorMessage, setErrorMessage] = useState("");
+  const [zapOrderUrl, setZapOrderUrl] = useState<string | null>(null);
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -66,53 +69,61 @@ export default function CouponGeneratorModal({
     reader.readAsDataURL(file);
   };
 
+  // Refactorizamos la lógica de generación del Blob para poder reusarla
+  const generatePdfBlob = async (): Promise<{ blob: Blob; rawCoupons: { code: string; expiresAt: string }[] }> => {
+    const res = await fetch(`/api/cupones/lote`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        promotionId: promotion.id,
+        count: parseInt(count, 10),
+        expiresAt: new Date(expiresAt).toISOString(),
+      }),
+    });
+
+    if (!res.ok) {
+      const errData = await res.json();
+      throw new Error(errData.error || "Error al solicitar lote.");
+    }
+
+    const data = await res.json();
+    const rawCoupons: { code: string; expiresAt: string }[] = data.coupons;
+
+    if (!rawCoupons || rawCoupons.length === 0) {
+      throw new Error("No se devolvieron cupones.");
+    }
+
+    const pdfItems: PDFCouponItem[] = await Promise.all(
+      rawCoupons.map(async (c) => ({
+        code: c.code,
+        expiresAt: c.expiresAt,
+        qrDataUrl: await QRCode.toDataURL(c.code, { margin: 1, width: 400 }),
+      }))
+    );
+
+    const blob = await pdf(
+      <MostazaCouponPDF
+        coupons={pdfItems}
+        brandColor={brandColor}
+        logoUrl={branchLogoUrl ?? undefined}
+        heroImageUrl={heroImageDataUrl ?? undefined}
+        line1={line1}
+        line2={line2}
+        line3={line3}
+      />
+    ).toBlob();
+
+    return { blob, rawCoupons };
+  };
+
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
     setStatus("generating");
     setErrorMessage("");
+    setZapOrderUrl(null);
 
     try {
-      const res = await fetch(`/api/cupones/lote`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          promotionId: promotion.id,
-          count: parseInt(count, 10),
-          expiresAt: new Date(expiresAt).toISOString(),
-        }),
-      });
-
-      if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.error || "Error al solicitar lote.");
-      }
-
-      const data = await res.json();
-      const rawCoupons: { code: string; expiresAt: string }[] = data.coupons;
-
-      if (!rawCoupons || rawCoupons.length === 0) {
-        throw new Error("No se devolvieron cupones.");
-      }
-
-      const pdfItems: PDFCouponItem[] = await Promise.all(
-        rawCoupons.map(async (c) => ({
-          code: c.code,
-          expiresAt: c.expiresAt,
-          qrDataUrl: await QRCode.toDataURL(c.code, { margin: 1, width: 400 }),
-        }))
-      );
-
-      const blob = await pdf(
-        <MostazaCouponPDF
-          coupons={pdfItems}
-          brandColor={brandColor}
-          logoUrl={branchLogoUrl ?? undefined}
-          heroImageUrl={heroImageDataUrl ?? undefined}
-          line1={line1}
-          line2={line2}
-          line3={line3}
-        />
-      ).toBlob();
+      const { blob } = await generatePdfBlob();
 
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -130,6 +141,61 @@ export default function CouponGeneratorModal({
     }
   };
 
+  const handleZapPremium = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setStatus("sending_zap");
+    setErrorMessage("");
+    setZapOrderUrl(null);
+
+    try {
+      // 1. Generar PDF
+      const { blob, rawCoupons } = await generatePdfBlob();
+
+      // 2. Subir directamente el Blob a Cloudflare R2 usando el endpoint de Kiosco24
+      const formData = new FormData();
+      const filename = `cupones-${promotion.name.replace(/\s+/g, "-").toLowerCase()}-${Date.now()}.pdf`;
+      formData.append("file", blob, filename);
+      formData.append("folder", "coupons");
+
+      const uploadRes = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!uploadRes.ok) {
+        throw new Error("Error subiendo el PDF al servidor de medios.");
+      }
+
+      const uploadData = await uploadRes.json();
+      const pdfUrl = uploadData.secure_url || uploadData.url;
+
+      // 3. Enviar la URL a nuestro proxy interno (que redirige a tienda.zap)
+      const res = await fetch(`/api/partner/push-coupons`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          promotionId: promotion.id,
+          coupons: rawCoupons,
+          pdfUrl,
+          filename,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Error al enviar el pedido a ZAP Premium.");
+      }
+
+      setZapOrderUrl(data.orderUrl);
+      setStatus("success");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Error integrando con ZAP Premium.";
+      console.error(err);
+      setStatus("error");
+      setErrorMessage(msg);
+    }
+  };
+
   return (
     <div className="promo-modal-backdrop">
       <div className="promo-modal" style={{ maxWidth: "560px" }}>
@@ -139,13 +205,13 @@ export default function CouponGeneratorModal({
             type="button"
             className="promo-close-btn"
             onClick={onClose}
-            disabled={status === "generating"}
+            disabled={status === "generating" || status === "sending_zap"}
           >
             ×
           </button>
         </div>
 
-        <form onSubmit={handleGenerate} className="promo-modal-body">
+        <div className="promo-modal-body">
           <p style={{ fontSize: "14px", color: "var(--text-2)", marginBottom: "20px" }}>
             Cada cupón incluirá un QR único. Personalizá los textos que aparecerán impresos.
           </p>
@@ -294,23 +360,54 @@ export default function CouponGeneratorModal({
           )}
 
           {status === "success" && (
-            <div className="promo-alert success">¡PDF generado y descargado!</div>
+            <div className="promo-alert success" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <strong>¡Proceso exitoso!</strong>
+              {zapOrderUrl ? (
+                <>
+                  <p>Tu pedido fue enviado a ZAP Premium. Un operador lo procesará en breve.</p>
+                  <a href={zapOrderUrl} target="_blank" rel="noreferrer" style={{ color: 'var(--primary, #f97316)', fontWeight: 'bold', textDecoration: 'underline' }}>
+                    Ver pedido / Pagar en Cuotas →
+                  </a>
+                </>
+              ) : (
+                <p>El PDF fue generado y descargado a tu equipo.</p>
+              )}
+            </div>
           )}
 
-          <div className="promo-modal-footer" style={{ marginTop: "24px" }}>
+          <div className="promo-modal-footer" style={{ marginTop: "24px", flexWrap: "wrap", justifyContent: "flex-end", gap: "10px" }}>
             <button
               type="button"
               className="promo-btn-ghost"
               onClick={onClose}
-              disabled={status === "generating"}
+              disabled={status === "generating" || status === "sending_zap"}
+              style={{ marginRight: "auto" }}
             >
               Cerrar
             </button>
-            <button type="submit" className="promo-btn-primary" disabled={status === "generating"}>
-              {status === "generating" ? "Generando PDF…" : `Generar ${count} cupones`}
+            
+            <button 
+              type="button"
+              className="promo-btn-secondary" 
+              onClick={handleGenerate}
+              disabled={status === "generating" || status === "sending_zap"}
+            >
+              {status === "generating" ? "Generando PDF…" : `Descargar PDF`}
             </button>
+
+            {isOwner && (
+              <button 
+                type="button"
+                className="promo-btn-primary" 
+                onClick={handleZapPremium}
+                disabled={status === "generating" || status === "sending_zap"}
+                style={{ background: "#8b5cf6", borderColor: "#7c3aed" }}
+              >
+                {status === "sending_zap" ? "Enviando..." : `🖨️ Imprimir en ZAP Premium`}
+              </button>
+            )}
           </div>
-        </form>
+        </div>
       </div>
     </div>
   );

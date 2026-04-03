@@ -24,6 +24,7 @@ import {
 } from "@/lib/stats-helpers";
 import type { PeriodoData } from "@/lib/stats-types";
 import { downloadVentasReportPDF } from "@/lib/report-download";
+import ZapAdSlot from "@/components/ads/ZapAdSlot";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -333,6 +334,8 @@ export default function EstadisticasPage() {
             </button>
           </div>
         )}
+
+        <ZapAdSlot zone="stats" />
 
         {/* Tab content */}
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>

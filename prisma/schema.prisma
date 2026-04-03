@@ -1063,3 +1063,22 @@ model SalePromoApplication {
   @@index([saleId])
   @@index([couponId])
 }
+
+model ZapCampaign {
+  id              String   @id @default(cuid()) // Id espejo de tienda.zap
+  zone            String   
+  format          String   
+  title           String
+  description     String?
+  ctaText         String?
+  imageUrl        String?
+  backgroundColor String?
+  textColor       String?
+  actionType      String   
+  actionUrl       String?
+  productId       String?  
+  active          Boolean  @default(true)
+  syncedAt        DateTime @default(now())
+
+  @@index([zone, active])
+}

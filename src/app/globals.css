@@ -1296,7 +1296,8 @@ body {
   }
 
   .restock-modal__product-head {
-    flex-direction: column;
+    flex-direction: row;
+    align-items: center;
   }
 
   .restock-modal__list {
@@ -1306,16 +1307,16 @@ body {
   }
 
   .restock-modal__product {
-    padding: 12px;
-    gap: 10px;
+    padding: 10px;
+    gap: 8px;
     box-shadow: 0 10px 24px rgba(2, 6, 23, 0.12);
   }
 
   /* Mejorado: Hacer campos de cantidad input más compactos */
   .restock-modal__field-card .input {
-    padding: 10px 12px;
+    padding: 8px 10px;
     font-size: 13px;
-    min-height: 40px;
+    min-height: 36px;
   }
 }
 
@@ -1360,13 +1361,14 @@ body {
   }
 
   .restock-modal__product {
-    padding: 10px;
-    gap: 8px;
-    box-shadow: 0 8px 20px rgba(2, 6, 23, 0.1);
+    padding: 8px;
+    gap: 6px;
+    box-shadow: 0 8px 16px rgba(2, 6, 23, 0.08);
   }
 
   .restock-modal__product-head {
-    gap: 10px;
+    gap: 8px;
+    align-items: stretch;
   }
 
   /* Mejorado: Money grid en vertical en móviles muy pequeños */
@@ -1380,16 +1382,16 @@ body {
   }
 
   .restock-modal__money-grid .input {
-    padding: 8px 10px;
+    padding: 6px 8px;
     font-size: 12px;
-    min-height: 36px;
+    min-height: 32px;
   }
 
   /* Compactar labels en inputs pequeños */
   .restock-modal__field-card .input {
-    padding: 8px 10px;
+    padding: 6px 8px;
     font-size: 12px;
-    min-height: 36px;
+    min-height: 32px;
   }
 }
 

@@ -626,6 +626,7 @@ function ProductModal({
   onCategoriesChange: (categories: Category[]) => void;
   isOwner: boolean;
   allowOpenStockAfter?: boolean;
+  onOpenCorrection?: () => void;
 }) {
   const isNew = !product;
   const isInlineCreateOnly = isNew && !allowOpenStockAfter;
@@ -1970,8 +1971,19 @@ function ProductModal({
                         
                         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px" }}>
                           <div>
-                            <label style={{ fontSize: "8px", color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase", marginBottom: "4px", display: "block" }}>
-                              {soldByWeight ? "Peso que entra" : "Unidades que entran"}
+                            <label style={{ fontSize: "8px", color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase", marginBottom: "4px", display: "flex", justifyContent: "space-between" }}>
+                              <span>{soldByWeight ? "Peso que entra" : "Unidades que entran"}</span>
+                              {!isNew && onOpenCorrection && (
+                                <button
+                                  type="button"
+                                  className="btn btn-sm btn-ghost"
+                                  style={{ fontSize: "8px", padding: "0px 4px", height: "auto", marginLeft: "auto", display: "inline-block" }}
+                                  onClick={onOpenCorrection}
+                                  title="Abrir panel de corrección de stock"
+                                >
+                                  🧮 Corregir
+                                </button>
+                              )}
                             </label>
                             <input
                               className="input"
@@ -2017,9 +2029,7 @@ function ProductModal({
                                 {(() => {
                                   const key = v.id || `index-${i}`;
                                   const adj = parseStockQuantityInput(variantStockAdjustments[key] || "", soldByWeight);
-                                  if (adj !== null && adj > 0) {
-                                    return formatStockQuantity(currentVariantStock + adj, soldByWeight);
-                                  }
+                                  if (adj !== null && adj > 0) return formatStockQuantity(currentVariantStock + adj, soldByWeight);
                                   return formatStockQuantity(v.stock, soldByWeight) || "—";
                                 })()}
                               </span>
@@ -2094,9 +2104,22 @@ function ProductModal({
               
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
                 <div>
-                  <label style={{ fontSize: "10px", color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase", marginBottom: "6px", display: "block" }}>
-                    {soldByWeight ? "Peso que entra" : "Unidades que entran"}
-                  </label>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                    <label style={{ fontSize: "10px", color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase", display: "block", margin: 0 }}>
+                      {soldByWeight ? "Peso que entra" : "Unidades que entran"}
+                    </label>
+                    {!isNew && onOpenCorrection && (
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-ghost"
+                        style={{ fontSize: "10px", padding: "2px 6px", height: "auto" }}
+                        onClick={onOpenCorrection}
+                        title="Abrir panel de corrección de stock"
+                      >
+                        🧮 Corregir inventario
+                      </button>
+                    )}
+                  </div>
                   <input
                     className="input"
                     type={soldByWeight ? "text" : "number"}
@@ -3693,17 +3716,11 @@ function StockLoadingModal({
         onClick={(e) => e.stopPropagation()}
         style={{ width: "100%", display: "flex", flexDirection: "column" }}
       >
-        <div className="restock-modal__header">
+        <div className="restock-modal__header" style={{ padding: "12px", paddingBottom: "8px" }}>
           <div className="restock-modal__title-wrap">
-            <span className="restock-modal__eyebrow">{isReceiveFlow ? "Ingreso rapido" : "Ajuste manual"}</span>
-            <h2 className="restock-modal__title">{modalTitle}</h2>
-            <p className="restock-modal__subtitle">
-              {isReceiveFlow
-                ? "Carga cantidades, deja notas opcionales y guarda todo sin perder de vista la lista."
-                : "Corrige el inventario real con una lectura mas clara del stock actual y del resultado final."}
-            </p>
+            <h2 className="restock-modal__title" style={{ fontSize: "16px", margin: 0 }}>{modalTitle}</h2>
           </div>
-          <button className="btn btn-sm btn-ghost" onClick={onClose}>✕</button>
+          <button className="btn btn-sm btn-ghost" onClick={onClose} style={{ padding: "4px 8px" }}>✕</button>
         </div>
 
         {/* Filter + metadata */}
@@ -3757,11 +3774,11 @@ function StockLoadingModal({
             <div style={{ display: "none" }}>
               {helperCopy}
             </div>
-            <div className="restock-modal__quick-actions">
+            <div className="restock-modal__quick-actions" style={{ display: "flex", flexWrap: "nowrap", gap: "6px", width: "100%", overflowX: "auto", paddingBottom: "2px" }}>
               <button
                 type="button"
                 className="btn btn-ghost"
-                style={{ padding: "0 12px", fontWeight: 700 }}
+                style={{ flex: "1 0 auto", padding: "0 12px", fontWeight: 700 }}
                 onClick={() => setScannerOpen(true)}
                 title="Escanear para buscar"
               >
@@ -3770,7 +3787,7 @@ function StockLoadingModal({
               <button
                 type="button"
                 className="btn btn-ghost"
-                style={{ border: "1px solid var(--border)", fontWeight: 700 }}
+                style={{ flex: "1 0 auto", border: "1px solid var(--border)", fontWeight: 700 }}
                 onClick={openInlineCreate}
               >
                 Crear producto
@@ -3778,10 +3795,10 @@ function StockLoadingModal({
               <button
                 type="button"
                 className="btn btn-ghost"
-                style={{ border: "1px solid var(--border)", fontWeight: 700 }}
+                style={{ flex: "1 0 auto", border: "1px solid var(--border)", fontWeight: 700 }}
                 onClick={() => setDetailsOpen((prev) => !prev)}
               >
-                {detailsOpen ? "Ocultar detalles" : isReceiveFlow ? "Detalles del ingreso" : "Motivo del ajuste"}
+                {detailsOpen ? "Ocultar detalles" : isReceiveFlow ? "Detalles" : "Motivos"}
               </button>
             </div>
           </div>
@@ -3796,22 +3813,7 @@ function StockLoadingModal({
             </div>
           )}
           {detailsOpen && (
-            <>
-          <div
-            style={{
-              fontSize: "11px",
-              color: "var(--text-3)",
-              padding: "10px 12px",
-              borderRadius: "12px",
-              border: "1px solid var(--border)",
-              background: "var(--surface-2)",
-            }}
-          >
-            {isReceiveFlow
-              ? "Ingresá cuántas unidades llegaron. El sistema las suma al stock actual y deja el ingreso trazado para completar costos más adelante si hace falta."
-              : "Ingresá el stock físico correcto total. Esto corrige el inventario actual sin mezclarlo con una compra."}
-          </div>
-
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
           {isReceiveFlow ? (
             <>
               <input
@@ -3842,9 +3844,6 @@ function StockLoadingModal({
                 <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
                   <div>
                     <div style={{ fontSize: "12px", fontWeight: 700 }}>Comprobante</div>
-                    <div style={{ fontSize: "11px", color: "var(--text-3)" }}>
-                      Adjuntá una foto para completar costos más tarde sin frenar la carga.
-                    </div>
                   </div>
                   <button
                     type="button"
@@ -3916,10 +3915,7 @@ function StockLoadingModal({
                   style={{ marginTop: "2px" }}
                 />
                 <div>
-                  <div style={{ fontSize: "12px", fontWeight: 700 }}>Seguir costos de esta mercadería</div>
-                  <div style={{ fontSize: "11px", color: "var(--text-3)" }}>
-                    Si queda activo, este ingreso se marca como pendiente para completar la valorización más adelante.
-                  </div>
+                  <div style={{ fontSize: "12px", fontWeight: 700 }}>Seguir costos de la mercadería</div>
                 </div>
               </label>
             </>
@@ -3933,7 +3929,7 @@ function StockLoadingModal({
               style={{ resize: "vertical", minHeight: "78px" }}
             />
           )}
-            </>
+            </div>
           )}
         </div>
 
@@ -4005,15 +4001,15 @@ function StockLoadingModal({
                       : undefined,
                 }}
               >
-                <div className="restock-modal__product-head">
-                  <ProductThumb image={p.image} emoji={p.emoji} name={p.name} size={56} radius={18} previewable />
+                <div className="restock-modal__product-head" style={{ alignItems: "center" }}>
+                  <ProductThumb image={p.image} emoji={p.emoji} name={p.name} size={42} radius={12} previewable />
                   <div className="restock-modal__product-copy">
                     <div className="restock-modal__product-title-row">
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div className="restock-modal__product-title">{p.name}</div>
+                        <div className="restock-modal__product-title" style={{ fontSize: "14px" }}>{p.name}</div>
                         {[p.brand, p.supplierName, p.presentation].filter(Boolean).length > 0 && (
-                      <div style={{ fontSize: "11px", color: "var(--text-3)" }}>{[p.brand, p.supplierName].filter(Boolean).join(" · ")}</div>
-                    )}
+                          <div style={{ fontSize: "10px", color: "var(--text-3)", marginTop: "1px" }}>{[p.brand, p.supplierName, p.presentation].filter(Boolean).join(" · ")}</div>
+                        )}
                       </div>
                       <div className="restock-modal__product-tags">
                         {p.id === activeSpotlightId && (
@@ -4206,11 +4202,9 @@ function StockLoadingModal({
               {saveError}
             </span>
           )}
-            {!saveError && (
-              <div className="restock-modal__footer-text">
-                {hasInvalidRows
-                  ? "Revisa los lotes que superan el stock final antes de guardar."
-                  : "Puedes seguir cargando sin cerrar el modal."}
+            {!saveError && hasInvalidRows && (
+              <div className="restock-modal__footer-text" style={{ color: "var(--red)" }}>
+                Revisa los lotes.
               </div>
             )}
           </div>
@@ -6033,6 +6027,15 @@ export default function ProductosPage() {
             onSave={handleProductModalSave}
             onCategoriesChange={setCategories}
             isOwner={Boolean(isOwner)}
+            onOpenCorrection={() => {
+              const editingId = modal !== "new" && modal?.id ? modal.id : null;
+              setModal(null);
+              setStockModalPreset({
+                initialOperation: "correct",
+                spotlightProductId: editingId,
+              });
+              setShowStockModal(true);
+            }}
           />
         </ModalPortal>
       )}

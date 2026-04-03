@@ -93,35 +93,57 @@ export default function ZapAdSlot({ zone, branchId }: ZapAdSlotProps) {
       return (
         <div 
             onClick={handleAction}
-            className="group flex flex-col md:flex-row items-center justify-between p-3 rounded-lg border border-orange-100 hover:border-orange-300 transition-colors cursor-pointer mb-6"
-            style={{ backgroundColor: bgColor }}
+            className="group relative flex flex-col md:flex-row items-center justify-between p-4 md:p-5 rounded-2xl cursor-pointer mb-6 transform hover:-translate-y-1 transition-all duration-300 ease-out shadow-sm hover:shadow-lg overflow-hidden border border-white/20"
+            style={{ 
+              background: `linear-gradient(135deg, ${bgColor}ee 0%, ${bgColor}bb 100%)`,
+              backdropFilter: 'blur(10px)'
+            }}
         >
-            <div className="flex items-center gap-3 w-full">
-                <span className="text-xl">⚡</span>
+            {/* Shimmer effect on hover */}
+            <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-700 bg-gradient-to-r from-transparent via-white/20 to-transparent -skew-x-12 translate-x-[-150%] group-hover:translate-x-[150%]" />
+            
+            <div className="flex items-center gap-4 w-full z-10">
+                <div 
+                  className="hidden sm:flex items-center justify-center w-10 h-10 rounded-full shadow-inner"
+                  style={{ backgroundColor: `${textColor}15` }}
+                >
+                  <span className="text-xl filter drop-shadow-sm">⚡</span>
+                </div>
                 <div className="flex-1">
-                    <p style={{ color: textColor }} className="text-sm font-bold m-0 leading-tight">
-                        {ad.content.title}
-                    </p>
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                      <p style={{ color: textColor }} className="text-sm sm:text-base font-black m-0 leading-tight tracking-tight">
+                          {ad.content.title}
+                      </p>
+                      {discountBadge && (
+                          <span className="text-[10px] sm:text-xs font-black px-2 py-0.5 rounded-full text-white shrink-0 shadow-sm" style={{ backgroundColor: textColor }}>
+                              {discountBadge}
+                          </span>
+                      )}
+                    </div>
                     {ad.content.description && (
-                        <p className="text-xs text-gray-500 m-0 mt-0.5 leading-tight">
+                        <p className="text-xs sm:text-sm m-0 mt-1 leading-relaxed opacity-90 font-medium" style={{ color: `${textColor}cc` }}>
                             {ad.content.description}
                         </p>
                     )}
                 </div>
-                {discountBadge && (
-                    <span className="text-xs font-black px-2 py-0.5 rounded-full text-white shrink-0" style={{ backgroundColor: textColor }}>
-                        {discountBadge}
-                    </span>
-                )}
                 {ad.content.ctaText && (
-                    <button 
-                        style={{ color: textColor }} 
-                        className="text-xs font-bold underline bg-transparent border-none p-0 cursor-pointer whitespace-nowrap"
+                    <div 
+                        className="hidden sm:flex px-4 py-2 rounded-xl text-sm font-bold text-white shadow-md group-hover:shadow-lg transition-all"
+                        style={{ backgroundColor: textColor }}
                     >
-                        {ad.content.ctaText} &rarr;
-                    </button>
+                        {ad.content.ctaText}
+                    </div>
                 )}
             </div>
+            {/* Mobile CTA */}
+            {ad.content.ctaText && (
+                <div 
+                    className="sm:hidden w-full mt-3 px-4 py-2 rounded-xl text-sm text-center font-bold text-white shadow-sm"
+                    style={{ backgroundColor: textColor }}
+                >
+                    {ad.content.ctaText}
+                </div>
+            )}
         </div>
       )
 
@@ -129,36 +151,39 @@ export default function ZapAdSlot({ zone, branchId }: ZapAdSlotProps) {
       return (
         <div 
           onClick={handleAction}
-          className="relative overflow-hidden rounded-xl cursor-pointer mb-6 transform hover:scale-[1.01] transition-transform shadow-sm hover:shadow-md"
-          style={{ backgroundColor: bgColor, border: `1px solid ${textColor}30` }}
+          className="group relative overflow-hidden rounded-2xl cursor-pointer mb-6 transform hover:scale-[1.02] transition-all duration-300 ease-in-out shadow-md hover:shadow-xl border border-white/10"
+          style={{ 
+            background: `linear-gradient(to right, ${bgColor}, ${bgColor}ee)`,
+          }}
         >
-           <div className="p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-              <div className="flex-1 z-10">
-                  <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                      <span className="text-xs font-black tracking-widest uppercase px-1.5 py-0.5 rounded text-white bg-black bg-opacity-20 inline-block" style={{ color: textColor }}>
+           <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none" />
+           <div className="p-5 sm:p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5 relative z-10">
+              <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-2 flex-wrap">
+                      <span className="text-[10px] sm:text-xs font-black tracking-widest uppercase px-2 py-1 rounded-md text-white bg-black/20 backdrop-blur-sm shadow-inner" style={{ color: textColor }}>
                           ZAP PREMIUM
                       </span>
                       {discountBadge && (
-                          <span className="text-xs font-black px-2 py-0.5 rounded-full text-white" style={{ backgroundColor: textColor }}>
+                          <span className="text-[10px] sm:text-xs font-black px-2 py-1 rounded-md text-white shadow-sm" style={{ backgroundColor: textColor }}>
                               {discountBadge}
                           </span>
                       )}
                   </div>
-                  <h3 style={{ color: textColor }} className="text-lg font-black m-0 mb-1">
+                  <h3 style={{ color: textColor }} className="text-lg sm:text-xl font-black m-0 mb-1.5 tracking-tight drop-shadow-sm">
                       {ad.content.title}
                   </h3>
                   {ad.content.description && (
-                      <p className="text-sm m-0 text-gray-600 max-w-sm">
+                      <p className="text-sm sm:text-base m-0 max-w-lg font-medium opacity-90" style={{ color: `${textColor}dd` }}>
                           {ad.content.description}
                       </p>
                   )}
               </div>
-              <div className="z-10 w-full sm:w-auto mt-2 sm:mt-0">
+              <div className="w-full sm:w-auto mt-2 sm:mt-0">
                   <button 
-                      className="w-full sm:w-auto px-5 py-2.5 rounded-lg text-sm font-bold text-white transition-opacity hover:opacity-90 border-none cursor-pointer"
+                      className="w-full sm:w-auto px-6 py-3 rounded-xl text-sm font-black text-white transition-all group-hover:brightness-110 group-hover:scale-105 border-none cursor-pointer shadow-lg active:scale-95"
                       style={{ backgroundColor: textColor }}
                   >
-                      {ad.content.ctaText || "Conocer más"}
+                      {ad.content.ctaText || "Activar ahora"} →
                   </button>
               </div>
            </div>

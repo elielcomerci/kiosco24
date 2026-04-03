@@ -17,6 +17,7 @@ import type { TicketPreviewData } from "@/lib/ticket-format";
 import { getTicketPrintModeLabel, type TicketPrintMode } from "@/lib/ticketing";
 import ConfigTabsContainer from "./ConfigTabsContainer";
 import type { Employee, Category, Branch, PricingMode, FiscalEnvironment } from "./types";
+import ZapAdSlot from "@/components/ads/ZapAdSlot";
 
 // ─── Employee Form Modal ───────────────────────────────────────────────────────
 function EmployeeModal({
@@ -1361,6 +1362,9 @@ export default function ConfiguracionPage() {
       </div>
 
       <div style={{ maxWidth: "1180px", margin: "0 auto", display: "flex", flexDirection: "column", gap: "28px" }}>
+        
+        <ZapAdSlot zone="configuracion" branchId={branchId} />
+
         <div
           style={{
             borderRadius: "28px",

@@ -436,7 +436,7 @@ export async function POST(req: Request) {
         quantity: item.quantity,
         soldByWeight: item.soldByWeight,
         cost: item.cost,
-        appliedPromoType: item.appliedPromoType,
+        appliedPromoType: item.appliedPromoType === "NONE" ? null : (item.appliedPromoType ?? null),
         appliedPromoId: item.appliedPromoId,
         comboGroupId: item.comboGroupId,
       }));

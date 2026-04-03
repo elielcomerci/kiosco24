@@ -71,10 +71,22 @@ export default function ZapAdSlot({ zone, branchId }: ZapAdSlotProps) {
   if (loading || !ad) return null
 
   const handleAction = () => {
-      // TODO: Implementar modal en caso de 'one_click_order'
-      if (ad.action?.type === 'open_url' && ad.action.url) {
-          window.open(ad.action.url, '_blank', 'noopener,noreferrer')
+      console.log('Ad clicked:', ad);
+      const urlToOpen = ad.action?.url;
+
+      if (urlToOpen) {
+          const finalUrl = urlToOpen.startsWith('http') ? urlToOpen : `https://${urlToOpen}`;
+          window.open(finalUrl, '_blank', 'noopener,noreferrer');
+          return;
       }
+
+      if (ad.action?.type === 'one_click_order') {
+          alert(`Próximamente: Añadir ${ad.action.productName || 'el producto'} al carrito con 1 click.`);
+          return;
+      }
+
+      // Si no hay acción configurada, mostramos un pequeño aviso para evitar confusión (alguien puede haber olvidado configurar la URL)
+      console.warn('El anuncio fue clickeado pero no tiene una URL o acción configurada.', ad);
   }
 
   // REUSABILITY: Basic styling parameters

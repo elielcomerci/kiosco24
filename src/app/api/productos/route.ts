@@ -531,7 +531,8 @@ export async function GET(req: Request) {
     });
 
     const baseNegative = negativeReservationsByKey.get(lotKey(record.product.id)) ?? 0;
-    const baseAvailableStock = (baseSummary.availableStock ?? record.stock) - baseNegative;
+    const baseAvailableStockOriginal = baseSummary.availableStock ?? record.stock;
+    const baseAvailableStock = baseAvailableStockOriginal === null ? null : baseAvailableStockOriginal - baseNegative;
     const baseFlags = getStockFlags(baseAvailableStock, record.minStock);
     const variantPrices = mappedVariants
       .map((variant) => (typeof variant.price === "number" && variant.price > 0 ? variant.price : null))
@@ -619,7 +620,7 @@ export async function GET(req: Request) {
       costMin,
       costMax,
       hasVariablePrices: priceMin !== priceMax,
-      stock: record.stock - baseNegative,
+      stock: record.stock === null ? null : record.stock - baseNegative,
       availableStock: baseAvailableStock,
       minStock: record.minStock,
       showInGrid: record.showInGrid,

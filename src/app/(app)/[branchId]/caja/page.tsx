@@ -22,6 +22,7 @@ import InvoiceModal from "@/components/fiscal/InvoiceModal";
 import type { InvoicePreviewData } from "@/lib/invoice-format";
 import TrialWelcomeModal from "@/components/trial/TrialWelcomeModal";
 import TrialBanner from "@/components/trial/TrialBanner";
+import DigitalSalesCarousel from "@/components/caja/DigitalSalesCarousel";
 import { calculateTrialInfo, getTrialMessage } from "@/lib/trial-manager";
 
 import { savePendingSale } from "@/lib/offline/db";
@@ -1820,12 +1821,16 @@ export default function CajaPage() {
           </span>
         </button>
         <div className="separator" style={{ width: "1px", height: "32px", background: "var(--border-2)" }} />
-        <div className="status-bar-item" style={{ alignItems: "flex-end", opacity: isCashier ? 0 : 1 }}>
-          <span className="status-bar-label">Ganancia estimada</span>
-          <span className="status-bar-value" style={{ color: cajaStats.ganancia !== null && cajaStats.ganancia >= 0 ? "var(--primary)" : "var(--red)" }}>
-            {cajaStats.ganancia !== null ? formatARS(cajaStats.ganancia) : "—"}
-          </span>
-        </div>
+        {isCashier ? (
+          <DigitalSalesCarousel stats={cajaStats} />
+        ) : (
+          <div className="status-bar-item" style={{ alignItems: "flex-end" }}>
+            <span className="status-bar-label">Ganancia estimada</span>
+            <span className="status-bar-value" style={{ color: cajaStats.ganancia !== null && cajaStats.ganancia >= 0 ? "var(--primary)" : "var(--red)" }}>
+              {cajaStats.ganancia !== null ? formatARS(cajaStats.ganancia) : "—"}
+            </span>
+          </div>
+        )}
       </div>
       
       {/* Header */}

@@ -59,6 +59,7 @@ export default async function PromocionesPage({
           id: true,
           name: true,
           emoji: true,
+          image: true,
           variants: { select: { id: true, name: true } },
         },
       },

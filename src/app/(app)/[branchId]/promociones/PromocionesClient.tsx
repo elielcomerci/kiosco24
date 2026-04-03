@@ -4,6 +4,7 @@ import { useState } from "react";
 import useSWR from "swr";
 import { formatARS } from "@/lib/utils";
 import PromoModal from "./PromoModal";
+import CouponGeneratorModal from "./CouponGeneratorModal";
 
 type PromotionType = "COMBO" | "ZONA_ROJA" | "HAPPY_HOUR" | "DIA_TEMATICO";
 
@@ -37,6 +38,7 @@ export interface ProductCatalogItem {
     id: string;
     name: string;
     emoji: string | null;
+    image: string | null;
     variants: Array<{ id: string; name: string }>;
   };
 }
@@ -54,6 +56,7 @@ export default function PromocionesClient({
   
   const [modalOpen, setModalOpen] = useState(false);
   const [editPromo, setEditPromo] = useState<Promotion | null>(null);
+  const [showCouponGenFor, setShowCouponGenFor] = useState<Promotion | null>(null);
 
   const getTypeLabel = (type: PromotionType) => {
     switch (type) {
@@ -187,6 +190,14 @@ export default function PromocionesClient({
               <div className="promo-card-actions">
                 <button 
                   className="btn-icon" 
+                  style={{ color: "var(--primary)" }}
+                  onClick={() => setShowCouponGenFor(promo)}
+                  title="Generar Cupones PDF (Estilo Mostaza)"
+                >
+                  {"\uD83C\uDFAB"}
+                </button>
+                <button 
+                  className="btn-icon" 
                   onClick={() => { setEditPromo(promo); setModalOpen(true); }}
                   title="Editar"
                 >
@@ -212,6 +223,15 @@ export default function PromocionesClient({
           existingPromo={editPromo}
           onClose={() => setModalOpen(false)}
           onSaved={() => mutate()}
+        />
+      )}
+
+      {showCouponGenFor && (
+        <CouponGeneratorModal
+          branchId={branchId}
+          products={products}
+          promotion={showCouponGenFor}
+          onClose={() => setShowCouponGenFor(null)}
         />
       )}
     </div>

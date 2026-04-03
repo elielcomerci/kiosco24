@@ -51,9 +51,20 @@ export default function CouponGeneratorModal({
   const [line3, setLine3] = useState(defaultDetail); // detail / what's included
 
   const [brandColor, setBrandColor] = useState(branchPrimaryColor);
+  const [heroImageDataUrl, setHeroImageDataUrl] = useState<string | null>(null);
 
   const [status, setStatus] = useState<"idle" | "generating" | "success" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState("");
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      setHeroImageDataUrl(ev.target?.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
 
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -96,6 +107,7 @@ export default function CouponGeneratorModal({
           coupons={pdfItems}
           brandColor={brandColor}
           logoUrl={branchLogoUrl ?? undefined}
+          heroImageUrl={heroImageDataUrl ?? undefined}
           line1={line1}
           line2={line2}
           line3={line3}
@@ -227,6 +239,36 @@ export default function CouponGeneratorModal({
                 disabled={status === "generating"}
               />
             </div>
+          </div>
+
+          {/* ── Imagen promocional ── */}
+          <div className="promo-form-group" style={{ marginBottom: "16px" }}>
+            <label>Foto promocional (opcional)</label>
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              className="promo-input"
+              style={{ padding: "8px", cursor: "pointer" }}
+              onChange={handleImageChange}
+              disabled={status === "generating"}
+            />
+            {heroImageDataUrl && (
+              <div style={{ marginTop: "8px", display: "flex", alignItems: "center", gap: "10px" }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={heroImageDataUrl}
+                  alt="Vista previa"
+                  style={{ width: "80px", height: "54px", objectFit: "cover", borderRadius: "6px", border: "1px solid var(--border, #e2e8f0)" }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setHeroImageDataUrl(null)}
+                  style={{ fontSize: "12px", color: "var(--red, #ef4444)", background: "none", border: "none", cursor: "pointer" }}
+                >
+                  Quitar foto
+                </button>
+              </div>
+            )}
           </div>
 
           {/* ── Color de marca ── */}

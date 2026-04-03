@@ -123,8 +123,10 @@ export interface PDFCouponItem {
 export interface MostazaCouponPDFProps {
   coupons: PDFCouponItem[];
   brandColor?: string;
-  /** Optional logo URL (Cloudinary or any HTTPS image) */
+  /** Optional logo shown in the header bar */
   logoUrl?: string;
+  /** Optional custom photo shown as full-width banner */
+  heroImageUrl?: string;
   /** Line 1: branch name / headline shown in the header */
   line1?: string;
   /** Line 2: promo name / offer description */
@@ -157,6 +159,7 @@ export function MostazaCouponPDF({
   coupons,
   brandColor = "#da251d",
   logoUrl,
+  heroImageUrl,
   line1 = "CUPÓN ESPECIAL",
   line2,
   line3,
@@ -180,6 +183,15 @@ export function MostazaCouponPDF({
 
           {/* ── Top divider ─────────────────────────────────────────── */}
           <View style={[styles.divider, { backgroundColor: brandColor, opacity: 0.3 }]} />
+
+          {/* ── Hero image ──────────────────────────────────────────── */}
+          {heroImageUrl ? (
+            <Image
+              source={heroImageUrl}
+              style={{ width: "100%", height: 160, objectFit: "cover" }}
+            />
+          ) : null}
+
 
           {/* ── Promo description ───────────────────────────────────── */}
           {(line2 || line3) ? (

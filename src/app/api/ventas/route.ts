@@ -428,7 +428,18 @@ export async function POST(req: Request) {
       }
 
       // Los items con precios ajustados por promos son los que se persisten
-      const saleItems = promoResult.adjustedItems;
+      const saleItems = promoResult.adjustedItems.map(item => ({
+        productId: item.productId,
+        variantId: item.variantId,
+        name: item.name,
+        price: item.price,
+        quantity: item.quantity,
+        soldByWeight: item.soldByWeight,
+        cost: item.cost,
+        appliedPromoType: item.appliedPromoType,
+        appliedPromoId: item.appliedPromoId,
+        comboGroupId: item.comboGroupId,
+      }));
       const total = promoResult.total;
       // ─────────────────────────────────────────────────────────────────────
 

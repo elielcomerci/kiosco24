@@ -961,13 +961,6 @@ function ProductModal({
     setLoading(true);
     setSaveError(null);
 
-    // Si hay ajuste pendiente, usar el stock proyectado (stock actual + lo que entró)
-    // Si no, usar el valor directo del campo stock
-    const normalizedStock = hasVariants ? null : isInlineCreateOnly ? 0 : (
-      projectedSimpleStock !== null
-        ? projectedSimpleStock
-        : parseStockQuantityInput(stock, soldByWeight)
-    );
     const normalizedMinStock = hasVariants ? null : parseStockQuantityInput(minStock, soldByWeight);
 
     const payload = {
@@ -984,7 +977,8 @@ function ProductModal({
       categoryId: categoryId || null,
       price: isInlineCreateOnly ? null : toNum(price),
       cost: isInlineCreateOnly ? null : toNum(cost),
-      stock: normalizedStock,
+      stock: hasVariants ? undefined : isInlineCreateOnly ? 0 : isNew ? (parsedStockAdjustment !== null && parsedStockAdjustment > 0 ? parsedStockAdjustment : parseStockQuantityInput(stock, soldByWeight)) : undefined,
+      stockAdjustment: hasVariants ? undefined : isNew ? undefined : (parsedStockAdjustment !== null && parsedStockAdjustment > 0 ? parsedStockAdjustment : undefined),
       minStock: normalizedMinStock,
       showInGrid,
       soldByWeight,
@@ -993,9 +987,7 @@ function ProductModal({
         const key = v.id || `index-${i}`;
         const adjustment = parseStockQuantityInput(variantStockAdjustments[key] || "", soldByWeight);
         const currentVariantStock = v.stock ?? 0;
-        const finalVariantStock = adjustment !== null && adjustment > 0
-          ? currentVariantStock + adjustment
-          : parseStockQuantityInput(v.stock?.toString() || "", soldByWeight);
+        const isNewVariant = !v.id;
         
         return {
           id: v.id,
@@ -1004,7 +996,8 @@ function ProductModal({
           internalCode: v.internalCode?.trim() || null,
           price: isInlineCreateOnly ? null : toNum(v.price?.toString() || ""),
           cost: isInlineCreateOnly ? null : toNum(v.cost?.toString() || ""),
-          stock: isInlineCreateOnly ? null : finalVariantStock,
+          stock: isInlineCreateOnly ? null : isNewVariant ? (adjustment !== null && adjustment > 0 ? adjustment : parseStockQuantityInput(v.stock?.toString() || "", soldByWeight)) : undefined,
+          stockAdjustment: isNewVariant ? undefined : (adjustment !== null && adjustment > 0 ? adjustment : undefined),
           minStock: parseStockQuantityInput(v.minStock?.toString() || "", soldByWeight)
         };
       }).filter(v => v.name) : []

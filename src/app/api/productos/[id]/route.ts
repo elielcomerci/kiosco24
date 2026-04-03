@@ -27,7 +27,8 @@ type VariantPayload = {
   name: string;
   barcode: string | null;
   internalCode: string | null;
-  stock: number;
+  stock?: number;
+  stockAdjustment?: number;
   minStock: number;
   price: number | null;
   cost: number | null;
@@ -78,7 +79,13 @@ function normalizeVariantPayload(variants: unknown): VariantPayload[] {
           ? variant.stock
           : Number.isFinite(Number(variant?.stock))
             ? Number(variant?.stock)
-            : 0,
+            : undefined,
+      stockAdjustment:
+        typeof variant?.stockAdjustment === "number"
+          ? variant.stockAdjustment
+          : Number.isFinite(Number(variant?.stockAdjustment))
+            ? Number(variant?.stockAdjustment)
+            : undefined,
       minStock:
         typeof variant?.minStock === "number"
           ? variant.minStock
@@ -374,6 +381,7 @@ export async function PATCH(
     price,
     cost,
     stock,
+    stockAdjustment,
     minStock,
     showInGrid,
     variants,
@@ -442,10 +450,21 @@ export async function PATCH(
         : Number.isFinite(Number(stock))
           ? Number(stock)
           : currentInventory?.stock ?? 0
-      : currentInventory?.stock ?? 0;
-  const simpleStockChanged = stock !== undefined && requestedSimpleStock !== (currentInventory?.stock ?? 0);
+      : stockAdjustment !== undefined && typeof stockAdjustment === "number"
+        ? (currentInventory?.stock ?? 0) + stockAdjustment
+        : currentInventory?.stock ?? 0;
+  const computedStock = stock !== undefined ? requestedSimpleStock : (stockAdjustment !== undefined ? requestedSimpleStock : undefined);
+  const simpleStockChanged = computedStock !== undefined && computedStock !== (currentInventory?.stock ?? 0);
   const variantStockChanged = normalizedVariants.some((variant) => {
-    if (!variant.id || typeof variant.stock !== "number") {
+    if (!variant.id) {
+      return false;
+    }
+    
+    if (variant.stockAdjustment !== undefined) {
+      return true;
+    }
+
+    if (typeof variant.stock !== "number") {
       return false;
     }
 
@@ -476,12 +495,20 @@ export async function PATCH(
   }
 
   for (const variant of normalizedVariants) {
-    if (!variant.id || typeof variant.stock !== "number") {
+    if (!variant.id) {
+      continue;
+    }
+    
+    if (variant.stockAdjustment === undefined && typeof variant.stock !== "number") {
       continue;
     }
 
     const currentVariantStock = currentVariantStockById.get(variant.id) ?? 0;
-    if (variant.stock === currentVariantStock) {
+    const targetVariantStock = variant.stockAdjustment !== undefined && typeof variant.stockAdjustment === "number" 
+      ? currentVariantStock + variant.stockAdjustment 
+      : (variant.stock ?? currentVariantStock);
+      
+    if (targetVariantStock === currentVariantStock) {
       continue;
     }
 
@@ -666,7 +693,9 @@ export async function PATCH(
         }
 
         const previousStock = currentVariantStockById.get(actualVariant.id) ?? 0;
-        const nextStock = typeof variant.stock === "number" ? variant.stock : previousStock;
+        const nextStock = variant.stockAdjustment !== undefined && typeof variant.stockAdjustment === "number"
+          ? previousStock + variant.stockAdjustment
+          : typeof variant.stock === "number" ? variant.stock : previousStock;
 
         await prisma.variantInventory.upsert({
           where: {
@@ -678,20 +707,20 @@ export async function PATCH(
           create: {
             variantId: actualVariant.id,
             branchId,
-            stock: variant.stock ?? 0,
+            stock: nextStock,
             minStock: variant.minStock ?? 0,
             price: variant.price,
             cost: variant.cost,
           },
           update: {
-            ...(variant.stock !== undefined && { stock: variant.stock }),
+            ...(variant.stock !== undefined || variant.stockAdjustment !== undefined ? { stock: nextStock } : {}),
             ...(variant.minStock !== undefined && { minStock: variant.minStock }),
             ...(variant.price !== undefined && { price: variant.price }),
             ...(variant.cost !== undefined && { cost: variant.cost }),
           },
         });
 
-        if (typeof variant.stock === "number" && nextStock < previousStock) {
+        if (nextStock < previousStock) {
           await prisma.$transaction(async (tx) => {
             await applyInventoryCorrectionToCostLayers(tx, {
               branchId,
@@ -712,26 +741,26 @@ export async function PATCH(
       branchId,
       price: typeof price === "number" ? price : 0,
       cost: typeof cost === "number" ? cost : null,
-      stock: typeof stock === "number" ? stock : null,
+      stock: computedStock !== undefined ? computedStock : null,
       minStock: typeof minStock === "number" ? minStock : null,
       showInGrid: typeof showInGrid === "boolean" ? showInGrid : true,
     },
     update: {
       ...(price !== undefined && { price }),
       ...(cost !== undefined && { cost }),
-      ...(stock !== undefined && { stock }),
+      ...(computedStock !== undefined && { stock: computedStock }),
       ...(minStock !== undefined && { minStock }),
       ...(showInGrid !== undefined && { showInGrid }),
     },
   });
 
-  if (typeof stock === "number" && stock < (currentInventory?.stock ?? 0)) {
+  if (computedStock !== undefined && computedStock < (currentInventory?.stock ?? 0)) {
     await prisma.$transaction(async (tx) => {
       await applyInventoryCorrectionToCostLayers(tx, {
         branchId,
         productId: id,
         variantId: null,
-        delta: stock - (currentInventory?.stock ?? 0),
+        delta: computedStock - (currentInventory?.stock ?? 0),
       });
     });
   }

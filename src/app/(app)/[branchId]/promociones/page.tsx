@@ -41,7 +41,7 @@ export default async function PromocionesPage({
       id: branchId,
       kiosco: { ownerId: session.user.id },
     },
-    select: { id: true },
+    select: { id: true, name: true, logoUrl: true, primaryColor: true },
   });
 
   if (!branch) {
@@ -69,7 +69,13 @@ export default async function PromocionesPage({
 
   return (
     <div className="promo-page fade-in">
-      <PromocionesClient branchId={branchId} products={products} />
+      <PromocionesClient
+        branchId={branchId}
+        products={products}
+        branchName={branch.name}
+        branchLogoUrl={branch.logoUrl ?? null}
+        branchPrimaryColor={branch.primaryColor ?? "#22c55e"}
+      />
     </div>
   );
 }

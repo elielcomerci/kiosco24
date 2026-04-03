@@ -48,9 +48,15 @@ const fetcher = (url: string) => fetch(url).then((res) => res.json());
 export default function PromocionesClient({
   branchId,
   products,
+  branchName,
+  branchLogoUrl,
+  branchPrimaryColor,
 }: {
   branchId: string;
   products: ProductCatalogItem[];
+  branchName: string;
+  branchLogoUrl: string | null;
+  branchPrimaryColor: string;
 }) {
   const { data: promotions, error, mutate } = useSWR<Promotion[]>(`/api/promociones`, fetcher);
   
@@ -231,6 +237,9 @@ export default function PromocionesClient({
           branchId={branchId}
           products={products}
           promotion={showCouponGenFor}
+          branchName={branchName}
+          branchLogoUrl={branchLogoUrl}
+          branchPrimaryColor={branchPrimaryColor}
           onClose={() => setShowCouponGenFor(null)}
         />
       )}

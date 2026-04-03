@@ -606,18 +606,21 @@ model Invoice {
 }
 
 model SaleItem {
-  id        String  @id @default(cuid())
-  saleId    String
-  sale      Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
-  productId String?
-  variantId String?
-  name      String
-  price     Float
-  quantity  Int
-  soldByWeight Boolean @default(false)
-  cost      Float?
-  lotConsumptions SaleLotConsumption[]
-  costAllocations SaleCostAllocation[]
+  id               String     @id @default(cuid())
+  saleId           String
+  sale             Sale       @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  productId        String?
+  variantId        String?
+  name             String
+  price            Float
+  quantity         Int
+  soldByWeight     Boolean    @default(false)
+  cost             Float?
+  appliedPromoType PromoType? // Tipo de promo que ajustó este ítem
+  appliedPromoId   String?    // ID de la Promotion aplicada
+  comboGroupId     String?    // UUID que agrupa ítems del mismo combo
+  lotConsumptions           SaleLotConsumption[]
+  costAllocations           SaleCostAllocation[]
   negativeStockReservations NegativeStockReservation[]
 }
 

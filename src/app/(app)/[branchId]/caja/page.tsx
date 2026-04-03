@@ -2244,13 +2244,13 @@ export default function CajaPage() {
               return (
               <div key={idx} className="ticket-item" style={{ padding: "10px 12px" }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <span style={{ fontWeight: 600, fontSize: "13px", display: "flex", alignItems: "center", gap: "6px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  <span style={{ fontWeight: 600, fontSize: "13px", display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {item.name}
-                    {promoResult?.adjustedItems[idx]?.appliedPromoType === 'COMBO' && <span style={{ background: "linear-gradient(90deg, #ec4899, #8b5cf6)", color: "#fff", fontSize: "9px", fontWeight: 800, padding: "2px 5px", borderRadius: "4px", flexShrink: 0 }}>COMBO</span>}
-                    {promoResult?.adjustedItems[idx]?.appliedPromoType === 'ZONA_ROJA' && <span style={{ background: "var(--red)", color: "#fff", fontSize: "9px", fontWeight: 800, padding: "2px 5px", borderRadius: "4px", flexShrink: 0 }}>ROJA</span>}
                   </span>
-                  <span style={{ display: "block", fontSize: "11px", color: "var(--text-3)", marginTop: "2px" }}>
-                    {item.soldByWeight ? formatSaleItemWeightLabel(item) : `x${item.quantity}`}
+                  <span style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "11px", color: "var(--text-3)", marginTop: "3px" }}>
+                    <span>{item.soldByWeight ? formatSaleItemWeightLabel(item) : `x${item.quantity}`}</span>
+                    {promoResult?.adjustedItems[idx]?.appliedPromoType === 'COMBO' && <span style={{ background: "linear-gradient(90deg, #ec4899, #8b5cf6)", color: "#fff", fontSize: "9px", fontWeight: 800, padding: "2px 5px", borderRadius: "4px" }}>COMBO</span>}
+                    {promoResult?.adjustedItems[idx]?.appliedPromoType === 'ZONA_ROJA' && <span style={{ background: "var(--red)", color: "#fff", fontSize: "9px", fontWeight: 800, padding: "2px 5px", borderRadius: "4px" }}>ROJA</span>}
                   </span>
                   {itemNeedsNegativeStock && (
                     <div

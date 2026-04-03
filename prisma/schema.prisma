@@ -1077,6 +1077,10 @@ model ZapCampaign {
   actionType      String   
   actionUrl       String?
   productId       String?  
+  // Promoción / Descuento
+  promoType       String?  // 'COMBO', 'ZONA_ROJA', 'HAPPY_HOUR', 'DIA_TEMATICO'
+  discountKind    String?  // 'PERCENTAGE' | 'FIXED_PRICE'
+  discountValue   Float?   // % o precio fijo
   active          Boolean  @default(true)
   syncedAt        DateTime @default(now())
 

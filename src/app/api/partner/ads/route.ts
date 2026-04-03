@@ -46,7 +46,14 @@ export async function GET(req: Request) {
         type: campaign.actionType,
         url: campaign.actionUrl,
         productId: campaign.productId,
-      }
+      },
+      ...(campaign.promoType && campaign.discountKind && campaign.discountValue != null && {
+        promo: {
+          type: campaign.promoType,
+          discountKind: campaign.discountKind as 'PERCENTAGE' | 'FIXED_PRICE',
+          discountValue: campaign.discountValue,
+        },
+      }),
     }
 
     return NextResponse.json({ data: mappedAd })

@@ -6,6 +6,8 @@ interface AdAction {
   type: 'open_url' | 'one_click_order' | 'informational'
   url?: string
   productId?: string
+  productName?: string
+  productSlug?: string
 }
 
 interface AdContent {
@@ -17,12 +19,19 @@ interface AdContent {
   textColor?: string
 }
 
+interface AdPromo {
+  type: string
+  discountKind: 'PERCENTAGE' | 'FIXED_PRICE'
+  discountValue: number
+}
+
 interface ZapAd {
   id: string
   zone: string
   format: 'text_only' | 'banner_small' | 'banner_large'
   content: AdContent
   action?: AdAction
+  promo?: AdPromo
 }
 
 interface ZapAdSlotProps {
@@ -69,7 +78,14 @@ export default function ZapAdSlot({ zone }: ZapAdSlotProps) {
 
   // REUSABILITY: Basic styling parameters
   const bgColor = ad.content.backgroundColor ?? '#fdf4ff'
-  const textColor = ad.content.textColor ?? '#f97316' // Orange by default
+  const textColor = ad.content.textColor ?? '#f97316'
+
+  // Badge de descuento
+  const discountBadge = ad.promo ? (
+    ad.promo.discountKind === 'PERCENTAGE'
+      ? `${ad.promo.discountValue}% OFF`
+      : `$${ad.promo.discountValue.toLocaleString('es-AR')} precio fijo`
+  ) : null
 
   switch (ad.format) {
     case 'text_only':
@@ -91,6 +107,11 @@ export default function ZapAdSlot({ zone }: ZapAdSlotProps) {
                         </p>
                     )}
                 </div>
+                {discountBadge && (
+                    <span className="text-xs font-black px-2 py-0.5 rounded-full text-white shrink-0" style={{ backgroundColor: textColor }}>
+                        {discountBadge}
+                    </span>
+                )}
                 {ad.content.ctaText && (
                     <button 
                         style={{ color: textColor }} 
@@ -112,10 +133,15 @@ export default function ZapAdSlot({ zone }: ZapAdSlotProps) {
         >
            <div className="p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div className="flex-1 z-10">
-                  <div className="flex items-center gap-2 mb-1.5">
+                  <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                       <span className="text-xs font-black tracking-widest uppercase px-1.5 py-0.5 rounded text-white bg-black bg-opacity-20 inline-block" style={{ color: textColor }}>
                           ZAP PREMIUM
                       </span>
+                      {discountBadge && (
+                          <span className="text-xs font-black px-2 py-0.5 rounded-full text-white" style={{ backgroundColor: textColor }}>
+                              {discountBadge}
+                          </span>
+                      )}
                   </div>
                   <h3 style={{ color: textColor }} className="text-lg font-black m-0 mb-1">
                       {ad.content.title}

@@ -42,6 +42,9 @@ export async function POST(req: Request) {
     actionType: string
     actionUrl?: string | null
     productId?: string | null
+    promoType?: string | null
+    discountKind?: string | null
+    discountValue?: number | null
     active: boolean
   }> = []
 
@@ -91,6 +94,9 @@ export async function POST(req: Request) {
             actionType: camp.actionType,
             actionUrl: camp.actionUrl,
             productId: camp.productId,
+            promoType: camp.promoType,
+            discountKind: camp.discountKind,
+            discountValue: camp.discountValue,
             active: camp.active,
             syncedAt: new Date(),
           },
@@ -106,6 +112,9 @@ export async function POST(req: Request) {
             actionType: camp.actionType,
             actionUrl: camp.actionUrl,
             productId: camp.productId,
+            promoType: camp.promoType,
+            discountKind: camp.discountKind,
+            discountValue: camp.discountValue,
             active: camp.active,
             syncedAt: new Date(),
           },

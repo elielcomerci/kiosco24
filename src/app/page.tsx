@@ -128,7 +128,7 @@ export default async function LandingPage() {
         <div style={{ display: "grid", gap: "8px" }}>
           <BrandLogo tone="white" width={152} />
           <div style={{ color: "#94a3b8", fontSize: "12px", letterSpacing: ".08em", textTransform: "uppercase" }}>
-            Sistema operativo para kioscos
+            Sistema operativo para negocios
           </div>
         </div>
 
@@ -155,7 +155,7 @@ export default async function LandingPage() {
                 Entrar
               </Link>
               <Link href="/register" className="btn btn-primary" style={{ borderRadius: "999px", padding: "10px 18px" }}>
-                Crear cuenta
+                Empezar ahora
               </Link>
             </>
           )}
@@ -200,7 +200,7 @@ export default async function LandingPage() {
                   fontWeight: 900,
                 }}
               >
-                El sistema que hace que tu kiosco deje de depender de acordarse de todo.
+                El sistema que hace que tu negocio deje de depender de acordarse de todo.
               </h1>
               <p style={{ margin: 0, maxWidth: "760px", color: "#cbd5e1", fontSize: "20px", lineHeight: 1.7 }}>
                 Vendes rapido, controlas stock real, ordenas fiados, emites ticket o Factura C y mantienes varias sucursales sin duplicar trabajo. Todo en una herramienta hecha para atender, no para pelearse con el sistema.
@@ -214,7 +214,7 @@ export default async function LandingPage() {
                 </Link>
               ) : (
                 <Link href="/register" className="btn btn-primary btn-lg" style={{ padding: "16px 28px" }}>
-                  Crear mi cuenta
+                  Empezar ahora
                 </Link>
               )}
               <a href="#dolor" className="btn btn-secondary btn-lg" style={{ padding: "16px 28px" }}>

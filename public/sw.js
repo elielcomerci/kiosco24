@@ -1,6 +1,6 @@
-const CACHE_NAME = "clikit-static-v3";
+const CACHE_NAME = "clikit-static-v4";
 
-const STATIC_ASSETS = ["/manifest.json", "/clikit.svg", "/clikit-blue.svg", "/clikit-white.svg"];
+const STATIC_ASSETS = ["/manifest.json"];
 
 function shouldHandleAsStatic(request) {
   if (request.method !== "GET") return false;
@@ -13,9 +13,6 @@ function shouldHandleAsStatic(request) {
   return (
     url.pathname === "/manifest.json" ||
     url.pathname === "/favicon.ico" ||
-    url.pathname === "/clikit.svg" ||
-    url.pathname === "/clikit-blue.svg" ||
-    url.pathname === "/clikit-white.svg" ||
     url.pathname.startsWith("/_next/static/") ||
     url.pathname.startsWith("/_next/image") ||
     url.pathname.startsWith("/icons/")

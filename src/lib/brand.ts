@@ -1,9 +1,20 @@
 export const APP_NAME = "Clikit";
 export const LEGACY_APP_NAME = "Kiosco24";
 
-export const BRAND_ICON_SRC = "/clikit.svg";
-export const BRAND_WORDMARK_BLUE_SRC = "/clikit-blue.svg";
-export const BRAND_WORDMARK_WHITE_SRC = "/clikit-white.svg";
+const FALLBACK_BRAND_ASSET_BASE_URL = "https://media.zap.com.ar/branding";
+
+function getBrandAssetBaseUrl() {
+  const fromEnv = process.env.NEXT_PUBLIC_BRAND_ASSET_BASE_URL?.trim();
+  return (fromEnv || FALLBACK_BRAND_ASSET_BASE_URL).replace(/\/+$/, "");
+}
+
+function buildBrandAssetUrl(fileName: string) {
+  return `${getBrandAssetBaseUrl()}/${fileName}`;
+}
+
+export const BRAND_ICON_SRC = buildBrandAssetUrl("clikit.svg");
+export const BRAND_WORDMARK_BLUE_SRC = buildBrandAssetUrl("clikit-blue.svg");
+export const BRAND_WORDMARK_WHITE_SRC = buildBrandAssetUrl("clikit-white.svg");
 
 export const SOUND_STORAGE_KEY = "clikit_sound_enabled";
 export const LEGACY_SOUND_STORAGE_KEY = "kiosco24_sound_enabled";

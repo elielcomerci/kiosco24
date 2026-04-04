@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import Script from "next/script";
 import { GeistSans } from "geist/font/sans";
+import { BRAND_ICON_SRC } from "@/lib/brand";
 
 import "./globals.css";
 
@@ -9,7 +10,7 @@ export const metadata: Metadata = {
   description: "POS rapido para kioscos y comercios argentinos",
   manifest: "/manifest.json",
   icons: {
-    icon: [{ url: "/clikit.svg", type: "image/svg+xml" }],
+    icon: [{ url: BRAND_ICON_SRC, type: "image/svg+xml" }],
     apple: "/apple-touch-icon.png",
   },
   appleWebApp: {

@@ -30,6 +30,7 @@ import { calculateTrialInfo, getTrialMessage } from "@/lib/trial-manager";
 import { savePendingSale } from "@/lib/offline/db";
 import { useOnlineStatus } from "@/lib/offline/sync";
 import { useIsDesktop } from "@/lib/hooks";
+import { playAudio } from "@/lib/audio";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -435,6 +436,8 @@ export default function CajaPage() {
   
   const searchInputRef = useRef<HTMLInputElement>(null);
   const handleBarcodeScanRef = useRef<(code: string) => void>(() => {});
+  const hasPlayedStartupRef = useRef(false);
+  const prevPromosCountRef = useRef(0);
   const allowNegativeStock = products[0]?.allowNegativeStock ?? false;
   
   // Trial handlers
@@ -488,6 +491,22 @@ export default function CajaPage() {
       expiryInfo: [], // Zona Roja days calculation for later
     });
   }, [ticket, promotions, couponRecord]);
+
+  // ─── Audio Effects ────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (products.length > 0 && !hasPlayedStartupRef.current) {
+      hasPlayedStartupRef.current = true;
+      void playAudio("/hello_k24.wav", 0.6);
+    }
+  }, [products]);
+
+  useEffect(() => {
+    const currentPromosCount = promoResult?.applications?.length ?? 0;
+    if (currentPromosCount > prevPromosCountRef.current) {
+      void playAudio("/promo.wav", 0.7);
+    }
+    prevPromosCountRef.current = currentPromosCount;
+  }, [promoResult]);
 
   const rawTotal = ticket.reduce((sum, item) => sum + getSaleItemSubtotal(item), 0);
   const total = promoResult ? promoResult.total : rawTotal;
@@ -1478,6 +1497,7 @@ export default function CajaPage() {
         setCouponRecord(null);
       setReceivedAmount("");
       setShowCashNumpad(false);
+      void playAudio("/blip.wav", 0.8);
       fetchStats();
     } catch (err: unknown) {
       console.error("[Ventas] Error de red o inesperado al registrar venta:", err);

@@ -8,6 +8,7 @@ import BottomNav from "@/components/ui/BottomNav";
 import BranchSelector from "@/components/ui/BranchSelector";
 import { BranchWorkspaceProvider } from "@/components/ui/BranchWorkspace";
 import DeviceTextScaleControl from "@/components/ui/DeviceTextScaleControl";
+import SoundToggle from "@/components/ui/SoundToggle";
 import { DEVICE_TEXT_SCALE_COOKIE, normalizeDeviceTextScale } from "@/lib/device-text-scale";
 import { hexToRgb } from "@/lib/utils";
 
@@ -102,6 +103,7 @@ export default async function BranchLayout({
           <BranchSelector branches={branches} currentBranchId={effectiveBranchId} />
         </div>
         <div className="app-header-actions">
+          <SoundToggle />
           <DeviceTextScaleControl initialScale={initialTextScale} />
           <a
             href={`/${effectiveBranchId}/tickets`}

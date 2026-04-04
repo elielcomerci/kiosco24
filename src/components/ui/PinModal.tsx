@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { playAudio } from "@/lib/audio";
 import ModalPortal from "@/components/ui/ModalPortal";
 
 interface PinModalProps {
@@ -23,12 +24,14 @@ export default function PinModal({
   const [pin, setPin] = useState("");
 
   const handleKey = (digit: string) => {
+    void playAudio("/tap.wav", 0.4);
     if (pin.length < 6) {
       setPin((p) => p + digit);
     }
   };
 
   const handleBackspace = () => {
+    void playAudio("/tap.wav", 0.4);
     setPin((p) => p.slice(0, -1));
   };
 

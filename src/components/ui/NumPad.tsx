@@ -1,5 +1,7 @@
 "use client";
 
+import { playAudio } from "@/lib/audio";
+
 interface NumPadProps {
   value: string;
   onChange: (value: string) => void;
@@ -7,6 +9,7 @@ interface NumPadProps {
 
 export default function NumPad({ value, onChange }: NumPadProps) {
   const handle = (key: string) => {
+    void playAudio("/tap.wav", 0.4);
     if (key === "⌫") {
       onChange(value.slice(0, -1));
     } else if (key === "000") {

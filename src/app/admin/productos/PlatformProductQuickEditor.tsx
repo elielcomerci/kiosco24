@@ -5,6 +5,11 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import BarcodeScanner from "@/components/caja/BarcodeScanner";
 import ProductThumb from "@/components/products/ProductThumb";
 import ModalPortal from "@/components/ui/ModalPortal";
+import {
+  DEFAULT_BUSINESS_ACTIVITY_CODE,
+  getBusinessActivityLabel,
+  type BusinessActivityOption,
+} from "@/lib/business-activities";
 import { optimizeProductImage } from "@/lib/image-upload";
 
 type PlatformProductStatusValue = "APPROVED" | "HIDDEN";
@@ -18,6 +23,7 @@ interface PlatformProductQuickEditorVariant {
 export interface PlatformProductQuickEditorItem {
   id: string;
   barcode: string | null;
+  businessActivity: string;
   name: string;
   brand: string | null;
   categoryName: string | null;
@@ -40,6 +46,7 @@ type SearchFilter =
 interface DraftState {
   id: string;
   barcode: string;
+  businessActivity: string;
   name: string;
   brand: string;
   categoryName: string;
@@ -50,12 +57,17 @@ interface DraftState {
   variants: PlatformProductQuickEditorVariant[];
 }
 
-function buildDraft(product?: PlatformProductQuickEditorItem | null, barcodeHint?: string): DraftState {
+function buildDraft(
+  product?: PlatformProductQuickEditorItem | null,
+  barcodeHint?: string,
+  fallbackBusinessActivity = DEFAULT_BUSINESS_ACTIVITY_CODE,
+): DraftState {
   const usesVariants = (product?.variants.length ?? 0) > 0;
 
   return {
     id: product?.id ?? "",
     barcode: usesVariants ? "" : product?.barcode ?? barcodeHint ?? "",
+    businessActivity: product?.businessActivity ?? fallbackBusinessActivity,
     name: product?.name ?? "",
     brand: product?.brand ?? "",
     categoryName: product?.categoryName ?? "",
@@ -78,6 +90,7 @@ function looksLikeBarcode(value: string) {
 
 const FIELD_LABELS: Record<string, string> = {
   barcode: "Codigo base",
+  businessActivity: "Rubro",
   name: "Nombre",
   brand: "Marca",
   categoryName: "Categoria",
@@ -150,6 +163,7 @@ function normalizeDraft(draft: DraftState): DraftState {
   return {
     ...draft,
     barcode: draft.barcode.trim(),
+    businessActivity: draft.businessActivity.trim() || DEFAULT_BUSINESS_ACTIVITY_CODE,
     name: smartTitleCase(draft.name),
     brand: smartTitleCase(draft.brand),
     categoryName: smartTitleCase(draft.categoryName),
@@ -169,7 +183,17 @@ function compareDrafts(current: DraftState, baseline: DraftState) {
   const normalizedBaseline = normalizeDraft(baseline);
   const changed: string[] = [];
 
-  (["barcode", "name", "brand", "categoryName", "presentation", "description", "image", "status"] as const).forEach((field) => {
+  ([
+    "barcode",
+    "businessActivity",
+    "name",
+    "brand",
+    "categoryName",
+    "presentation",
+    "description",
+    "image",
+    "status",
+  ] as const).forEach((field) => {
     if (normalizedCurrent[field] !== normalizedBaseline[field]) {
       changed.push(field);
     }
@@ -222,8 +246,10 @@ function FieldGroup({
 }
 
 export default function PlatformProductQuickEditor({
+  businessActivities,
   products,
 }: {
+  businessActivities: BusinessActivityOption[];
   products: PlatformProductQuickEditorItem[];
 }) {
   const router = useRouter();
@@ -231,8 +257,13 @@ export default function PlatformProductQuickEditor({
   const searchParams = useSearchParams();
   const [search, setSearch] = useState("");
   const [searchFilter, setSearchFilter] = useState<SearchFilter>("ALL");
-  const [draft, setDraft] = useState<DraftState>(() => buildDraft());
-  const [baselineDraft, setBaselineDraft] = useState<DraftState>(() => buildDraft());
+  const [activityFilter, setActivityFilter] = useState<string>("ALL");
+  const [draft, setDraft] = useState<DraftState>(() =>
+    buildDraft(undefined, undefined, businessActivities[0]?.value ?? DEFAULT_BUSINESS_ACTIVITY_CODE),
+  );
+  const [baselineDraft, setBaselineDraft] = useState<DraftState>(() =>
+    buildDraft(undefined, undefined, businessActivities[0]?.value ?? DEFAULT_BUSINESS_ACTIVITY_CODE),
+  );
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
@@ -244,23 +275,28 @@ export default function PlatformProductQuickEditor({
 
   const normalizedSearch = search.trim().toLowerCase();
   const filteredProducts = useMemo(() => {
+    const activityFiltered =
+      activityFilter === "ALL"
+        ? products
+        : products.filter((product) => product.businessActivity === activityFilter);
+
     switch (searchFilter) {
       case "APPROVED":
-        return products.filter((product) => product.status === "APPROVED");
+        return activityFiltered.filter((product) => product.status === "APPROVED");
       case "HIDDEN":
-        return products.filter((product) => product.status === "HIDDEN");
+        return activityFiltered.filter((product) => product.status === "HIDDEN");
       case "WITH_VARIANTS":
-        return products.filter((product) => product.variants.length > 0);
+        return activityFiltered.filter((product) => product.variants.length > 0);
       case "MISSING_IMAGE":
-        return products.filter((product) => !hasText(product.image));
+        return activityFiltered.filter((product) => !hasText(product.image));
       case "MISSING_DESCRIPTION":
-        return products.filter((product) => !hasText(product.description));
+        return activityFiltered.filter((product) => !hasText(product.description));
       case "MISSING_BRAND":
-        return products.filter((product) => !hasText(product.brand));
+        return activityFiltered.filter((product) => !hasText(product.brand));
       default:
-        return products;
+        return activityFiltered;
     }
-  }, [products, searchFilter]);
+  }, [activityFilter, products, searchFilter]);
   const matches = useMemo(() => {
     if (!normalizedSearch) {
       return filteredProducts;
@@ -325,7 +361,11 @@ export default function PlatformProductQuickEditor({
   }, [products, search]);
 
   const loadProduct = (product: PlatformProductQuickEditorItem) => {
-    const nextDraft = buildDraft(product);
+    const nextDraft = buildDraft(
+      product,
+      undefined,
+      businessActivities[0]?.value ?? DEFAULT_BUSINESS_ACTIVITY_CODE,
+    );
     setDraft(nextDraft);
     setBaselineDraft(nextDraft);
     setSearch(product.barcode ?? product.variants[0]?.barcode ?? product.name);
@@ -335,7 +375,13 @@ export default function PlatformProductQuickEditor({
   };
 
   const startNewDraft = (barcodeHint?: string) => {
-    const nextDraft = buildDraft(null, barcodeHint);
+    const nextDraft = buildDraft(
+      null,
+      barcodeHint,
+      activityFilter === "ALL"
+        ? businessActivities[0]?.value ?? DEFAULT_BUSINESS_ACTIVITY_CODE
+        : activityFilter,
+    );
     setDraft(nextDraft);
     setBaselineDraft(nextDraft);
     setMessage(null);
@@ -370,14 +416,18 @@ export default function PlatformProductQuickEditor({
       return;
     }
 
-    const nextDraft = buildDraft(product);
+    const nextDraft = buildDraft(
+      product,
+      undefined,
+      businessActivities[0]?.value ?? DEFAULT_BUSINESS_ACTIVITY_CODE,
+    );
     setDraft(nextDraft);
     setBaselineDraft(nextDraft);
     setSearch(product.barcode ?? product.variants[0]?.barcode ?? product.name);
     setMessage(null);
     setError(null);
     setEditorOpen(true);
-  }, [editParam, products]);
+  }, [businessActivities, editParam, products]);
 
   const handleChange = (field: keyof Omit<DraftState, "variants">, value: string) => {
     setDraft((current) => ({
@@ -599,6 +649,22 @@ export default function PlatformProductQuickEditor({
                 : `${visibleProductsCount} ficha${visibleProductsCount === 1 ? "" : "s"} en este filtro`}
             </div>
 
+            <label style={{ display: "grid", gap: "6px" }}>
+              <span style={{ fontSize: "12px", color: "#94a3b8", fontWeight: 700 }}>Rubro</span>
+              <select
+                className="input"
+                value={activityFilter}
+                onChange={(e) => setActivityFilter(e.target.value)}
+              >
+                <option value="ALL">Todos los rubros</option>
+                {businessActivities.map((activity) => (
+                  <option key={activity.value} value={activity.value}>
+                    {activity.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
             <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
               {[
                 { value: "ALL", label: "Todo" },
@@ -673,6 +739,9 @@ export default function PlatformProductQuickEditor({
                         {product.barcode || product.variants[0]?.barcode || "Sin barcode base"}
                         {product.brand ? ` | ${product.brand}` : ""}
                         {product.categoryName ? ` | ${product.categoryName}` : ""}
+                      </div>
+                      <div style={{ color: "#cbd5e1", fontSize: "12px" }}>
+                        {getBusinessActivityLabel(product.businessActivity, businessActivities)}
                       </div>
                       {product.variants.length > 0 && (
                         <div style={{ color: "#94a3b8", fontSize: "12px" }}>
@@ -822,14 +891,17 @@ export default function PlatformProductQuickEditor({
                   }}
                 />
               </label>
-              <div style={{ minWidth: 0, display: "grid", gap: "6px" }}>
-                <div style={{ fontWeight: 800, fontSize: "22px", lineHeight: 1.15 }}>
-                  {draft.name.trim() || "Producto nuevo"}
-                </div>
-                <div style={{ color: "#94a3b8", fontSize: "13px" }}>
-                  {draft.id ? "Editando ficha global" : "Creando ficha global"}
-                </div>
-                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "2px" }}>
+                <div style={{ minWidth: 0, display: "grid", gap: "6px" }}>
+                  <div style={{ fontWeight: 800, fontSize: "22px", lineHeight: 1.15 }}>
+                    {draft.name.trim() || "Producto nuevo"}
+                  </div>
+                  <div style={{ color: "#94a3b8", fontSize: "13px" }}>
+                    {draft.id ? "Editando ficha global" : "Creando ficha global"}
+                  </div>
+                  <div style={{ color: "#cbd5e1", fontSize: "13px" }}>
+                    Rubro: {getBusinessActivityLabel(draft.businessActivity, businessActivities)}
+                  </div>
+                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "2px" }}>
                   <span
                     style={{
                       padding: "4px 10px",
@@ -997,6 +1069,20 @@ export default function PlatformProductQuickEditor({
                       onChange={(e) => handleChange("presentation", e.target.value)}
                       onBlur={() => normalizeField("presentation")}
                     />
+                  </FieldGroup>
+
+                  <FieldGroup label={FIELD_LABELS.businessActivity} changed={changedFieldSet.has("businessActivity")}>
+                    <select
+                      className="input"
+                      value={draft.businessActivity}
+                      onChange={(e) => handleChange("businessActivity", e.target.value)}
+                    >
+                      {businessActivities.map((activity) => (
+                        <option key={activity.value} value={activity.value}>
+                          {activity.label}
+                        </option>
+                      ))}
+                    </select>
                   </FieldGroup>
 
                   <FieldGroup label={FIELD_LABELS.status} changed={changedFieldSet.has("status")}>

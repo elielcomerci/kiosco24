@@ -2,6 +2,10 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import {
+  DEFAULT_BUSINESS_ACTIVITY_CODE,
+  type BusinessActivityOption,
+} from "@/lib/business-activities";
 
 interface ImportSummary {
   created: number;
@@ -23,9 +27,16 @@ function countRows(raw: string) {
     .filter(Boolean).length;
 }
 
-export default function PlatformProductBulkImporter() {
+export default function PlatformProductBulkImporter({
+  businessActivities,
+}: {
+  businessActivities: BusinessActivityOption[];
+}) {
   const router = useRouter();
   const [raw, setRaw] = useState("");
+  const [businessActivity, setBusinessActivity] = useState(
+    businessActivities[0]?.value ?? DEFAULT_BUSINESS_ACTIVITY_CODE,
+  );
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [summary, setSummary] = useState<ImportSummary | null>(null);
@@ -45,7 +56,7 @@ export default function PlatformProductBulkImporter() {
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ raw }),
+          body: JSON.stringify({ raw, businessActivity }),
         });
 
         const data = await res.json().catch(() => ({}));
@@ -110,6 +121,7 @@ export default function PlatformProductBulkImporter() {
       >
         <div>Formato recomendado: `barcode;nombre;marca;categoria;presentacion;descripcion;imagen;estado`</div>
         <div>Tambien acepta tabulaciones o comas. `estado` puede ser `APPROVED`, `APROBADO`, `HIDDEN` u `OCULTO`.</div>
+        <div>Todo lo que importes desde aca se guarda dentro del rubro seleccionado.</div>
         <div>No toca stock, precios ni configuracion de los kioscos.</div>
         <pre
           style={{
@@ -127,6 +139,21 @@ export default function PlatformProductBulkImporter() {
           {EXAMPLE_ROWS.join("\n")}
         </pre>
       </div>
+
+      <label style={{ display: "grid", gap: "6px" }}>
+        <span style={{ fontSize: "12px", color: "#94a3b8", fontWeight: 700 }}>Rubro destino</span>
+        <select
+          className="input"
+          value={businessActivity}
+          onChange={(e) => setBusinessActivity(e.target.value)}
+        >
+          {businessActivities.map((activity) => (
+            <option key={activity.value} value={activity.value}>
+              {activity.label}
+            </option>
+          ))}
+        </select>
+      </label>
 
       <textarea
         className="input"

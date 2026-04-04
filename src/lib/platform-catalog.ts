@@ -9,6 +9,11 @@ import {
   type BarcodeSuggestion,
 } from "@/lib/barcode-suggestions";
 import {
+  DEFAULT_BUSINESS_ACTIVITY_CODE,
+  normalizeBusinessActivityCode,
+} from "@/lib/business-activities";
+import { ensureBusinessActivitiesSeeded } from "@/lib/business-activities-store";
+import {
   DEFAULT_KIOSCO_CATEGORIES,
   DEFAULT_KIOSCO_PRODUCTS,
 } from "@/lib/default-kiosco-catalog";
@@ -16,6 +21,7 @@ import { prisma } from "@/lib/prisma";
 
 type PlatformProductDraft = {
   barcode?: string | null;
+  businessActivity?: string | null;
   name: string;
   brand?: string | null;
   categoryName?: string | null;
@@ -30,6 +36,7 @@ type PlatformProductDraft = {
 
 export type PlatformDraftChangeField =
   | "barcode"
+  | "businessActivity"
   | "name"
   | "brand"
   | "categoryName"
@@ -41,6 +48,21 @@ export type PlatformDraftChangeField =
 function cleanText(value?: string | null) {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
+}
+
+function normalizeBusinessActivity(
+  value: string | null | undefined,
+  fallback = DEFAULT_BUSINESS_ACTIVITY_CODE,
+) {
+  return normalizeBusinessActivityCode(value, fallback);
+}
+
+function buildBusinessActivityWhere(businessActivity?: string | null) {
+  const normalized = cleanText(businessActivity)
+    ? normalizeBusinessActivity(businessActivity, "")
+    : "";
+
+  return normalized ? { businessActivity: normalized } : {};
 }
 
 function normalizeVariants(
@@ -71,6 +93,8 @@ const defaultCategoryNameByKey = new Map(
 );
 
 export async function ensurePlatformCatalogSeeded() {
+  await ensureBusinessActivitiesSeeded();
+
   const existing = await prisma.platformProduct.findMany({
     where: {
       barcode: {
@@ -95,6 +119,7 @@ export async function ensurePlatformCatalogSeeded() {
         await prisma.platformProduct.upsert({
           where: { barcode: product.barcode },
           update: {
+            businessActivity: DEFAULT_BUSINESS_ACTIVITY_CODE,
             name: product.name,
             brand: product.brand ?? null,
             categoryName: defaultCategoryNameByKey.get(product.categoryKey) ?? null,
@@ -105,6 +130,7 @@ export async function ensurePlatformCatalogSeeded() {
           },
           create: {
             barcode: product.barcode,
+            businessActivity: DEFAULT_BUSINESS_ACTIVITY_CODE,
             name: product.name,
             brand: product.brand ?? null,
             categoryName: defaultCategoryNameByKey.get(product.categoryKey) ?? null,
@@ -123,13 +149,17 @@ export async function ensurePlatformCatalogSeeded() {
   await seedPromise;
 }
 
-export async function findApprovedPlatformProductByBarcode(barcode: string) {
+export async function findApprovedPlatformProductByBarcode(
+  barcode: string,
+  businessActivity?: string | null,
+) {
   await ensurePlatformCatalogSeeded();
 
   const directMatch = await prisma.platformProduct.findFirst({
     where: {
       barcode,
       status: PlatformProductStatus.APPROVED,
+      ...buildBusinessActivityWhere(businessActivity),
     },
     include: {
       variants: {
@@ -145,6 +175,7 @@ export async function findApprovedPlatformProductByBarcode(barcode: string) {
   return prisma.platformProduct.findFirst({
     where: {
       status: PlatformProductStatus.APPROVED,
+      ...buildBusinessActivityWhere(businessActivity),
       variants: {
         some: { barcode },
       },
@@ -157,7 +188,11 @@ export async function findApprovedPlatformProductByBarcode(barcode: string) {
   });
 }
 
-export async function searchApprovedPlatformProductsByName(query: string, limit = 6) {
+export async function searchApprovedPlatformProductsByName(
+  query: string,
+  limit = 6,
+  businessActivity?: string | null,
+) {
   await ensurePlatformCatalogSeeded();
 
   const normalizedQuery = query.trim();
@@ -169,6 +204,7 @@ export async function searchApprovedPlatformProductsByName(query: string, limit 
   const results = await prisma.platformProduct.findMany({
     where: {
       status: PlatformProductStatus.APPROVED,
+      ...buildBusinessActivityWhere(businessActivity),
       OR: [
         { name: { contains: normalizedQuery, mode: "insensitive" } },
         { brand: { contains: normalizedQuery, mode: "insensitive" } },
@@ -222,7 +258,11 @@ export async function searchApprovedPlatformProductsByName(query: string, limit 
     .map((entry) => entry.product);
 }
 
-export async function browseApprovedPlatformProducts(query: string, limit = 12) {
+export async function browseApprovedPlatformProducts(
+  query: string,
+  limit = 12,
+  businessActivity?: string | null,
+) {
   await ensurePlatformCatalogSeeded();
 
   const normalizedQuery = query.trim();
@@ -232,6 +272,7 @@ export async function browseApprovedPlatformProducts(query: string, limit = 12) 
     return prisma.platformProduct.findMany({
       where: {
         status: PlatformProductStatus.APPROVED,
+        ...buildBusinessActivityWhere(businessActivity),
       },
       include: {
         variants: {
@@ -255,6 +296,7 @@ export async function browseApprovedPlatformProducts(query: string, limit = 12) 
   const results = await prisma.platformProduct.findMany({
     where: {
       status: PlatformProductStatus.APPROVED,
+      ...buildBusinessActivityWhere(businessActivity),
       OR: [
         { name: { contains: normalizedQuery, mode: "insensitive" } },
         { brand: { contains: normalizedQuery, mode: "insensitive" } },
@@ -351,6 +393,7 @@ export function platformProductToSuggestion(product: PlatformProductDraft): Barc
 export function normalizePlatformProductDraft(draft: PlatformProductDraft) {
   return {
     barcode: cleanText(draft.barcode),
+    businessActivity: normalizeBusinessActivity(draft.businessActivity),
     name: draft.name.trim(),
     brand: cleanText(draft.brand),
     categoryName: cleanText(draft.categoryName),
@@ -393,6 +436,9 @@ export function buildPlatformSubmissionDraft(
 
   return {
     barcode: normalizedDraft.barcode ?? normalizedProduct.barcode,
+    businessActivity: normalizeBusinessActivity(
+      normalizedDraft.businessActivity ?? normalizedProduct.businessActivity,
+    ),
     name: preferNonEmptyText(normalizedProduct.name, normalizedDraft.name) ?? normalizedProduct.name,
     brand: preferNonEmptyText(normalizedProduct.brand, normalizedDraft.brand),
     categoryName: preferNonEmptyText(normalizedProduct.categoryName, normalizedDraft.categoryName),
@@ -416,6 +462,7 @@ export function getPlatformDraftChanges(
     const changes: PlatformDraftChangeField[] = [];
 
     if (normalizedDraft.barcode) changes.push("barcode");
+    if (normalizedDraft.businessActivity) changes.push("businessActivity");
     if (normalizedDraft.name) changes.push("name");
     if (normalizedDraft.brand) changes.push("brand");
     if (normalizedDraft.categoryName) changes.push("categoryName");
@@ -431,6 +478,7 @@ export function getPlatformDraftChanges(
   const changes: PlatformDraftChangeField[] = [];
 
   if (normalizedProduct.barcode !== normalizedDraft.barcode) changes.push("barcode");
+  if (normalizedProduct.businessActivity !== normalizedDraft.businessActivity) changes.push("businessActivity");
   if (normalizedProduct.name !== normalizedDraft.name) changes.push("name");
   if (normalizedProduct.brand !== normalizedDraft.brand) changes.push("brand");
   if (normalizedProduct.categoryName !== normalizedDraft.categoryName) changes.push("categoryName");
@@ -455,6 +503,7 @@ export function platformDraftDiffers(
 
   return (
     normalizedProduct.barcode !== normalizedDraft.barcode ||
+    normalizedProduct.businessActivity !== normalizedDraft.businessActivity ||
     normalizedProduct.name !== normalizedDraft.name ||
     normalizedProduct.brand !== normalizedDraft.brand ||
     normalizedProduct.categoryName !== normalizedDraft.categoryName ||
@@ -470,6 +519,7 @@ export async function queuePlatformProductSubmission(args: {
   submittedByUserId?: string | null;
   submittedFromKioscoId?: string | null;
   barcode?: string | null;
+  businessActivity?: string | null;
   name: string;
   brand?: string | null;
   categoryName?: string | null;
@@ -501,6 +551,7 @@ export async function queuePlatformProductSubmission(args: {
       where: { id: existingPending.id },
       data: {
         name: draft.name,
+        businessActivity: draft.businessActivity,
         brand: draft.brand,
         categoryName: draft.categoryName,
         description: draft.description,
@@ -523,6 +574,7 @@ export async function queuePlatformProductSubmission(args: {
   return prisma.platformProductSubmission.create({
     data: {
       barcode: draft.barcode,
+      businessActivity: draft.businessActivity,
       name: draft.name,
       brand: draft.brand,
       categoryName: draft.categoryName,

@@ -1,12 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { signIn } from "next-auth/react";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import BrandLogo from "@/components/branding/BrandLogo";
-import {
-  SUBSCRIPTION_CANCEL_LABEL,
-  SUBSCRIPTION_PROMO_LABEL,
-} from "@/lib/subscription-plan";
 
 const AUTH_TIMEOUT_MS = 15000;
 const ACCESS_KEY_RE = /^KIOSCO-[A-Z0-9]{8}-[A-Z0-9]{8}$/;
@@ -23,7 +20,6 @@ interface EmployeeOption {
 type LoginExperienceProps = {
   initialMode?: LoginMode;
   initialAccessKey?: string;
-  initialRegister?: boolean;
 };
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs = AUTH_TIMEOUT_MS): Promise<T> {
@@ -62,11 +58,9 @@ function normalizeAccessKey(value: string) {
 export default function LoginExperience({
   initialMode = "owner",
   initialAccessKey = "",
-  initialRegister = false,
 }: LoginExperienceProps) {
   const [mode, setMode] = useState<LoginMode>(initialAccessKey ? "employee" : initialMode);
   const [loading, setLoading] = useState(false);
-  const [isRegister, setIsRegister] = useState(initialRegister);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -96,7 +90,6 @@ export default function LoginExperience({
 
   const switchToOwnerMode = () => {
     setLoading(false);
-    setIsRegister(false);
     setMode("owner");
     setError("");
     resetEmployeeFlow();
@@ -104,7 +97,6 @@ export default function LoginExperience({
 
   const switchToEmployeeMode = () => {
     setLoading(false);
-    setIsRegister(false);
     setMode("employee");
     setError("");
     resetEmployeeFlow(Boolean(initialAccessKey));
@@ -117,47 +109,6 @@ export default function LoginExperience({
     e.preventDefault();
     setLoading(true);
     setError("");
-
-    if (isRegister) {
-      try {
-        const res = await fetch("/api/auth/register", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, password }),
-        });
-
-        const data = await res.json().catch(() => ({}));
-
-        if (!res.ok) {
-          setError(data.error || "Error al registrarse");
-          setLoading(false);
-          return;
-        }
-
-        const result = await withTimeout(
-          signIn("credentials", {
-            email,
-            password,
-            redirect: false,
-            callbackUrl: "/",
-          }),
-        );
-
-        if (result?.error) {
-          setError("No se pudo iniciar sesion despues del registro.");
-          setLoading(false);
-          return;
-        }
-
-        window.location.assign(result?.url || "/");
-        return;
-      } catch (error) {
-        console.error("[Login] Registration sign-in failed:", error);
-        setError(getAuthErrorMessage(error));
-        setLoading(false);
-        return;
-      }
-    }
 
     try {
       const result = await withTimeout(
@@ -236,7 +187,6 @@ export default function LoginExperience({
 
     autoKeyRef.current = normalizedInitialKey;
     setMode("employee");
-    setIsRegister(false);
     setError("");
     resetEmployeeFlow(true);
     setBranchKey(normalizedInitialKey);
@@ -354,14 +304,12 @@ export default function LoginExperience({
               marginBottom: "6px",
             }}
           >
-            {mode === "employee" ? "Acceso de empleado" : isRegister ? "Crear cuenta" : "Entrar al sistema"}
+            {mode === "employee" ? "Acceso de empleado" : "Entrar al sistema"}
           </h2>
           <p style={{ fontSize: "13px", color: "var(--text-2)" }}>
             {mode === "employee"
               ? "Entrá con el codigo de tu sucursal y tu identidad."
-              : isRegister
-                ? "Crea tu cuenta y arranca en minutos."
-                : "Ingresa a tu kiosco."}
+              : "IngresÃ¡ a tu negocio y retomÃ¡ la operaciÃ³n en segundos."}
           </p>
         </div>
 
@@ -539,23 +487,33 @@ export default function LoginExperience({
           </div>
         ) : (
           <>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
-              <button
-                type="button"
-                className={`btn btn-sm ${isRegister ? "btn-primary" : "btn-ghost"}`}
-                onClick={() => setIsRegister(true)}
-                disabled={loading}
+            <div
+              style={{
+                display: "grid",
+                gap: "8px",
+                padding: "12px",
+                borderRadius: "14px",
+                background: "rgba(143,102,255,0.08)",
+                border: "1px solid rgba(143,102,255,0.18)",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: "12px",
+                  fontWeight: 800,
+                  letterSpacing: "0.08em",
+                  textTransform: "uppercase",
+                  color: "var(--text-2)",
+                }}
               >
+                Alta nueva
+              </div>
+              <div style={{ fontSize: "14px", color: "var(--text)" }}>
+                Si todavía no tenés cuenta, hacé el alta en una pantalla separada y más completa.
+              </div>
+              <Link href="/register" className="btn btn-primary btn-full" style={{ textDecoration: "none" }}>
                 Crear cuenta
-              </button>
-              <button
-                type="button"
-                className={`btn btn-sm ${isRegister ? "btn-ghost" : "btn-primary"}`}
-                onClick={() => setIsRegister(false)}
-                disabled={loading}
-              >
-                Ya tengo cuenta
-              </button>
+              </Link>
             </div>
 
             <form onSubmit={handleCredentialsSubmit} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
@@ -576,7 +534,7 @@ export default function LoginExperience({
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  autoComplete={isRegister ? "new-password" : "current-password"}
+                  autoComplete="current-password"
                   style={{ paddingRight: "44px" }}
                 />
                 <button
@@ -612,11 +570,11 @@ export default function LoginExperience({
                 </button>
               </div>
               <button type="submit" className="btn btn-primary btn-full" disabled={loading}>
-                {loading ? "Cargando..." : isRegister ? "Registrarse" : "Ingresar"}
+                {loading ? "Cargando..." : "Ingresar"}
               </button>
             </form>
 
-            {!isRegister && (
+            
               <a
                 href="/reset-password"
                 style={{
@@ -628,7 +586,7 @@ export default function LoginExperience({
               >
                 Olvidé mi contraseña
               </a>
-            )}
+            
 
             <button
               className="btn-ghost"
@@ -642,11 +600,6 @@ export default function LoginExperience({
         )}
       </div>
 
-      {mode !== "employee" && isRegister && (
-        <p style={{ fontSize: "13px", color: "var(--text-3)", textAlign: "center", maxWidth: "320px" }}>
-          {SUBSCRIPTION_PROMO_LABEL} {SUBSCRIPTION_CANCEL_LABEL}
-        </p>
-      )}
     </div>
   );
 }

@@ -1,57 +1,115 @@
-import { prisma } from "@/lib/prisma";
-import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { UserRole } from "@prisma/client";
+import { NextResponse } from "next/server";
+
+import {
+  isValidBusinessActivity,
+  shouldSeedDefaultCatalogForBusinessActivity,
+} from "@/lib/business-activities-store";
+import { prisma } from "@/lib/prisma";
+import { provisionOwnerKiosco } from "@/lib/provision-owner-kiosco";
+
+type RegisterPayload = {
+  firstName?: string;
+  lastName?: string;
+  businessName?: string;
+  mainBusinessActivity?: string;
+  email?: string;
+  password?: string;
+};
+
+function normalizeText(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
 
 export async function POST(req: Request) {
   try {
-    const { email, password } = (await req.json()) as {
-      email?: string;
-      password?: string;
-    };
+    const body = (await req.json()) as RegisterPayload;
 
-    console.log(`[Register] Attempting to register email: ${email}`);
+    const firstName = normalizeText(body.firstName);
+    const lastName = normalizeText(body.lastName);
+    const businessName = normalizeText(body.businessName);
+    const email = normalizeText(body.email).toLowerCase();
+    const password = typeof body.password === "string" ? body.password : "";
+    const mainBusinessActivity = normalizeText(body.mainBusinessActivity);
 
-    if (!email || !password) {
-      console.warn("[Register] Missing email or password");
+    if (!firstName || !lastName || !businessName || !email || !password || !mainBusinessActivity) {
       return NextResponse.json(
-        { error: "Faltan datos requeridos" },
-        { status: 400 }
+        { error: "Completá nombre, apellido, negocio, rubro, email y contraseña." },
+        { status: 400 },
       );
     }
 
-    // Diagnostic log for DB connection
-    console.log("[Register] Checking for existing user...");
+    if (!(await isValidBusinessActivity(mainBusinessActivity))) {
+      return NextResponse.json({ error: "Elegí un rubro principal válido." }, { status: 400 });
+    }
+
+    if (password.length < 8) {
+      return NextResponse.json(
+        { error: "La contraseña tiene que tener al menos 8 caracteres." },
+        { status: 400 },
+      );
+    }
+
     const existingUser = await prisma.user.findUnique({
       where: { email },
+      select: { id: true },
     });
 
     if (existingUser) {
-      console.warn(`[Register] User already exists: ${email}`);
-      return NextResponse.json(
-        { error: "El usuario ya existe" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Ya existe una cuenta con ese email." }, { status: 400 });
     }
 
-    console.log("[Register] Hashing password...");
     const hashedPassword = await bcrypt.hash(password, 10);
+    const fullName = `${firstName} ${lastName}`.trim();
+    const seedDefaultCatalog = await shouldSeedDefaultCatalogForBusinessActivity(
+      mainBusinessActivity,
+    );
 
-    console.log("[Register] Creating user in DB...");
-    const user = await prisma.user.create({
-      data: {
-        email,
-        password: hashedPassword,
-        role: UserRole.OWNER,
-      },
+    const created = await prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          firstName,
+          lastName,
+          name: fullName,
+          email,
+          password: hashedPassword,
+          role: UserRole.OWNER,
+        },
+      });
+
+      const provisioned = await provisionOwnerKiosco(
+        {
+          ownerId: user.id,
+          kioscoName: businessName,
+          mainBusinessActivity,
+          seedDefaultCatalog,
+        },
+        tx,
+      );
+
+      return {
+        user,
+        kiosco: provisioned.kiosco,
+        branchId: provisioned.mainBranch.id,
+      };
     });
 
-    console.log(`[Register] User created successfully: ${user.id}`);
     return NextResponse.json({
       user: {
-        id: user.id,
-        email: user.email,
+        id: created.user.id,
+        email: created.user.email,
+        firstName: created.user.firstName,
+        lastName: created.user.lastName,
+        name: created.user.name,
       },
+      kiosco: {
+        id: created.kiosco.id,
+        name: created.kiosco.name,
+        mainBusinessActivity: created.kiosco.mainBusinessActivity,
+      },
+      branchId: created.branchId,
+      seededDefaultCatalog: seedDefaultCatalog,
     });
   } catch (error) {
     const details = error instanceof Error ? error.message : "Unknown error";
@@ -59,14 +117,15 @@ export async function POST(req: Request) {
       process.env.NODE_ENV === "development" && error instanceof Error
         ? error.stack
         : undefined;
+
     console.error("[Register] CRITICAL ERROR:", error);
     return NextResponse.json(
       {
-        error: "Error al registrar el usuario",
+        error: "Error al registrar la cuenta.",
         details,
         ...(stack ? { stack } : {}),
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

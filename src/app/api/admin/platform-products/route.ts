@@ -6,6 +6,11 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 import {
+  ensureBusinessActivitiesSeeded,
+  isValidBusinessActivity,
+} from "@/lib/business-activities-store";
+import { normalizeBusinessActivityCode } from "@/lib/business-activities";
+import {
   normalizeCatalogBarcode,
   normalizeCatalogDescription,
   normalizeCatalogOptionalTitle,
@@ -42,8 +47,10 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json().catch(() => ({}));
+  await ensureBusinessActivitiesSeeded();
   const id = typeof body.id === "string" ? body.id : "";
   const barcode = normalizeCatalogBarcode(body.barcode);
+  const businessActivity = normalizeBusinessActivityCode(body.businessActivity);
   const name = normalizeCatalogTitle(body.name);
   const brand = normalizeCatalogOptionalTitle(body.brand);
   const categoryName = normalizeCatalogOptionalTitle(body.categoryName);
@@ -56,6 +63,10 @@ export async function POST(req: Request) {
     body.status === PlatformProductStatus.HIDDEN
       ? PlatformProductStatus.HIDDEN
       : PlatformProductStatus.APPROVED;
+
+  if (!(await isValidBusinessActivity(businessActivity))) {
+    return NextResponse.json({ error: "Elegi un rubro valido." }, { status: 400 });
+  }
 
   if (!name || (!effectiveBarcode && !variants.some((variant) => variant.barcode))) {
     return NextResponse.json(
@@ -78,6 +89,7 @@ export async function POST(req: Request) {
         where: { id },
         data: {
           barcode: effectiveBarcode,
+          businessActivity,
           name,
           brand,
           categoryName,
@@ -131,6 +143,7 @@ export async function POST(req: Request) {
           },
           create: {
             barcode: effectiveBarcode,
+            businessActivity,
             name,
             brand,
             categoryName,
@@ -152,9 +165,10 @@ export async function POST(req: Request) {
           },
         })
       : await prisma.platformProduct.create({
-          data: {
-            barcode: effectiveBarcode,
-            name,
+        data: {
+          barcode: effectiveBarcode,
+          businessActivity,
+          name,
             brand,
             categoryName,
             presentation,

@@ -16,6 +16,7 @@ export default auth((req: NextAuthRequest) => {
 
   const isPublic =
     nextUrl.pathname === "/" ||
+    nextUrl.pathname === "/register" ||
     nextUrl.pathname === "/onboarding" ||
     isInternalEmployeeAccess ||
     nextUrl.pathname === "/sw.js" ||

@@ -8,6 +8,11 @@ import {
   normalizeCatalogOptionalTitle,
   normalizeCatalogTitle,
 } from "@/lib/catalog-text";
+import {
+  ensureBusinessActivitiesSeeded,
+  isValidBusinessActivity,
+} from "@/lib/business-activities-store";
+import { normalizeBusinessActivityCode } from "@/lib/business-activities";
 import { syncAutoProductsFromPlatformProduct } from "@/lib/platform-product-sync";
 import { prisma } from "@/lib/prisma";
 
@@ -184,6 +189,7 @@ function toRemoteProductPayload(
   return {
     id: match.product.id,
     barcode: match.product.barcode,
+    businessActivity: match.product.businessActivity,
     name: match.product.name,
     brand: match.product.brand,
     categoryName: match.product.categoryName,
@@ -245,7 +251,9 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json().catch(() => ({}));
+  await ensureBusinessActivitiesSeeded();
   const barcode = normalizeCatalogBarcode(body.barcode);
+  const businessActivity = normalizeBusinessActivityCode(body.businessActivity);
   const name = normalizeCatalogTitle(body.name);
   const brand = normalizeCatalogOptionalTitle(body.brand);
   const categoryName = normalizeCatalogOptionalTitle(body.categoryName);
@@ -264,6 +272,10 @@ export async function POST(request: Request) {
       { error: "barcode y name son obligatorios." },
       { status: 400 },
     );
+  }
+
+  if (!(await isValidBusinessActivity(businessActivity))) {
+    return NextResponse.json({ error: "Rubro invalido." }, { status: 400 });
   }
 
   const existing = await findPlatformProductByBarcode(barcode);
@@ -292,6 +304,7 @@ export async function POST(request: Request) {
   const saved = await prisma.platformProduct.upsert({
     where: { barcode },
     update: {
+      businessActivity,
       name,
       brand,
       categoryName,
@@ -302,6 +315,7 @@ export async function POST(request: Request) {
     },
     create: {
       barcode,
+      businessActivity,
       name,
       brand,
       categoryName,
@@ -324,6 +338,7 @@ export async function POST(request: Request) {
     product: {
       id: saved.id,
       barcode: saved.barcode,
+      businessActivity: saved.businessActivity,
       name: saved.name,
       brand: saved.brand,
       categoryName: saved.categoryName,

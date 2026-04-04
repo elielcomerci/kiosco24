@@ -11,11 +11,17 @@ import {
   type PlatformDraftChangeField,
 } from "@/lib/platform-catalog";
 import {
+  DEFAULT_BUSINESS_ACTIVITY_CODE,
+  getBusinessActivityLabel,
+  normalizeBusinessActivityCode,
+} from "@/lib/business-activities";
+import {
   normalizeCatalogBarcode,
   normalizeCatalogDescription,
   normalizeCatalogOptionalTitle,
   normalizeCatalogTitle,
 } from "@/lib/catalog-text";
+import { listBusinessActivityOptions } from "@/lib/business-activities-store";
 import { isPlatformAdmin } from "@/lib/platform-admin";
 import { syncAutoProductsFromPlatformProduct } from "@/lib/platform-product-sync";
 import { prisma } from "@/lib/prisma";
@@ -34,6 +40,7 @@ const scrapedProductReviewInclude = {
     select: {
       id: true,
       barcode: true,
+      businessActivity: true,
       name: true,
       brand: true,
       categoryName: true,
@@ -55,6 +62,7 @@ const scrapedProductReviewInclude = {
 
 const platformChangeLabels: Record<PlatformDraftChangeField, string> = {
   barcode: "Codigo de barras",
+  businessActivity: "Rubro",
   name: "Nombre",
   brand: "Marca",
   categoryName: "Categoria",
@@ -67,6 +75,7 @@ const platformChangeLabels: Record<PlatformDraftChangeField, string> = {
 type ComparisonProduct = {
   id: string;
   barcode: string | null;
+  businessActivity: string;
   name: string;
   brand: string | null;
   categoryName: string | null;
@@ -83,6 +92,7 @@ type ComparisonProduct = {
 
 type ScrapedDraft = {
   barcode: string | null;
+  businessActivity: string;
   name: string;
   brand: string | null;
   categoryName: string | null;
@@ -121,6 +131,7 @@ function formatDiffValue(value?: string | null, emptyLabel = "Sin dato") {
 
 function buildScrapedDraft(product: {
   barcode: string | null;
+  businessActivity?: string | null;
   name: string;
   brand: string | null;
   categoryName: string | null;
@@ -130,6 +141,7 @@ function buildScrapedDraft(product: {
 }): ScrapedDraft {
   return {
     barcode: cleanText(product.barcode),
+    businessActivity: normalizeBusinessActivityCode(product.businessActivity),
     name: product.name,
     brand: product.brand,
     categoryName: product.categoryName,
@@ -159,6 +171,13 @@ function buildDiffRows(
           label: platformChangeLabels[field],
           current: formatDiffValue(comparisonProduct?.name, "Sin nombre"),
           next: formatDiffValue(draft.name, "Sin nombre"),
+        };
+      case "businessActivity":
+        return {
+          field,
+          label: platformChangeLabels[field],
+          current: comparisonProduct?.businessActivity ?? DEFAULT_BUSINESS_ACTIVITY_CODE,
+          next: draft.businessActivity,
         };
       case "brand":
         return {
@@ -217,14 +236,19 @@ function buildDiffRows(
 
 function buildScrapedProductsAdminPath(args?: {
   runId?: string | null;
+  businessActivity?: string | null;
   bulkPublished?: number;
   bulkSkipped?: number;
   bulkPending?: number;
 }) {
   const params = new URLSearchParams();
   const runId = cleanText(args?.runId);
+  const businessActivity = cleanText(args?.businessActivity);
   if (runId) {
     params.set("run", runId);
+  }
+  if (businessActivity) {
+    params.set("activity", businessActivity);
   }
   if (typeof args?.bulkPublished === "number" && args.bulkPublished > 0) {
     params.set("bulkPublished", String(args.bulkPublished));
@@ -255,6 +279,7 @@ async function ensurePlatformAdmin() {
 
 async function resolveScrapedComparisonProduct(product: {
   barcode: string | null;
+  businessActivity?: string | null;
   remotePlatformProduct: (ComparisonProduct & { status: PlatformProductStatus }) | null;
 }) {
   if (product.remotePlatformProduct) {
@@ -265,7 +290,10 @@ async function resolveScrapedComparisonProduct(product: {
     return null;
   }
 
-  const matched = await findApprovedPlatformProductByBarcode(product.barcode);
+  const matched =
+    (product.businessActivity
+      ? await findApprovedPlatformProductByBarcode(product.barcode, product.businessActivity)
+      : null) ?? (await findApprovedPlatformProductByBarcode(product.barcode));
   if (!matched) {
     return null;
   }
@@ -273,6 +301,7 @@ async function resolveScrapedComparisonProduct(product: {
   return {
     id: matched.id,
     barcode: matched.barcode,
+    businessActivity: matched.businessActivity,
     name: matched.name,
     brand: matched.brand,
     categoryName: matched.categoryName,
@@ -291,6 +320,7 @@ async function resolveScrapedComparisonProduct(product: {
 function buildDraftFromFormData(formData: FormData): ScrapedDraft {
   return {
     barcode: normalizeCatalogBarcode(formData.get("barcode")),
+    businessActivity: normalizeBusinessActivityCode(formData.get("businessActivity")),
     name: normalizeCatalogTitle(formData.get("name")),
     brand: normalizeCatalogOptionalTitle(formData.get("brand")),
     categoryName: normalizeCatalogOptionalTitle(formData.get("categoryName")),
@@ -378,6 +408,7 @@ async function publishScrapedProductById({
         where: { id: comparisonProduct.id },
         data: {
           barcode: mergedDraft.barcode,
+          businessActivity: mergedDraft.businessActivity,
           name: mergedDraft.name,
           brand: mergedDraft.brand,
           categoryName: mergedDraft.categoryName,
@@ -391,6 +422,7 @@ async function publishScrapedProductById({
     : await prisma.platformProduct.upsert({
         where: { barcode: mergedDraft.barcode },
         update: {
+          businessActivity: mergedDraft.businessActivity,
           name: mergedDraft.name,
           brand: mergedDraft.brand,
           categoryName: mergedDraft.categoryName,
@@ -401,6 +433,7 @@ async function publishScrapedProductById({
         },
         create: {
           barcode: mergedDraft.barcode,
+          businessActivity: mergedDraft.businessActivity,
           name: mergedDraft.name,
           brand: mergedDraft.brand,
           categoryName: mergedDraft.categoryName,
@@ -461,6 +494,12 @@ async function resolveSafeScrapedProducts(formData: FormData) {
 
   await ensurePlatformAdmin();
   const runId = String(formData.get("runId") ?? "").trim();
+  const businessActivity = normalizeBusinessActivityCode(
+    typeof formData.get("businessActivity") === "string"
+      ? String(formData.get("businessActivity"))
+      : "",
+    "",
+  );
   const pendingProducts = await prisma.scrapedProduct.findMany({
     where: {
       reviewAction: ScrapedProductReviewAction.PENDING,
@@ -468,6 +507,7 @@ async function resolveSafeScrapedProducts(formData: FormData) {
         in: [...pendingSyncStatuses],
       },
       ...(runId ? { runId } : {}),
+      ...(businessActivity ? { businessActivity } : {}),
     },
     include: scrapedProductReviewInclude,
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
@@ -519,6 +559,7 @@ async function resolveSafeScrapedProducts(formData: FormData) {
   redirect(
     buildScrapedProductsAdminPath({
       runId,
+      businessActivity,
       bulkPublished: publishedCount,
       bulkSkipped: skippedCount,
       bulkPending: pendingCount,
@@ -531,6 +572,7 @@ export default async function AdminScrapedProductsPage({
 }: {
   searchParams?: Promise<{
     run?: string;
+    activity?: string;
     bulkPublished?: string;
     bulkSkipped?: string;
     bulkPending?: string;
@@ -539,6 +581,10 @@ export default async function AdminScrapedProductsPage({
   await ensurePlatformAdmin();
   const params = (await searchParams) ?? {};
   const selectedRunId = typeof params.run === "string" ? params.run.trim() : "";
+  const selectedBusinessActivity = normalizeBusinessActivityCode(
+    typeof params.activity === "string" ? params.activity : "",
+    "",
+  );
   const bulkPublishedCount =
     typeof params.bulkPublished === "string" ? Number.parseInt(params.bulkPublished, 10) || 0 : 0;
   const bulkSkippedCount =
@@ -552,19 +598,24 @@ export default async function AdminScrapedProductsPage({
       in: [...pendingSyncStatuses],
     },
     ...(selectedRunId ? { runId: selectedRunId } : {}),
+    ...(selectedBusinessActivity ? { businessActivity: selectedBusinessActivity } : {}),
   };
 
   const [
+    businessActivities,
     recentRuns,
     pendingCountsByRun,
     pendingProductsTotalCount,
     rawPendingProducts,
   ] = await Promise.all([
+    listBusinessActivityOptions({ includeInactive: true }),
     prisma.scrapeRun.findMany({
+      where: selectedBusinessActivity ? { businessActivity: selectedBusinessActivity } : undefined,
       orderBy: { startedAt: "desc" },
       take: 12,
       select: {
         id: true,
+        businessActivity: true,
         source: true,
         status: true,
         startedAt: true,
@@ -582,6 +633,7 @@ export default async function AdminScrapedProductsPage({
         syncStatus: {
           in: [...pendingSyncStatuses],
         },
+        ...(selectedBusinessActivity ? { businessActivity: selectedBusinessActivity } : {}),
       },
       _count: {
         _all: true,
@@ -593,6 +645,7 @@ export default async function AdminScrapedProductsPage({
         syncStatus: {
           in: [...pendingSyncStatuses],
         },
+        ...(selectedBusinessActivity ? { businessActivity: selectedBusinessActivity } : {}),
       },
     }),
     prisma.scrapedProduct.findMany({
@@ -601,6 +654,7 @@ export default async function AdminScrapedProductsPage({
         run: {
           select: {
             id: true,
+            businessActivity: true,
             source: true,
             status: true,
             startedAt: true,
@@ -651,6 +705,9 @@ export default async function AdminScrapedProductsPage({
   ).length;
   const filteredPendingCount = analyzedPendingProducts.length;
   const pendingProducts = reviewPendingProducts.slice(0, 120);
+  const selectedBusinessActivityLabel = selectedBusinessActivity
+    ? getBusinessActivityLabel(selectedBusinessActivity, businessActivities)
+    : "Todos los rubros";
 
   return (
     <div style={{ minHeight: "100dvh", background: "#020617", padding: "24px", color: "white" }}>
@@ -662,6 +719,10 @@ export default async function AdminScrapedProductsPage({
             </div>
             <h1 style={{ margin: "6px 0 0", fontSize: "34px" }}>Revision de productos scrapeados</h1>
           </div>
+          <div style={{ color: "#64748b", fontSize: "13px" }}>
+            Rubro actual: {selectedBusinessActivityLabel}
+          </div>
+
           <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
             <Link href="/admin" className="btn btn-ghost">
               Volver a admin
@@ -684,6 +745,55 @@ export default async function AdminScrapedProductsPage({
         >
           Esta pantalla sirve para cerrar el circuito del scraper. Si el producto no existe se crea, si coincide con la ficha colaborativa se omite en silencio, y si hay diferencias podés verlas, retocar la ficha y publicar.
         </div>
+
+        <section
+          style={{
+            background: "rgba(15,23,42,.82)",
+            border: "1px solid rgba(148,163,184,.18)",
+            borderRadius: "22px",
+            padding: "20px",
+            display: "grid",
+            gap: "14px",
+          }}
+        >
+          <div>
+            <h2 style={{ margin: 0, fontSize: "22px" }}>Filtro por rubro</h2>
+            <div style={{ color: "#94a3b8", fontSize: "14px", marginTop: "4px" }}>
+              Cada corrida y cada publicacion del scraper se revisa dentro de su rubro para no
+              mezclar catalogos.
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+            <Link
+              href={buildScrapedProductsAdminPath()}
+              className="btn btn-ghost"
+              style={{
+                borderColor: selectedBusinessActivity ? undefined : "rgba(56,189,248,.4)",
+                color: selectedBusinessActivity ? undefined : "#bae6fd",
+              }}
+            >
+              Todos los rubros
+            </Link>
+            {businessActivities.map((activity) => (
+              <Link
+                key={activity.value}
+                href={buildScrapedProductsAdminPath({ businessActivity: activity.value })}
+                className="btn btn-ghost"
+                style={{
+                  borderColor:
+                    selectedBusinessActivity === activity.value
+                      ? "rgba(56,189,248,.4)"
+                      : undefined,
+                  color:
+                    selectedBusinessActivity === activity.value ? "#bae6fd" : undefined,
+                }}
+              >
+                {activity.label}
+              </Link>
+            ))}
+          </div>
+        </section>
 
         {(bulkPublishedCount > 0 || bulkSkippedCount > 0 || bulkPendingCount > 0) && (
           <div
@@ -766,7 +876,9 @@ export default async function AdminScrapedProductsPage({
 
           <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
             <Link
-              href="/admin/productos/scraper"
+              href={buildScrapedProductsAdminPath({
+                businessActivity: selectedBusinessActivity || null,
+              })}
               className="btn btn-ghost"
               style={{
                 borderColor: selectedRunId ? undefined : "rgba(56,189,248,.4)",
@@ -778,14 +890,18 @@ export default async function AdminScrapedProductsPage({
             {recentRuns.map((run) => (
               <Link
                 key={run.id}
-                href={`/admin/productos/scraper?run=${run.id}`}
+                href={buildScrapedProductsAdminPath({
+                  runId: run.id,
+                  businessActivity: selectedBusinessActivity || null,
+                })}
                 className="btn btn-ghost"
                 style={{
                   borderColor: selectedRunId === run.id ? "rgba(56,189,248,.4)" : undefined,
                   color: selectedRunId === run.id ? "#bae6fd" : undefined,
                 }}
               >
-                {run.source} · {formatDate(run.startedAt)} · pendientes {pendingCountByRun.get(run.id) ?? 0}
+                {getBusinessActivityLabel(run.businessActivity, businessActivities)} · {run.source} ·{" "}
+                {formatDate(run.startedAt)} · pendientes {pendingCountByRun.get(run.id) ?? 0}
               </Link>
             ))}
           </div>
@@ -805,17 +921,26 @@ export default async function AdminScrapedProductsPage({
             <div>
               <h2 style={{ margin: 0, fontSize: "24px" }}>Pendientes del scraper</h2>
               <div style={{ color: "#94a3b8", fontSize: "14px", marginTop: "4px" }}>
-                Mostrando {pendingProducts.length} de {reviewPendingProducts.length} productos que todavia requieren revision manual
+                Mostrando {pendingProducts.length} de {reviewPendingProducts.length} productos que
+                todavia requieren revision manual dentro de {selectedBusinessActivityLabel}
               </div>
             </div>
-            {selectedRunId && (
-              <div style={{ color: "#94a3b8", fontSize: "14px" }}>
-                Filtrado por run {selectedRunId}
-              </div>
-            )}
+            <div style={{ display: "grid", gap: "4px", justifyItems: "end" }}>
+              {selectedBusinessActivity && (
+                <div style={{ color: "#94a3b8", fontSize: "14px" }}>
+                  Rubro: {selectedBusinessActivityLabel}
+                </div>
+              )}
+              {selectedRunId && (
+                <div style={{ color: "#94a3b8", fontSize: "14px" }}>
+                  Filtrado por run {selectedRunId}
+                </div>
+              )}
+            </div>
             {safeResolvableCount > 0 && (
               <form action={resolveSafeScrapedProducts}>
                 <input type="hidden" name="runId" value={selectedRunId} />
+                <input type="hidden" name="businessActivity" value={selectedBusinessActivity} />
                 <button type="submit" className="btn btn-secondary">
                   Resolver seguros ({safeResolvableCount})
                 </button>
@@ -845,10 +970,13 @@ export default async function AdminScrapedProductsPage({
                     <div style={{ display: "grid", gap: "6px" }}>
                       <div style={{ fontWeight: 700, fontSize: "20px" }}>{product.name}</div>
                       <div style={{ color: "#94a3b8", fontSize: "13px" }}>
-                        {product.barcode || "Sin barcode"} | {product.run.source} | run {product.run.id}
+                        {product.barcode || "Sin barcode"} |{" "}
+                        {getBusinessActivityLabel(product.businessActivity, businessActivities)} |{" "}
+                        {product.run.source} | run {product.run.id}
                       </div>
                       <div style={{ color: "#94a3b8", fontSize: "13px" }}>
-                        Scrapeado el {formatDate(product.createdAt)} · categoria {product.categoryName || "Sin categoria"}
+                        Scrapeado el {formatDate(product.createdAt)} · categoria{" "}
+                        {product.categoryName || "Sin categoria"}
                       </div>
                     </div>
                     <div
@@ -897,7 +1025,12 @@ export default async function AdminScrapedProductsPage({
                         Detectado en catalogo: {product.comparisonProduct.name}
                       </div>
                       <div style={{ color: "#94a3b8", fontSize: "13px" }}>
-                        {product.comparisonProduct.barcode || "Sin barcode"} · {product.comparisonProduct.brand || "Sin marca"}
+                        {product.comparisonProduct.barcode || "Sin barcode"} ·{" "}
+                        {product.comparisonProduct.brand || "Sin marca"} ·{" "}
+                        {getBusinessActivityLabel(
+                          product.comparisonProduct.businessActivity,
+                          businessActivities,
+                        )}
                       </div>
                     </div>
                   ) : (
@@ -910,7 +1043,9 @@ export default async function AdminScrapedProductsPage({
                         color: "#cbd5e1",
                       }}
                     >
-                      No se encontró producto colaborativo con ese barcode. Si lo publicás, se crea una ficha nueva.
+                      No se encontro producto colaborativo con ese barcode dentro de{" "}
+                      {getBusinessActivityLabel(product.businessActivity, businessActivities)}. Si
+                      lo publicas, se crea una ficha nueva.
                     </div>
                   )}
 
@@ -955,13 +1090,21 @@ export default async function AdminScrapedProductsPage({
                                 <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: ".06em" }}>
                                   Actual
                                 </div>
-                                <div style={{ color: "#cbd5e1", wordBreak: "break-word" }}>{row.current}</div>
+                                <div style={{ color: "#cbd5e1", wordBreak: "break-word" }}>
+                                  {row.field === "businessActivity"
+                                    ? getBusinessActivityLabel(row.current, businessActivities)
+                                    : row.current}
+                                </div>
                               </div>
                               <div>
                                 <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: ".06em" }}>
                                   Scrapeado
                                 </div>
-                                <div style={{ color: "#f8fafc", wordBreak: "break-word" }}>{row.next}</div>
+                                <div style={{ color: "#f8fafc", wordBreak: "break-word" }}>
+                                  {row.field === "businessActivity"
+                                    ? getBusinessActivityLabel(row.next, businessActivities)
+                                    : row.next}
+                                </div>
                               </div>
                             </div>
                           ))}
@@ -974,6 +1117,20 @@ export default async function AdminScrapedProductsPage({
                     <label style={{ display: "grid", gap: "6px" }}>
                       <span style={{ fontSize: "12px", color: "#94a3b8" }}>Barcode</span>
                       <input name="barcode" defaultValue={product.barcode ?? ""} className="input" />
+                    </label>
+                    <label style={{ display: "grid", gap: "6px" }}>
+                      <span style={{ fontSize: "12px", color: "#94a3b8" }}>Rubro</span>
+                      <select
+                        name="businessActivity"
+                        defaultValue={product.businessActivity}
+                        className="input"
+                      >
+                        {businessActivities.map((activity) => (
+                          <option key={`${product.id}-${activity.value}`} value={activity.value}>
+                            {activity.label}
+                          </option>
+                        ))}
+                      </select>
                     </label>
                     <label style={{ display: "grid", gap: "6px" }}>
                       <span style={{ fontSize: "12px", color: "#94a3b8" }}>Nombre</span>

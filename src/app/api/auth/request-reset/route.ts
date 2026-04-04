@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
 
     const user = await prisma.user.findUnique({
       where: { email: normalizedEmail },
-      select: { id: true, name: true, email: true },
+      select: { id: true, firstName: true, name: true, email: true },
     });
 
     if (!user) {
@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
           <div style="font-family: system-ui, -apple-system, sans-serif; max-width: 480px; margin: 0 auto; padding: 24px;">
             <h1 style="font-size: 24px; font-weight: 700; color: #1f2937; margin-bottom: 16px;">Recuperar contraseña</h1>
             <p style="font-size: 16px; color: #4b5563; line-height: 1.5; margin-bottom: 24px;">
-              Hola${user.name ? ` ${user.name}` : ""},
+              Hola${user.firstName ? ` ${user.firstName}` : user.name ? ` ${user.name}` : ""},
             </p>
             <p style="font-size: 16px; color: #4b5563; line-height: 1.5; margin-bottom: 24px;">
               Has solicitado recuperar tu contraseña de Clikit. Haz clic en el botón de abajo para crear una nueva:

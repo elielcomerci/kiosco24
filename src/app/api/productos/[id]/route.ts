@@ -610,19 +610,22 @@ export async function PATCH(
       : barcode !== undefined
         ? normalizedBarcode
         : product.barcode;
+  const kioscoSettings = await prisma.kiosco.findUnique({
+    where: { id: kioscoId },
+    select: { pricingMode: true, mainBusinessActivity: true },
+  });
   const lookupBarcode =
     effectiveBarcode ?? normalizedVariants.find((variant) => variant.barcode)?.barcode ?? null;
   const platformProduct = lookupBarcode
-    ? await findApprovedPlatformProductByBarcode(lookupBarcode)
+    ? await findApprovedPlatformProductByBarcode(
+        lookupBarcode,
+        kioscoSettings?.mainBusinessActivity ?? "KIOSCO",
+      )
     : null;
   const nextPlatformSyncMode = normalizePlatformSyncMode(
     platformSyncMode,
     product.platformSyncMode ?? PlatformSyncMode.MANUAL,
   );
-  const kioscoSettings = await prisma.kiosco.findUnique({
-    where: { id: kioscoId },
-    select: { pricingMode: true },
-  });
   const pricingMode = kioscoSettings?.pricingMode ?? DEFAULT_PRICING_MODE;
 
   await prisma.product.update({
@@ -775,6 +778,8 @@ export async function PATCH(
 
   const platformSubmissionDraft = buildPlatformSubmissionDraft(platformProduct, {
     barcode: effectiveBarcode,
+    businessActivity:
+      platformProduct?.businessActivity ?? kioscoSettings?.mainBusinessActivity ?? "KIOSCO",
     name: normalizedName,
     brand: normalizedBrand,
     categoryName: resolvedCategory.categoryName,
@@ -799,6 +804,8 @@ export async function PATCH(
       submittedByUserId: session.user.id,
       submittedFromKioscoId: kioscoId,
       barcode: platformSubmissionDraft.barcode,
+      businessActivity:
+        platformProduct?.businessActivity ?? kioscoSettings?.mainBusinessActivity ?? "KIOSCO",
       name: platformSubmissionDraft.name,
       brand: platformSubmissionDraft.brand,
       categoryName: platformSubmissionDraft.categoryName,

@@ -8,6 +8,8 @@ datasource db {
 
 model User {
   id                        String                      @id @default(cuid())
+  firstName                 String?
+  lastName                  String?
   name                      String?
   email                     String                      @unique
   password                  String?
@@ -44,6 +46,16 @@ enum FiscalEnvironment {
 enum FiscalVatCondition {
   MONOTRIBUTO
   RESP_INSCRIPTO
+}
+
+enum TaxType {
+  IVA_21
+  IVA_10_5
+  IVA_27
+  IVA_0
+  EXENTO
+  NO_GRAVADO
+  CUSTOM
 }
 
 enum InvoiceStatus {
@@ -97,6 +109,11 @@ model Session {
 model Kiosco {
   id                         String                      @id @default(cuid())
   name                       String
+  mainBusinessActivity       String?
+  legalId                    String?
+  address                    String?
+  city                       String?
+  phone                      String?
   ownerId                    String                      @unique
   owner                      User                        @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   branches                   Branch[]
@@ -215,6 +232,8 @@ model Category {
   name       String
   color      String?
   showInGrid Boolean   @default(true)
+  taxType    TaxType   @default(IVA_21)
+  customTaxPercent Float?
   kioscoId   String
   kiosco     Kiosco    @relation(fields: [kioscoId], references: [id], onDelete: Cascade)
   products   Product[]
@@ -263,9 +282,22 @@ model Product {
   @@index([platformProductId])
 }
 
+model PlatformBusinessActivity {
+  id                 String   @id @default(cuid())
+  code               String   @unique
+  label              String
+  description        String?
+  isActive           Boolean  @default(true)
+  seedDefaultCatalog Boolean  @default(false)
+  sortOrder          Int      @default(0)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
 model PlatformProduct {
   id           String                      @id @default(cuid())
   barcode      String?                     @unique
+  businessActivity String                  @default("KIOSCO")
   name         String
   brand        String?
   categoryName String?
@@ -281,6 +313,7 @@ model PlatformProduct {
   updatedAt    DateTime                    @updatedAt
 
   @@index([status])
+  @@index([businessActivity, status])
 }
 
 model PlatformProductVariant {
@@ -298,6 +331,7 @@ model PlatformProductVariant {
 model PlatformProductSubmission {
   id                    String                             @id @default(cuid())
   barcode               String?
+  businessActivity      String                             @default("KIOSCO")
   name                  String
   brand                 String?
   categoryName          String?
@@ -323,6 +357,7 @@ model PlatformProductSubmission {
   @@index([submittedByUserId])
   @@index([submittedFromKioscoId])
   @@index([platformProductId])
+  @@index([businessActivity, status])
 }
 
 model PlatformProductSubmissionVariant {
@@ -339,6 +374,7 @@ model PlatformProductSubmissionVariant {
 
 model ScrapeRun {
   id          String          @id @default(cuid())
+  businessActivity String     @default("KIOSCO")
   source      ScraperSource
   rootUrl     String?
   categoryUrl String
@@ -352,12 +388,14 @@ model ScrapeRun {
 
   @@index([source, createdAt])
   @@index([status, createdAt])
+  @@index([businessActivity, createdAt])
 }
 
 model ScrapedProduct {
   id                    String                     @id @default(cuid())
   runId                 String
   run                   ScrapeRun                  @relation(fields: [runId], references: [id], onDelete: Cascade)
+  businessActivity      String                     @default("KIOSCO")
   source                ScraperSource
   barcode               String?
   name                  String
@@ -386,6 +424,7 @@ model ScrapedProduct {
   @@index([barcode])
   @@index([syncStatus, createdAt])
   @@index([remotePlatformProductId])
+  @@index([businessActivity, syncStatus, createdAt])
 }
 
 model InventoryRecord {
@@ -616,6 +655,8 @@ model SaleItem {
   quantity         Int
   soldByWeight     Boolean    @default(false)
   cost             Float?
+  taxTypeApplied   TaxType    @default(IVA_21)
+  customTaxPercentApplied Float?
   appliedPromoType PromoType? // Tipo de promo que ajustó este ítem
   appliedPromoId   String?    // ID de la Promotion aplicada
   comboGroupId     String?    // UUID que agrupa ítems del mismo combo

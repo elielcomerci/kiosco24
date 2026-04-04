@@ -731,20 +731,22 @@ export async function POST(req: Request) {
     const normalizedImage = typeof image === "string" ? image.trim() || null : null;
     const kioscoSettings = await prisma.kiosco.findUnique({
       where: { id: kioscoId },
-      select: { pricingMode: true },
+      select: { pricingMode: true, mainBusinessActivity: true },
     });
     const pricingMode = kioscoSettings?.pricingMode ?? DEFAULT_PRICING_MODE;
+    const currentBusinessActivity = kioscoSettings?.mainBusinessActivity ?? "KIOSCO";
     const resolvedCategory = await resolveCategorySelection(kioscoId, categoryId);
     const normalizedBarcode =
       normalizedVariants.length > 0 ? null : normalizeCatalogBarcode(barcode);
     const lookupBarcode =
       normalizedBarcode ?? normalizedVariants.find((variant) => variant.barcode)?.barcode ?? null;
     const platformProduct = lookupBarcode
-      ? await findApprovedPlatformProductByBarcode(lookupBarcode)
+      ? await findApprovedPlatformProductByBarcode(lookupBarcode, currentBusinessActivity)
       : null;
     const normalizedPlatformSyncMode = normalizePlatformSyncMode(platformSyncMode);
     const platformSubmissionDraft = buildPlatformSubmissionDraft(platformProduct, {
       barcode: normalizedBarcode,
+      businessActivity: platformProduct?.businessActivity ?? currentBusinessActivity,
       name: normalizedName,
       brand: normalizedBrand,
       categoryName: resolvedCategory.categoryName,
@@ -902,6 +904,7 @@ export async function POST(req: Request) {
         submittedByUserId: session.user.id,
         submittedFromKioscoId: kioscoId,
         barcode: platformSubmissionDraft.barcode,
+        businessActivity: platformProduct?.businessActivity ?? currentBusinessActivity,
         name: platformSubmissionDraft.name,
         brand: platformSubmissionDraft.brand,
         categoryName: platformSubmissionDraft.categoryName,

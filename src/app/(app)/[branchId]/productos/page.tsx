@@ -846,7 +846,9 @@ function ProductModal({
       setLookupState("loading");
 
       try {
-        const res = await fetch(`/api/platform-products/lookup?code=${encodeURIComponent(lookupCode)}`);
+        const res = await fetch(`/api/platform-products/lookup?code=${encodeURIComponent(lookupCode)}`, {
+          headers: { "x-branch-id": branchId },
+        });
         const data = (await res.json()) as BarcodeLookupResponse;
 
         if (cancelled) return;
@@ -885,7 +887,9 @@ function ProductModal({
       setNameLookupState("loading");
 
       try {
-        const res = await fetch(`/api/platform-products/lookup?q=${encodeURIComponent(normalizedNameQuery)}`);
+        const res = await fetch(`/api/platform-products/lookup?q=${encodeURIComponent(normalizedNameQuery)}`, {
+          headers: { "x-branch-id": branchId },
+        });
         const data = (await res.json()) as BarcodeLookupResponse;
 
         if (cancelled) return;
@@ -935,7 +939,9 @@ function ProductModal({
           params.set("q", normalizedCatalogQuery);
         }
 
-        const res = await fetch(`/api/platform-products/lookup?${params.toString()}`);
+        const res = await fetch(`/api/platform-products/lookup?${params.toString()}`, {
+          headers: { "x-branch-id": branchId },
+        });
         const data = (await res.json()) as BarcodeLookupResponse;
 
         if (cancelled) return;
@@ -2861,6 +2867,7 @@ function StockLoadingModal({
         }
 
         const response = await fetch(`/api/platform-products/lookup?${params.toString()}`, {
+          headers: { "x-branch-id": branchId },
           signal: controller.signal,
         });
         const data = (await response.json().catch(() => null)) as BarcodeLookupResponse | null;

@@ -5,6 +5,11 @@ import { syncAutoProductsFromPlatformProduct } from "@/lib/platform-product-sync
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
+import {
+  ensureBusinessActivitiesSeeded,
+  isValidBusinessActivity,
+} from "@/lib/business-activities-store";
+import { normalizeBusinessActivityCode } from "@/lib/business-activities";
 
 function cleanCell(value: string | undefined) {
   const trimmed = (value ?? "").trim().replace(/^"|"$/g, "");
@@ -79,6 +84,8 @@ export async function POST(req: Request) {
 
   const body = await req.json().catch(() => ({}));
   const raw = typeof body.raw === "string" ? body.raw : "";
+  await ensureBusinessActivitiesSeeded();
+  const targetBusinessActivity = normalizeBusinessActivityCode(body.businessActivity);
   const lines = raw
     .split(/\r?\n/)
     .map((line: string) => line.trim())
@@ -86,6 +93,10 @@ export async function POST(req: Request) {
 
   if (lines.length === 0) {
     return NextResponse.json({ error: "No hay filas para importar." }, { status: 400 });
+  }
+
+  if (!(await isValidBusinessActivity(targetBusinessActivity))) {
+    return NextResponse.json({ error: "Elegi un rubro valido." }, { status: 400 });
   }
 
   let created = 0;
@@ -120,6 +131,7 @@ export async function POST(req: Request) {
     const saved = await prisma.platformProduct.upsert({
       where: { barcode: parsed.barcode },
       update: {
+        businessActivity: targetBusinessActivity,
         name: parsed.name,
         brand: parsed.brand,
         categoryName: parsed.categoryName,
@@ -130,6 +142,7 @@ export async function POST(req: Request) {
       },
       create: {
         barcode: parsed.barcode,
+        businessActivity: targetBusinessActivity,
         name: parsed.name,
         brand: parsed.brand,
         categoryName: parsed.categoryName,

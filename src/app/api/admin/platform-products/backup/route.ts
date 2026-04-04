@@ -5,6 +5,11 @@ import { syncAutoProductsFromPlatformProduct } from "@/lib/platform-product-sync
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
+import {
+  ensureBusinessActivitiesSeeded,
+  isValidBusinessActivity,
+} from "@/lib/business-activities-store";
+import { normalizeBusinessActivityCode } from "@/lib/business-activities";
 
 type BackupVariant = {
   id?: string | null;
@@ -52,11 +57,12 @@ export async function GET() {
   });
 
   const payload = {
-    version: 2,
+    version: 3,
     exportedAt: new Date().toISOString(),
     products: products.map((product) => ({
       id: product.id,
       barcode: product.barcode,
+      businessActivity: product.businessActivity,
       name: product.name,
       brand: product.brand,
       categoryName: product.categoryName,
@@ -91,6 +97,7 @@ export async function POST(req: Request) {
 
   const body = await req.json().catch(() => ({}));
   const rawProducts = Array.isArray(body.products) ? body.products : [];
+  await ensureBusinessActivitiesSeeded();
 
   if (rawProducts.length === 0) {
     return NextResponse.json({ error: "No hay productos para importar." }, { status: 400 });
@@ -105,6 +112,7 @@ export async function POST(req: Request) {
     const productId = cleanText(rawProduct?.id);
     const name = cleanText(rawProduct?.name);
     const barcode = cleanText(rawProduct?.barcode);
+    const businessActivity = normalizeBusinessActivityCode(rawProduct?.businessActivity);
     const brand = cleanText(rawProduct?.brand);
     const categoryName = cleanText(rawProduct?.categoryName);
     const presentation = cleanText(rawProduct?.presentation);
@@ -124,6 +132,12 @@ export async function POST(req: Request) {
     if (!name) {
       skipped += 1;
       errors.push(`Producto ${index + 1}: falta el nombre.`);
+      continue;
+    }
+
+    if (!(await isValidBusinessActivity(businessActivity))) {
+      skipped += 1;
+      errors.push(`Producto ${index + 1}: rubro invalido.`);
       continue;
     }
 
@@ -160,6 +174,7 @@ export async function POST(req: Request) {
     const saved = await prisma.platformProduct.upsert({
       where: effectiveBarcode ? { barcode: effectiveBarcode } : productId ? { id: productId } : { id: "__no-match__" },
       update: {
+        businessActivity,
         name,
         brand,
         categoryName,
@@ -195,6 +210,7 @@ export async function POST(req: Request) {
       create: {
         ...(productId ? { id: productId } : {}),
         barcode: effectiveBarcode,
+        businessActivity,
         name,
         brand,
         categoryName,
@@ -216,6 +232,7 @@ export async function POST(req: Request) {
         data: {
           ...(productId ? { id: productId } : {}),
           barcode: effectiveBarcode,
+          businessActivity,
           name,
           brand,
           categoryName,

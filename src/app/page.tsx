@@ -154,7 +154,7 @@ export default async function LandingPage() {
               <Link href="/login" className="btn btn-secondary" style={{ borderRadius: "999px", padding: "10px 18px" }}>
                 Entrar
               </Link>
-              <Link href="/login?register=1" className="btn btn-primary" style={{ borderRadius: "999px", padding: "10px 18px" }}>
+              <Link href="/register" className="btn btn-primary" style={{ borderRadius: "999px", padding: "10px 18px" }}>
                 Crear cuenta
               </Link>
             </>
@@ -213,7 +213,7 @@ export default async function LandingPage() {
                   {isPlatformAdmin(session.user) ? "Entrar al admin" : "Abrir mi kiosco"}
                 </Link>
               ) : (
-                <Link href="/login?register=1" className="btn btn-primary btn-lg" style={{ padding: "16px 28px" }}>
+                <Link href="/register" className="btn btn-primary btn-lg" style={{ padding: "16px 28px" }}>
                   Crear mi cuenta
                 </Link>
               )}
@@ -441,7 +441,7 @@ export default async function LandingPage() {
                 Entrar ahora
               </Link>
             ) : (
-              <Link href="/login?register=1" className="btn btn-primary btn-lg" style={{ padding: "16px 30px" }}>
+              <Link href="/register" className="btn btn-primary btn-lg" style={{ padding: "16px 30px" }}>
                 Crear mi cuenta
               </Link>
             )}

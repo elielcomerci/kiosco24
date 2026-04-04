@@ -4,6 +4,12 @@ import {
 } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import {
+  createBusinessActivity,
+  ensureBusinessActivitiesSeeded,
+  listBusinessActivityOptions,
+} from "@/lib/business-activities-store";
+import { getBusinessActivityLabel } from "@/lib/business-activities";
+import {
   buildPlatformSubmissionDraft,
   ensurePlatformCatalogSeeded,
   findApprovedPlatformProductByBarcode,
@@ -23,6 +29,7 @@ import PlatformProductQuickEditor from "@/app/admin/productos/PlatformProductQui
 
 const platformChangeLabels: Record<PlatformDraftChangeField, string> = {
   barcode: "Codigo de barras",
+  businessActivity: "Rubro",
   name: "Nombre",
   brand: "Marca",
   categoryName: "Categoria",
@@ -34,6 +41,7 @@ const platformChangeLabels: Record<PlatformDraftChangeField, string> = {
 
 type SubmissionDiffSource = {
   barcode: string | null;
+  businessActivity: string;
   name: string;
   brand: string | null;
   categoryName: string | null;
@@ -47,6 +55,7 @@ type SubmissionDiffSource = {
   platformProduct?: {
     id?: string;
     barcode: string | null;
+    businessActivity: string;
     name: string;
     brand: string | null;
     categoryName: string | null;
@@ -87,6 +96,7 @@ function formatVariantDiffValue(
 function buildSubmissionDiffRows(submission: SubmissionDiffSource) {
   const draft = {
     barcode: submission.barcode,
+    businessActivity: submission.businessActivity,
     name: submission.name,
     brand: submission.brand,
     categoryName: submission.categoryName,
@@ -107,6 +117,13 @@ function buildSubmissionDiffRows(submission: SubmissionDiffSource) {
           label: platformChangeLabels[field],
           current: formatDiffValue(submission.platformProduct?.barcode, "Sin barcode base"),
           next: formatDiffValue(submission.barcode, "Sin barcode base"),
+        };
+      case "businessActivity":
+        return {
+          field,
+          label: platformChangeLabels[field],
+          current: submission.platformProduct?.businessActivity ?? "KIOSCO",
+          next: submission.businessActivity,
         };
       case "name":
         return {
@@ -170,6 +187,7 @@ function buildSubmissionDiffRows(submission: SubmissionDiffSource) {
 
 async function resolveSubmissionComparisonProduct(submission: {
   barcode: string | null;
+  businessActivity?: string | null;
   platformProduct?: SubmissionComparisonProduct | null;
 }) {
   if (submission.platformProduct) {
@@ -180,7 +198,10 @@ async function resolveSubmissionComparisonProduct(submission: {
     return null;
   }
 
-  const matchedProduct = await findApprovedPlatformProductByBarcode(submission.barcode);
+  const matchedProduct =
+    (submission.businessActivity
+      ? await findApprovedPlatformProductByBarcode(submission.barcode, submission.businessActivity)
+      : null) ?? (await findApprovedPlatformProductByBarcode(submission.barcode));
   if (!matchedProduct) {
     return null;
   }
@@ -188,6 +209,7 @@ async function resolveSubmissionComparisonProduct(submission: {
   return {
     id: matchedProduct.id,
     barcode: matchedProduct.barcode,
+    businessActivity: matchedProduct.businessActivity,
     name: matchedProduct.name,
     brand: matchedProduct.brand,
     categoryName: matchedProduct.categoryName,
@@ -234,6 +256,7 @@ async function reviewSubmission(formData: FormData) {
         select: {
           id: true,
           barcode: true,
+          businessActivity: true,
           name: true,
           brand: true,
           categoryName: true,
@@ -275,10 +298,12 @@ async function reviewSubmission(formData: FormData) {
 
   const comparisonProduct = await resolveSubmissionComparisonProduct({
     barcode: submission.barcode,
+    businessActivity: submission.businessActivity,
     platformProduct: submission.platformProduct,
   });
   const mergedDraft = buildPlatformSubmissionDraft(comparisonProduct, {
     barcode: submission.barcode,
+    businessActivity: submission.businessActivity,
     name: submission.name,
     brand: submission.brand,
     categoryName: submission.categoryName,
@@ -302,6 +327,7 @@ async function reviewSubmission(formData: FormData) {
         where: { id: targetPlatformProductId },
         data: {
           barcode: effectiveBarcode,
+          businessActivity: mergedDraft.businessActivity,
           name: mergedDraft.name,
           brand: mergedDraft.brand,
           categoryName: mergedDraft.categoryName,
@@ -320,6 +346,7 @@ async function reviewSubmission(formData: FormData) {
       ? await prisma.platformProduct.upsert({
           where: { barcode: effectiveBarcode },
           update: {
+            businessActivity: mergedDraft.businessActivity,
             name: mergedDraft.name,
             brand: mergedDraft.brand,
             categoryName: mergedDraft.categoryName,
@@ -334,6 +361,7 @@ async function reviewSubmission(formData: FormData) {
           },
           create: {
             barcode: effectiveBarcode,
+            businessActivity: mergedDraft.businessActivity,
             name: mergedDraft.name,
             brand: mergedDraft.brand,
             categoryName: mergedDraft.categoryName,
@@ -350,6 +378,7 @@ async function reviewSubmission(formData: FormData) {
       : await prisma.platformProduct.create({
         data: {
           barcode: effectiveBarcode,
+          businessActivity: mergedDraft.businessActivity,
           name: mergedDraft.name,
           brand: mergedDraft.brand,
           categoryName: mergedDraft.categoryName,
@@ -400,6 +429,7 @@ async function clearNoChangeSubmissionsAction() {
         select: {
           id: true,
           barcode: true,
+          businessActivity: true,
           name: true,
           brand: true,
           categoryName: true,
@@ -428,6 +458,7 @@ async function clearNoChangeSubmissionsAction() {
   for (const submission of pendingSubmissions) {
     const comparisonProduct = await resolveSubmissionComparisonProduct({
       barcode: submission.barcode,
+      businessActivity: submission.businessActivity,
       platformProduct: submission.platformProduct,
     });
 
@@ -437,6 +468,7 @@ async function clearNoChangeSubmissionsAction() {
 
     const diffRows = buildSubmissionDiffRows({
       barcode: submission.barcode,
+      businessActivity: submission.businessActivity,
       name: submission.name,
       brand: submission.brand,
       categoryName: submission.categoryName,
@@ -473,11 +505,28 @@ async function clearNoChangeSubmissionsAction() {
   revalidatePath("/admin/productos");
 }
 
+async function createBusinessActivityAction(formData: FormData) {
+  "use server";
+
+  await ensurePlatformAdmin();
+
+  await createBusinessActivity({
+    label: String(formData.get("label") ?? ""),
+    code: String(formData.get("code") ?? ""),
+    description: String(formData.get("description") ?? ""),
+    seedDefaultCatalog: formData.get("seedDefaultCatalog") === "on",
+  });
+
+  revalidatePath("/admin/productos");
+}
+
 export default async function AdminProductsPage() {
   await ensurePlatformAdmin();
+  await ensureBusinessActivitiesSeeded();
   await ensurePlatformCatalogSeeded();
 
   const [
+    businessActivities,
     platformProducts,
     rawPendingSubmissions,
     linkedProductsCount,
@@ -486,7 +535,9 @@ export default async function AdminProductsPage() {
     pendingSubmissionsTotalCount,
     approvedCount,
     hiddenCount,
+    productsByBusinessActivity,
   ] = await Promise.all([
+    listBusinessActivityOptions({ includeInactive: true }),
     prisma.platformProduct.findMany({
       include: {
         variants: {
@@ -503,6 +554,7 @@ export default async function AdminProductsPage() {
           select: {
             id: true,
             barcode: true,
+            businessActivity: true,
             name: true,
             brand: true,
             categoryName: true,
@@ -562,15 +614,24 @@ export default async function AdminProductsPage() {
     prisma.platformProduct.count({
       where: { status: PlatformProductStatus.HIDDEN },
     }),
+    prisma.platformProduct.groupBy({
+      by: ["businessActivity"],
+      _count: { _all: true },
+    }),
   ]);
+  const productCountsByActivity = Object.fromEntries(
+    productsByBusinessActivity.map((entry) => [entry.businessActivity, entry._count._all]),
+  );
   const pendingSubmissions = await Promise.all(
     rawPendingSubmissions.map(async (submission) => {
       const effectivePlatformProduct = await resolveSubmissionComparisonProduct({
         barcode: submission.barcode,
+        businessActivity: submission.businessActivity,
         platformProduct: submission.platformProduct,
       });
       const diffRows = buildSubmissionDiffRows({
         barcode: submission.barcode,
+        businessActivity: submission.businessActivity,
         name: submission.name,
         brand: submission.brand,
         categoryName: submission.categoryName,
@@ -674,6 +735,116 @@ export default async function AdminProductsPage() {
             borderRadius: "22px",
             padding: "20px",
             display: "grid",
+            gap: "18px",
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", gap: "16px", flexWrap: "wrap" }}>
+            <div>
+              <h2 style={{ margin: 0, fontSize: "24px" }}>Rubros de la base colaborativa</h2>
+              <div style={{ color: "#94a3b8", fontSize: "14px", marginTop: "4px" }}>
+                Crea nuevos rubros para segmentar la base curada y que cada negocio vea su catalogo colaborativo sin friccion.
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.15fr) minmax(320px, .85fr)", gap: "16px" }}>
+            <div
+              style={{
+                display: "grid",
+                gap: "12px",
+                padding: "16px",
+                borderRadius: "18px",
+                background: "rgba(2,6,23,.38)",
+                border: "1px solid rgba(148,163,184,.12)",
+              }}
+            >
+              <div style={{ fontSize: "13px", color: "#94a3b8" }}>
+                Rubros activos y cantidad de productos curados por rubro.
+              </div>
+              <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                {businessActivities.map((activity) => (
+                  <div
+                    key={activity.value}
+                    style={{
+                      minWidth: "160px",
+                      padding: "12px 14px",
+                      borderRadius: "16px",
+                      background: "rgba(30,41,59,.72)",
+                      border: "1px solid rgba(148,163,184,.12)",
+                      display: "grid",
+                      gap: "4px",
+                    }}
+                  >
+                    <div style={{ fontWeight: 700 }}>{activity.label}</div>
+                    <div style={{ fontSize: "12px", color: "#94a3b8" }}>{activity.value}</div>
+                    <div style={{ fontSize: "12px", color: "#cbd5e1", lineHeight: 1.5 }}>
+                      {productCountsByActivity[activity.value] ?? 0} producto{(productCountsByActivity[activity.value] ?? 0) === 1 ? "" : "s"}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <form
+              action={createBusinessActivityAction}
+              style={{
+                display: "grid",
+                gap: "12px",
+                padding: "16px",
+                borderRadius: "18px",
+                background: "rgba(30,41,59,.72)",
+                border: "1px solid rgba(148,163,184,.12)",
+              }}
+            >
+              <div>
+                <div style={{ fontWeight: 700, fontSize: "18px" }}>Nuevo rubro</div>
+                <div style={{ color: "#94a3b8", fontSize: "13px", marginTop: "4px", lineHeight: 1.5 }}>
+                  El codigo es opcional. Si lo dejas vacio, lo generamos a partir del nombre.
+                </div>
+              </div>
+
+              <label style={{ display: "grid", gap: "6px" }}>
+                <span style={{ fontSize: "12px", color: "#94a3b8", fontWeight: 700 }}>Nombre visible</span>
+                <input name="label" className="input" placeholder="Ej: Ferreteria industrial" required />
+              </label>
+
+              <label style={{ display: "grid", gap: "6px" }}>
+                <span style={{ fontSize: "12px", color: "#94a3b8", fontWeight: 700 }}>Codigo interno</span>
+                <input name="code" className="input" placeholder="Ej: FERRETERIA_INDUSTRIAL" />
+              </label>
+
+              <label style={{ display: "grid", gap: "6px" }}>
+                <span style={{ fontSize: "12px", color: "#94a3b8", fontWeight: 700 }}>Descripcion</span>
+                <textarea
+                  name="description"
+                  className="input"
+                  rows={3}
+                  placeholder="Breve descripcion para registro y administracion."
+                  style={{ resize: "vertical" }}
+                />
+              </label>
+
+              <label style={{ display: "flex", gap: "10px", alignItems: "center", color: "#cbd5e1", fontSize: "14px" }}>
+                <input type="checkbox" name="seedDefaultCatalog" />
+                Sembrar catalogo base por defecto para cuentas nuevas de este rubro
+              </label>
+
+              <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                <button type="submit" className="btn btn-primary">
+                  Crear rubro
+                </button>
+              </div>
+            </form>
+          </div>
+        </section>
+
+        <section
+          style={{
+            background: "rgba(15,23,42,.82)",
+            border: "1px solid rgba(148,163,184,.18)",
+            borderRadius: "22px",
+            padding: "20px",
+            display: "grid",
             gap: "16px",
           }}
         >
@@ -726,6 +897,9 @@ export default async function AdminProductsPage() {
                         <div style={{ color: "#94a3b8", fontSize: "13px" }}>
                           {submission.barcode || "Sin barcode base"} | {submission.submittedFromKiosco?.name || "Kiosco desconocido"} |{" "}
                           {submission.submittedByUser?.name || submission.submittedByUser?.email || "Usuario desconocido"}
+                        </div>
+                        <div style={{ color: "#cbd5e1", fontSize: "13px" }}>
+                          Rubro: {getBusinessActivityLabel(submission.businessActivity, businessActivities)}
                         </div>
                         <div
                           style={{
@@ -807,13 +981,21 @@ export default async function AdminProductsPage() {
                                   <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: ".06em" }}>
                                     Actual
                                   </div>
-                                  <div style={{ color: "#cbd5e1", wordBreak: "break-word" }}>{row.current}</div>
+                                  <div style={{ color: "#cbd5e1", wordBreak: "break-word" }}>
+                                    {row.field === "businessActivity"
+                                      ? getBusinessActivityLabel(row.current, businessActivities)
+                                      : row.current}
+                                  </div>
                                 </div>
                                 <div>
                                   <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: ".06em" }}>
                                     Propuesto
                                   </div>
-                                  <div style={{ color: "#f8fafc", wordBreak: "break-word" }}>{row.next}</div>
+                                  <div style={{ color: "#f8fafc", wordBreak: "break-word" }}>
+                                    {row.field === "businessActivity"
+                                      ? getBusinessActivityLabel(row.next, businessActivities)
+                                      : row.next}
+                                  </div>
                                 </div>
                               </div>
                             ))}
@@ -823,6 +1005,10 @@ export default async function AdminProductsPage() {
                     )}
 
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "10px" }}>
+                      <div>
+                        <div style={{ fontSize: "12px", color: "#94a3b8" }}>Rubro</div>
+                        <div>{getBusinessActivityLabel(submission.businessActivity, businessActivities)}</div>
+                      </div>
                       <div>
                         <div style={{ fontSize: "12px", color: "#94a3b8" }}>Marca</div>
                         <div>{submission.brand || "Sin marca"}</div>
@@ -888,9 +1074,11 @@ export default async function AdminProductsPage() {
         </section>
 
         <PlatformProductQuickEditor
+          businessActivities={businessActivities}
           products={platformProducts.map((product) => ({
             id: product.id,
             barcode: product.barcode,
+            businessActivity: product.businessActivity,
             name: product.name,
             brand: product.brand,
             categoryName: product.categoryName,
@@ -910,7 +1098,7 @@ export default async function AdminProductsPage() {
 
         <PlatformProductBackupManager />
 
-        <PlatformProductBulkImporter />
+        <PlatformProductBulkImporter businessActivities={businessActivities} />
 
         <section
           style={{
@@ -977,6 +1165,9 @@ export default async function AdminProductsPage() {
                       {product.barcode || "Sin barcode base"}
                       {product.brand ? ` | ${product.brand}` : ""}
                       {product.categoryName ? ` | ${product.categoryName}` : ""}
+                    </div>
+                    <div style={{ color: "#cbd5e1", fontSize: "12px", marginTop: "4px" }}>
+                      Rubro: {getBusinessActivityLabel(product.businessActivity, businessActivities)}
                     </div>
                   </div>
                 </div>

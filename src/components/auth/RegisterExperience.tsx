@@ -35,10 +35,10 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs = AUTH_TIMEOUT_MS): Promi
 function getRegisterErrorMessage(error: unknown) {
   const message = error instanceof Error ? error.message : "";
   if (message === "AUTH_TIMEOUT") {
-    return "El alta tardó demasiado en responder. Reintentá en unos segundos.";
+    return "El alta tardo demasiado en responder. Reintenta en unos segundos.";
   }
 
-  return "No pudimos crear tu cuenta ahora. Reintentá en unos segundos.";
+  return "No pudimos crear tu cuenta ahora. Reintenta en unos segundos.";
 }
 
 export default function RegisterExperience({
@@ -103,7 +103,7 @@ export default function RegisterExperience({
       );
 
       if (result?.error) {
-        setError("La cuenta se creó, pero no pudimos iniciar sesión automáticamente.");
+        setError("La cuenta se creo, pero no pudimos iniciar sesion automaticamente.");
         setLoading(false);
         return;
       }
@@ -124,7 +124,7 @@ export default function RegisterExperience({
         display: "grid",
         placeItems: "center",
         background:
-          "radial-gradient(circle at top left, rgba(143,102,255,.18), transparent 28%), radial-gradient(circle at bottom right, rgba(34,197,94,.12), transparent 26%), linear-gradient(180deg, #07111f 0%, #030712 45%, #020617 100%)",
+          "radial-gradient(circle at top left, rgba(14,165,233,.16), transparent 28%), radial-gradient(circle at bottom right, rgba(245,158,11,.12), transparent 26%), linear-gradient(180deg, #07111f 0%, #030712 45%, #020617 100%)",
       }}
     >
       <div
@@ -145,12 +145,31 @@ export default function RegisterExperience({
             gap: "22px",
             justifyContent: "space-between",
             background:
-              "linear-gradient(160deg, rgba(8,15,31,.94) 0%, rgba(11,20,43,.9) 55%, rgba(24,24,63,.88) 100%)",
+              "linear-gradient(160deg, rgba(8,15,31,.94) 0%, rgba(11,27,46,.9) 55%, rgba(24,24,63,.88) 100%)",
             border: "1px solid rgba(148,163,184,.14)",
           }}
         >
           <div style={{ display: "grid", gap: "18px" }}>
+            <div
+              style={{
+                display: "inline-flex",
+                width: "fit-content",
+                padding: "6px 10px",
+                borderRadius: "999px",
+                background: "rgba(56,189,248,.12)",
+                border: "1px solid rgba(56,189,248,.22)",
+                color: "#bae6fd",
+                fontSize: "11px",
+                fontWeight: 800,
+                letterSpacing: ".08em",
+                textTransform: "uppercase",
+              }}
+            >
+              Empezar bien
+            </div>
+
             <BrandLogo tone="white" width={180} />
+
             <div style={{ display: "grid", gap: "12px" }}>
               <h1
                 style={{
@@ -161,20 +180,20 @@ export default function RegisterExperience({
                   letterSpacing: "-0.04em",
                 }}
               >
-                Creá tu cuenta con identidad real desde el primer minuto.
+                Tu cuenta nace con nombre, negocio y rumbo desde el primer minuto.
               </h1>
               <p style={{ margin: 0, color: "#cbd5e1", lineHeight: 1.7, fontSize: "15px" }}>
-                Nombre, negocio y rubro quedan listos desde el alta para que Clikit pueda
-                acompañarte con un tono más humano y preparar el camino a nuevos tipos de comercio.
+                Te pedimos muy poco, pero lo justo para recibirte por tu nombre y dejar tu negocio
+                bien encaminado desde el inicio.
               </p>
             </div>
           </div>
 
           <div style={{ display: "grid", gap: "12px" }}>
             {[
-              "Tu negocio nace creado junto con la cuenta, sin pasar por un alta improvisada después.",
-              "Para rubros tipo kiosco cargamos una base inicial; para el resto arrancás limpio, sin ruido.",
-              "Más adelante vas a completar CUIT/CUIL/DNI, dirección, ciudad y teléfono desde tu perfil.",
+              "Tu cuenta y tu negocio quedan creados juntos, listos para arrancar con orden.",
+              "Cuando suma, te dejamos una base inicial para ganar tiempo desde el primer dia.",
+              "Despues podras completar CUIT/CUIL/DNI, direccion, ciudad y telefono desde tu perfil.",
             ].map((item) => (
               <div
                 key={item}
@@ -187,14 +206,15 @@ export default function RegisterExperience({
                   lineHeight: 1.5,
                 }}
               >
-                <span style={{ color: "#8f66ff", fontWeight: 900 }}>•</span>
+                <span style={{ color: "#38bdf8", fontWeight: 900 }}>+</span>
                 <span>{item}</span>
               </div>
             ))}
           </div>
 
           <div style={{ color: "#94a3b8", fontSize: "12px", lineHeight: 1.6 }}>
-            Cuando entres por primera vez te vamos a ofrecer activar la suscripción o seguir preparando el negocio antes de vender.
+            Al entrar te vamos a ofrecer activar tu cuenta o seguir preparando todo con calma antes
+            de empezar a operar.
           </div>
         </section>
 
@@ -215,9 +235,9 @@ export default function RegisterExperience({
                 width: "fit-content",
                 padding: "6px 10px",
                 borderRadius: "999px",
-                background: "rgba(143,102,255,.14)",
-                border: "1px solid rgba(143,102,255,.24)",
-                color: "#d8ccff",
+                background: "rgba(56,189,248,.12)",
+                border: "1px solid rgba(56,189,248,.22)",
+                color: "#bae6fd",
                 fontSize: "11px",
                 fontWeight: 800,
                 letterSpacing: ".08em",
@@ -228,10 +248,10 @@ export default function RegisterExperience({
             </div>
             <div>
               <h2 style={{ margin: 0, color: "#f8fafc", fontSize: "26px", fontWeight: 800 }}>
-                Crear cuenta
+                Crear tu cuenta
               </h2>
               <p style={{ margin: "8px 0 0", color: "#94a3b8", fontSize: "14px", lineHeight: 1.6 }}>
-                Te pedimos sólo lo necesario para dejar tu negocio listo y poder hablarte por tu nombre.
+                Solo lo necesario para dejar tu negocio listo y hablarte como corresponde.
               </p>
             </div>
           </div>
@@ -259,7 +279,7 @@ export default function RegisterExperience({
                   type="text"
                   className="input"
                   value={firstName}
-                  onChange={(e) => setFirstName(e.target.value)}
+                  onChange={(event) => setFirstName(event.target.value)}
                   autoComplete="given-name"
                   placeholder="Ej: Martina"
                   required
@@ -271,9 +291,9 @@ export default function RegisterExperience({
                   type="text"
                   className="input"
                   value={lastName}
-                  onChange={(e) => setLastName(e.target.value)}
+                  onChange={(event) => setLastName(event.target.value)}
                   autoComplete="family-name"
-                  placeholder="Ej: Pérez"
+                  placeholder="Ej: Perez"
                   required
                 />
               </div>
@@ -287,9 +307,9 @@ export default function RegisterExperience({
                 type="text"
                 className="input"
                 value={businessName}
-                onChange={(e) => setBusinessName(e.target.value)}
+                onChange={(event) => setBusinessName(event.target.value)}
                 autoComplete="organization"
-                placeholder="Ej: Clásico 24, Almacén del Centro"
+                placeholder="Ej: Clasico 24, Almacen del Centro"
                 required
               />
             </div>
@@ -301,7 +321,7 @@ export default function RegisterExperience({
               <select
                 className="input"
                 value={mainBusinessActivity}
-                onChange={(e) => setMainBusinessActivity(e.target.value)}
+                onChange={(event) => setMainBusinessActivity(event.target.value)}
                 required
               >
                 {businessActivities.map((option) => (
@@ -314,8 +334,8 @@ export default function RegisterExperience({
                 <div style={{ fontSize: "12px", color: "var(--text-3)", lineHeight: 1.5 }}>
                   {selectedActivity.description}{" "}
                   {selectedActivity.seedDefaultCatalog
-                    ? "Te dejamos una base inicial lista para empezar más rápido."
-                    : "Arrancás con estructura limpia para adaptarlo a tu rubro."}
+                    ? "Te dejamos una base inicial lista para ganar tiempo desde el primer dia."
+                    : "Empiezas con una estructura limpia para acomodarlo a tu manera."}
                 </div>
               ) : null}
             </div>
@@ -326,7 +346,7 @@ export default function RegisterExperience({
                 type="email"
                 className="input"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(event) => setEmail(event.target.value)}
                 autoComplete="email"
                 placeholder="vos@negocio.com"
                 required
@@ -335,14 +355,14 @@ export default function RegisterExperience({
 
             <div style={{ display: "grid", gap: "6px" }}>
               <label style={{ fontSize: "12px", color: "var(--text-2)", fontWeight: 700 }}>
-                Contraseña
+                Contrasena
               </label>
               <div style={{ position: "relative" }}>
                 <input
                   type={showPassword ? "text" : "password"}
                   className="input"
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(event) => setPassword(event.target.value)}
                   autoComplete="new-password"
                   placeholder="Al menos 8 caracteres"
                   minLength={8}
@@ -352,7 +372,7 @@ export default function RegisterExperience({
                 <button
                   type="button"
                   onClick={() => setShowPassword((current) => !current)}
-                  aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                  aria-label={showPassword ? "Ocultar contrasena" : "Mostrar contrasena"}
                   style={{
                     position: "absolute",
                     right: "12px",
@@ -371,13 +391,13 @@ export default function RegisterExperience({
             </div>
 
             <button type="submit" className="btn btn-primary btn-lg btn-full" disabled={loading}>
-              {loading ? "Creando cuenta..." : "Crear mi cuenta"}
+              {loading ? "Creando tu cuenta..." : "Crear mi cuenta en Clikit"}
             </button>
           </form>
 
           <div style={{ display: "grid", gap: "10px", justifyItems: "center" }}>
             <p style={{ margin: 0, color: "var(--text-3)", fontSize: "13px", textAlign: "center" }}>
-              ¿Ya tenés cuenta?
+              Ya tienes cuenta?
             </p>
             <Link href="/login" className="btn btn-ghost btn-full" style={{ textDecoration: "none" }}>
               Ir al login

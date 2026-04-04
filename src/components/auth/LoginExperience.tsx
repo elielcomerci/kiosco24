@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { signIn } from "next-auth/react";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+
 import BrandLogo from "@/components/branding/BrandLogo";
 
 const AUTH_TIMEOUT_MS = 15000;
@@ -105,8 +106,8 @@ export default function LoginExperience({
     }
   };
 
-  const handleCredentialsSubmit = async (e: FormEvent) => {
-    e.preventDefault();
+  const handleCredentialsSubmit = async (event: FormEvent) => {
+    event.preventDefault();
     setLoading(true);
     setError("");
 
@@ -121,59 +122,64 @@ export default function LoginExperience({
       );
 
       if (result?.error) {
-        setError("Email o contrasena incorrectos");
+        setError("Email o contrasena incorrectos.");
         setLoading(false);
         return;
       }
 
       window.location.assign(result?.url || "/");
-    } catch (error) {
-      console.error("[Login] Credentials sign-in failed:", error);
-      setError(getAuthErrorMessage(error));
+    } catch (submitError) {
+      console.error("[Login] Credentials sign-in failed:", submitError);
+      setError(getAuthErrorMessage(submitError));
       setLoading(false);
     }
   };
 
-  const handleValidateKey = useCallback(async (rawKey?: string) => {
-    const normalizedKey = normalizeAccessKey(rawKey ?? branchKey);
-    if (!normalizedKey) {
-      return;
-    }
-
-    setLoading(true);
-    setError("");
-    setBranchKey(normalizedKey);
-
-    try {
-      const res = await withTimeout(fetch(`/api/branches/access-key/${encodeURIComponent(normalizedKey)}/employees`));
-      const data = await res.json().catch(() => ({}));
-
-      if (!res.ok) {
-        setError(data.error || "Codigo de sucursal invalido");
-        setLoading(false);
+  const handleValidateKey = useCallback(
+    async (rawKey?: string) => {
+      const normalizedKey = normalizeAccessKey(rawKey ?? branchKey);
+      if (!normalizedKey) {
         return;
       }
 
-      const employees = Array.isArray(data.employees) ? (data.employees as EmployeeOption[]) : [];
-      if (employees.length === 0) {
-        setError("No hay empleados habilitados para este codigo.");
-        setLoading(false);
-        return;
-      }
+      setLoading(true);
+      setError("");
+      setBranchKey(normalizedKey);
 
-      setSelectedBranchId(typeof data.branchId === "string" ? data.branchId : "");
-      setBranchName(typeof data.branchName === "string" ? data.branchName : "");
-      setBranchEmployees(employees);
-      setSelectedEmployee(null);
-      setPin("");
-      setEmployeeStep("employee");
-    } catch (error) {
-      console.error("[Login] Employee branch validation failed:", error);
-      setError(getAuthErrorMessage(error));
-    } finally {
-      setLoading(false);
-    }
-  }, [branchKey]);
+      try {
+        const response = await withTimeout(
+          fetch(`/api/branches/access-key/${encodeURIComponent(normalizedKey)}/employees`),
+        );
+        const data = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+          setError(data.error || "Codigo de sucursal invalido.");
+          setLoading(false);
+          return;
+        }
+
+        const employees = Array.isArray(data.employees) ? (data.employees as EmployeeOption[]) : [];
+        if (employees.length === 0) {
+          setError("No hay empleados habilitados para este codigo.");
+          setLoading(false);
+          return;
+        }
+
+        setSelectedBranchId(typeof data.branchId === "string" ? data.branchId : "");
+        setBranchName(typeof data.branchName === "string" ? data.branchName : "");
+        setBranchEmployees(employees);
+        setSelectedEmployee(null);
+        setPin("");
+        setEmployeeStep("employee");
+      } catch (validationError) {
+        console.error("[Login] Employee branch validation failed:", validationError);
+        setError(getAuthErrorMessage(validationError));
+      } finally {
+        setLoading(false);
+      }
+    },
+    [branchKey],
+  );
 
   useEffect(() => {
     const normalizedInitialKey = normalizeAccessKey(initialAccessKey);
@@ -212,9 +218,9 @@ export default function LoginExperience({
       }
 
       window.location.assign(selectedBranchId ? `/${selectedBranchId}/caja` : result?.url || "/");
-    } catch (error) {
-      console.error("[Login] Employee sign-in failed:", error);
-      setError(getAuthErrorMessage(error));
+    } catch (submitError) {
+      console.error("[Login] Employee sign-in failed:", submitError);
+      setError(getAuthErrorMessage(submitError));
       setLoading(false);
     }
   };
@@ -233,8 +239,8 @@ export default function LoginExperience({
     await completeEmployeeLogin(employee, "");
   };
 
-  const handleEmployeeSubmit = async (e: FormEvent) => {
-    e.preventDefault();
+  const handleEmployeeSubmit = async (event: FormEvent) => {
+    event.preventDefault();
     if (!selectedEmployee) {
       return;
     }
@@ -244,337 +250,540 @@ export default function LoginExperience({
     await completeEmployeeLogin(selectedEmployee, pin);
   };
 
+  const ownerHighlights = [
+    "Entras y todo vuelve a estar a mano.",
+    "Caja, stock y fiados listos para seguir.",
+    "Tu negocio te espera con ritmo real.",
+  ];
+
+  const employeeHighlights = [
+    "Cada persona entra con su identidad.",
+    "El turno arranca claro desde el primer segundo.",
+    "Rapido para el equipo, ordenado para el negocio.",
+  ];
+
+  const employeeStepMeta = {
+    key: {
+      badge: "Paso 1",
+      title: "Identifica tu sucursal",
+      text: "Ingresa el codigo que te compartio el responsable para entrar sin rodeos.",
+    },
+    employee: {
+      badge: "Paso 2",
+      title: "Elige quien entra",
+      text: "Selecciona a la persona correcta para mantener la operacion ordenada.",
+    },
+    pin: {
+      badge: "Paso 3",
+      title: "Confirma tu identidad",
+      text: "Tu PIN cierra el ingreso y te deja directo en caja.",
+    },
+  }[employeeStep];
+
+  const currentHighlights = mode === "employee" ? employeeHighlights : ownerHighlights;
+
   return (
     <div
       style={{
         minHeight: "100dvh",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: "24px",
-        gap: "40px",
-        background: "var(--bg)",
+        padding: "28px",
+        display: "grid",
+        placeItems: "center",
+        background:
+          "radial-gradient(circle at top left, rgba(14,165,233,.18), transparent 30%), radial-gradient(circle at bottom right, rgba(245,158,11,.15), transparent 24%), linear-gradient(180deg, #08111d 0%, #030712 46%, #020617 100%)",
       }}
     >
-      <div style={{ textAlign: "center", display: "grid", justifyItems: "center", gap: "14px" }}>
-        <BrandLogo
-          tone="white"
-          width={210}
-          style={{ filter: "drop-shadow(0 0 22px rgba(143,102,255,0.24))" }}
-        />
-        <h1
-          style={{
-            fontSize: "28px",
-            fontWeight: 800,
-            letterSpacing: "-0.02em",
-            color: "var(--text)",
-            marginBottom: "8px",
-          }}
-        >
-          Clikit
-        </h1>
-        <p
-          style={{
-            fontSize: "15px",
-            color: "var(--text-2)",
-            fontWeight: 400,
-          }}
-        >
-          Sabe exactamente cuanto ganaste hoy.
-        </p>
-      </div>
-
       <div
-        className="card"
         style={{
-          width: "100%",
-          maxWidth: "360px",
-          padding: "28px",
-          display: "flex",
-          flexDirection: "column",
-          gap: "20px",
+          width: "min(1080px, 100%)",
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+          gap: "22px",
+          alignItems: "stretch",
         }}
       >
-        <div>
-          <h2
-            style={{
-              fontSize: "18px",
-              fontWeight: 700,
-              marginBottom: "6px",
-            }}
-          >
-            {mode === "employee" ? "Acceso de empleado" : "Entrar al sistema"}
-          </h2>
-          <p style={{ fontSize: "13px", color: "var(--text-2)" }}>
-            {mode === "employee"
-              ? "Entrá con el codigo de tu sucursal y tu identidad."
-              : "Ingresá a tu negocio y retoma la operación en segundos."}
-          </p>
-        </div>
+        <section
+          className="card"
+          style={{
+            padding: "32px",
+            display: "flex",
+            flexDirection: "column",
+            gap: "24px",
+            justifyContent: "space-between",
+            background:
+              "linear-gradient(155deg, rgba(5,15,28,.96) 0%, rgba(11,31,52,.92) 52%, rgba(28,37,62,.9) 100%)",
+            border: "1px solid rgba(148,163,184,.14)",
+          }}
+        >
+          <div style={{ display: "grid", gap: "18px" }}>
+            <div
+              style={{
+                display: "inline-flex",
+                width: "fit-content",
+                padding: "6px 10px",
+                borderRadius: "999px",
+                background: "rgba(14,165,233,.12)",
+                border: "1px solid rgba(14,165,233,.22)",
+                color: "#bae6fd",
+                fontSize: "11px",
+                fontWeight: 800,
+                letterSpacing: ".08em",
+                textTransform: "uppercase",
+              }}
+            >
+              Acceso Clikit
+            </div>
 
-        {error && (
+            <BrandLogo tone="white" width={180} />
+
+            <div style={{ display: "grid", gap: "12px" }}>
+              <h1
+                style={{
+                  margin: 0,
+                  color: "#f8fafc",
+                  fontSize: "clamp(28px, 4vw, 42px)",
+                  lineHeight: 1.04,
+                  letterSpacing: "-0.04em",
+                }}
+              >
+                {mode === "employee"
+                  ? "Tu equipo entra rapido, claro y con identidad."
+                  : "Tu negocio te espera listo para seguir."}
+              </h1>
+              <p style={{ margin: 0, color: "#cbd5e1", lineHeight: 1.7, fontSize: "15px" }}>
+                {mode === "employee"
+                  ? "Clikit lleva a cada persona a la sucursal correcta para que el turno empiece con claridad, confianza y sin rodeos."
+                  : "Entra, retoma caja, stock y fiados, y sigue donde lo dejaste con una experiencia humana, agil y firme."}
+              </p>
+            </div>
+          </div>
+
+          <div style={{ display: "grid", gap: "12px" }}>
+            {currentHighlights.map((item) => (
+              <div
+                key={item}
+                style={{
+                  display: "flex",
+                  gap: "10px",
+                  alignItems: "flex-start",
+                  color: "#e2e8f0",
+                  fontSize: "14px",
+                  lineHeight: 1.5,
+                }}
+              >
+                <span style={{ color: "#38bdf8", fontWeight: 900 }}>+</span>
+                <span>{item}</span>
+              </div>
+            ))}
+          </div>
+
           <div
             style={{
-              color: "#ef4444",
-              fontSize: "13px",
-              background: "rgba(239, 68, 68, 0.1)",
-              padding: "10px",
-              borderRadius: "8px",
-              textAlign: "center",
+              display: "grid",
+              gap: "10px",
+              padding: "16px",
+              borderRadius: "18px",
+              background: "rgba(15,23,42,.55)",
+              border: "1px solid rgba(148,163,184,.14)",
             }}
           >
-            {error}
+            <div style={{ color: "#e2e8f0", fontSize: "14px", fontWeight: 700 }}>
+              {mode === "employee" ? "Acceso de equipo" : "Acceso principal"}
+            </div>
+            <div style={{ color: "#94a3b8", fontSize: "13px", lineHeight: 1.6 }}>
+              {mode === "employee"
+                ? "Codigo de sucursal, persona y PIN si hace falta. Rapido y ordenado."
+                : "Email, contrasena y adentro. Claro, directo y sin frialdad."}
+            </div>
           </div>
-        )}
+        </section>
 
-        {mode === "employee" ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-            {employeeStep === "key" && (
-              <>
-                <p style={{ fontSize: "13px", color: "var(--text-2)", textAlign: "center" }}>
-                  Ingresá el código o abrí el enlace que te compartió el responsable.
-                </p>
-                <input
-                  type="text"
-                  placeholder="Ej: KIOSCO-AB12CD34-EF56GH78"
-                  className="input"
-                  value={branchKey}
-                  onChange={(e) => setBranchKey(e.target.value.toUpperCase())}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      void handleValidateKey();
-                    }
-                  }}
-                  autoCapitalize="characters"
-                  autoCorrect="off"
-                  spellCheck={false}
-                  style={{ textAlign: "center", textTransform: "uppercase", letterSpacing: "0.06em" }}
-                />
-                <button className="btn btn-primary btn-full" onClick={() => void handleValidateKey()} disabled={loading || !branchKey.trim()}>
-                  {loading ? "Validando..." : "Continuar"}
-                </button>
-              </>
-            )}
-
-            {employeeStep === "employee" && (
-              <>
-                <div style={{ textAlign: "center" }}>
-                  <p style={{ fontSize: "13px", color: "var(--text-2)", marginBottom: "4px" }}>
-                    Sucursal autorizada
-                  </p>
-                  <div style={{ fontWeight: 700 }}>{branchName}</div>
-                </div>
-
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
-                  {branchEmployees.map((employee) => (
-                    <button
-                      key={employee.id}
-                      className="btn btn-ghost"
-                      onClick={() => void handleEmployeeSelect(employee)}
-                      disabled={loading}
-                      style={{
-                        minHeight: "88px",
-                        padding: "12px 10px",
-                        flexDirection: "column",
-                        gap: "6px",
-                        background: "var(--surface-2)",
-                      }}
-                    >
-                      <div
-                        style={{
-                          width: "34px",
-                          height: "34px",
-                          borderRadius: "999px",
-                          background: "var(--primary)",
-                          color: "black",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          fontWeight: 800,
-                        }}
-                      >
-                        {employee.name.charAt(0).toUpperCase()}
-                      </div>
-                      <span style={{ fontSize: "13px", fontWeight: 700 }}>{employee.name}</span>
-                      <span style={{ fontSize: "11px", color: "var(--text-3)" }}>
-                        {employee.hasPin ? "Requiere PIN" : "Entrar directo"}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-
-                <button
-                  className="btn-ghost"
-                  onClick={() => {
-                    setError("");
-                    setEmployeeStep("key");
-                    setSelectedEmployee(null);
-                    setPin("");
-                  }}
-                  style={{ fontSize: "13px", color: "var(--text-3)" }}
-                >
-                  Cambiar codigo
-                </button>
-              </>
-            )}
-
-            {employeeStep === "pin" && selectedEmployee && (
-              <form onSubmit={handleEmployeeSubmit} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-                <div style={{ textAlign: "center" }}>
-                  <div
-                    style={{
-                      width: "48px",
-                      height: "48px",
-                      borderRadius: "999px",
-                      background: "var(--primary)",
-                      color: "black",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      fontWeight: 800,
-                      margin: "0 auto 8px",
-                    }}
-                  >
-                    {selectedEmployee.name.charAt(0).toUpperCase()}
-                  </div>
-                  <div style={{ fontWeight: 700 }}>{selectedEmployee.name}</div>
-                  <div style={{ fontSize: "12px", color: "var(--text-3)", marginTop: "4px" }}>
-                    Ingresá tu PIN para continuar.
-                  </div>
-                </div>
-
-                <input
-                  type="tel"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  placeholder="PIN"
-                  className="input"
-                  value={pin}
-                  onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                  autoFocus
-                  style={{ textAlign: "center", letterSpacing: "0.45em", fontSize: "20px" }}
-                />
-
-                <button className="btn btn-primary btn-full" type="submit" disabled={loading || !pin}>
-                  {loading ? "Entrando..." : "Entrar"}
-                </button>
-
-                <button
-                  className="btn-ghost"
-                  type="button"
-                  onClick={() => {
-                    setError("");
-                    setEmployeeStep("employee");
-                    setPin("");
-                  }}
-                  style={{ fontSize: "13px", color: "var(--text-3)" }}
-                >
-                  Elegir otro empleado
-                </button>
-              </form>
-            )}
-
-            <button
-              className="btn-ghost"
-              onClick={switchToOwnerMode}
-              disabled={loading}
-              style={{ fontSize: "14px", color: "var(--primary)", fontWeight: 700 }}
-            >
-              Volver al acceso principal
-            </button>
-          </div>
-        ) : (
-          <>
+        <section
+          className="card"
+          style={{
+            padding: "32px",
+            display: "grid",
+            gap: "22px",
+            border: "1px solid rgba(148,163,184,.14)",
+            background: "rgba(2, 6, 23, 0.9)",
+          }}
+        >
+          <div style={{ display: "grid", gap: "12px" }}>
             <div
               style={{
                 display: "grid",
+                gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
                 gap: "8px",
-                padding: "12px",
-                borderRadius: "14px",
-                background: "rgba(143,102,255,0.08)",
-                border: "1px solid rgba(143,102,255,0.18)",
+                padding: "6px",
+                borderRadius: "18px",
+                background: "rgba(15,23,42,.72)",
+                border: "1px solid rgba(148,163,184,.14)",
               }}
             >
-              <div
-                style={{
-                  fontSize: "12px",
-                  fontWeight: 800,
-                  letterSpacing: "0.08em",
-                  textTransform: "uppercase",
-                  color: "var(--text-2)",
-                }}
+              <button
+                type="button"
+                className={`btn ${mode === "owner" ? "btn-primary" : "btn-ghost"}`}
+                onClick={switchToOwnerMode}
+                disabled={loading}
+                style={{ width: "100%" }}
               >
-                Alta nueva
-              </div>
-              <div style={{ fontSize: "14px", color: "var(--text)" }}>
-                Si todavía no tenés cuenta, podes registrarte y crear tu negocio en minutos.
-              </div>
-              <Link href="/register" className="btn btn-primary btn-full" style={{ textDecoration: "none" }}>
-                Empezar ahora
-              </Link>
+                Dueno
+              </button>
+              <button
+                type="button"
+                className={`btn ${mode === "employee" ? "btn-primary" : "btn-ghost"}`}
+                onClick={switchToEmployeeMode}
+                disabled={loading}
+                style={{ width: "100%" }}
+              >
+                Equipo
+              </button>
             </div>
 
-            <form onSubmit={handleCredentialsSubmit} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-              <input
-                type="email"
-                placeholder="Email"
-                className="input"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                autoComplete="email"
-              />
-              <div style={{ position: "relative" }}>
-                <input
-                  type={showPassword ? "text" : "password"}
-                  placeholder="Contrasena"
-                  className="input"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  autoComplete="current-password"
-                  style={{ paddingRight: "44px" }}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
+            <div>
+              <h2 style={{ margin: 0, color: "#f8fafc", fontSize: "26px", fontWeight: 800 }}>
+                {mode === "employee" ? employeeStepMeta.title : "Entrar a Clikit"}
+              </h2>
+              <p style={{ margin: "8px 0 0", color: "#94a3b8", fontSize: "14px", lineHeight: 1.6 }}>
+                {mode === "employee" ? employeeStepMeta.text : "Volvamos a poner tu negocio en marcha."}
+              </p>
+            </div>
+          </div>
+
+          {error ? (
+            <div
+              style={{
+                color: "#fecaca",
+                background: "rgba(239,68,68,.12)",
+                border: "1px solid rgba(239,68,68,.22)",
+                borderRadius: "14px",
+                padding: "12px 14px",
+                fontSize: "13px",
+              }}
+            >
+              {error}
+            </div>
+          ) : null}
+
+          {mode === "employee" ? (
+            <div style={{ display: "grid", gap: "18px" }}>
+              <div
+                style={{
+                  display: "inline-flex",
+                  width: "fit-content",
+                  padding: "6px 10px",
+                  borderRadius: "999px",
+                  background: "rgba(56,189,248,.12)",
+                  border: "1px solid rgba(56,189,248,.22)",
+                  color: "#bae6fd",
+                  fontSize: "11px",
+                  fontWeight: 800,
+                  letterSpacing: ".08em",
+                  textTransform: "uppercase",
+                }}
+              >
+                {employeeStepMeta.badge}
+              </div>
+
+              {employeeStep === "key" ? (
+                <div style={{ display: "grid", gap: "14px" }}>
+                  <div
+                    style={{
+                      padding: "14px 16px",
+                      borderRadius: "16px",
+                      background: "rgba(15,23,42,.72)",
+                      border: "1px solid rgba(148,163,184,.14)",
+                      color: "#cbd5e1",
+                      fontSize: "14px",
+                      lineHeight: 1.6,
+                    }}
+                  >
+                    Usa el codigo que te compartio el responsable o entra desde el enlace directo de tu sucursal.
+                  </div>
+
+                  <div style={{ display: "grid", gap: "6px" }}>
+                    <label style={{ fontSize: "12px", color: "var(--text-2)", fontWeight: 700 }}>
+                      Codigo de sucursal
+                    </label>
+                    <input
+                      type="text"
+                      className="input"
+                      value={branchKey}
+                      onChange={(event) => setBranchKey(event.target.value.toUpperCase())}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          void handleValidateKey();
+                        }
+                      }}
+                      autoCapitalize="characters"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      placeholder="Ej: KIOSCO-AB12CD34-EF56GH78"
+                      style={{
+                        textAlign: "center",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.06em",
+                      }}
+                    />
+                  </div>
+
+                  <button
+                    className="btn btn-primary btn-lg btn-full"
+                    onClick={() => void handleValidateKey()}
+                    disabled={loading || !branchKey.trim()}
+                  >
+                    {loading ? "Validando..." : "Continuar"}
+                  </button>
+                </div>
+              ) : null}
+
+              {employeeStep === "employee" ? (
+                <div style={{ display: "grid", gap: "16px" }}>
+                  <div
+                    style={{
+                      padding: "16px",
+                      borderRadius: "18px",
+                      background: "rgba(15,23,42,.72)",
+                      border: "1px solid rgba(148,163,184,.14)",
+                      display: "grid",
+                      gap: "6px",
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: "11px",
+                        fontWeight: 800,
+                        letterSpacing: ".08em",
+                        textTransform: "uppercase",
+                        color: "#94a3b8",
+                      }}
+                    >
+                      Sucursal autorizada
+                    </div>
+                    <div style={{ fontSize: "18px", fontWeight: 800, color: "#f8fafc" }}>{branchName}</div>
+                    <div style={{ fontSize: "13px", color: "#94a3b8" }}>
+                      Elige quien entra para seguir con la operacion correcta.
+                    </div>
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "10px" }}>
+                    {branchEmployees.map((employee) => (
+                      <button
+                        key={employee.id}
+                        className="btn btn-ghost"
+                        onClick={() => void handleEmployeeSelect(employee)}
+                        disabled={loading}
+                        style={{
+                          minHeight: "96px",
+                          padding: "14px 12px",
+                          flexDirection: "column",
+                          gap: "8px",
+                          background: "rgba(15,23,42,.62)",
+                          border: "1px solid rgba(148,163,184,.14)",
+                        }}
+                      >
+                        <div
+                          style={{
+                            width: "38px",
+                            height: "38px",
+                            borderRadius: "999px",
+                            background: "linear-gradient(135deg, #38bdf8 0%, #f59e0b 100%)",
+                            color: "#020617",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            fontWeight: 900,
+                          }}
+                        >
+                          {employee.name.charAt(0).toUpperCase()}
+                        </div>
+                        <span style={{ fontSize: "13px", fontWeight: 700 }}>{employee.name}</span>
+                        <span style={{ fontSize: "11px", color: "var(--text-3)" }}>
+                          {employee.hasPin ? "Requiere PIN" : "Ingreso directo"}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+
+                  <button
+                    className="btn btn-ghost btn-full"
+                    onClick={() => {
+                      setError("");
+                      setEmployeeStep("key");
+                      setSelectedEmployee(null);
+                      setPin("");
+                    }}
+                  >
+                    Cambiar codigo
+                  </button>
+                </div>
+              ) : null}
+
+              {employeeStep === "pin" && selectedEmployee ? (
+                <form onSubmit={handleEmployeeSubmit} style={{ display: "grid", gap: "16px" }}>
+                  <div
+                    style={{
+                      padding: "18px",
+                      borderRadius: "18px",
+                      background: "rgba(15,23,42,.72)",
+                      border: "1px solid rgba(148,163,184,.14)",
+                      textAlign: "center",
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: "52px",
+                        height: "52px",
+                        borderRadius: "999px",
+                        background: "linear-gradient(135deg, #38bdf8 0%, #f59e0b 100%)",
+                        color: "#020617",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontWeight: 900,
+                        margin: "0 auto 10px",
+                      }}
+                    >
+                      {selectedEmployee.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div style={{ fontWeight: 800, color: "#f8fafc" }}>{selectedEmployee.name}</div>
+                    <div style={{ fontSize: "13px", color: "#94a3b8", marginTop: "6px" }}>
+                      Ingresa tu PIN para terminar el acceso.
+                    </div>
+                  </div>
+
+                  <div style={{ display: "grid", gap: "6px" }}>
+                    <label style={{ fontSize: "12px", color: "var(--text-2)", fontWeight: 700 }}>
+                      PIN
+                    </label>
+                    <input
+                      type="tel"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      className="input"
+                      value={pin}
+                      onChange={(event) => setPin(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                      placeholder="PIN"
+                      autoFocus
+                      style={{ textAlign: "center", letterSpacing: "0.45em", fontSize: "20px" }}
+                    />
+                  </div>
+
+                  <button className="btn btn-primary btn-lg btn-full" type="submit" disabled={loading || !pin}>
+                    {loading ? "Entrando..." : "Entrar al turno"}
+                  </button>
+
+                  <button
+                    className="btn btn-ghost btn-full"
+                    type="button"
+                    onClick={() => {
+                      setError("");
+                      setEmployeeStep("employee");
+                      setPin("");
+                    }}
+                  >
+                    Elegir otra persona
+                  </button>
+                </form>
+              ) : null}
+
+              <button
+                className="btn btn-ghost btn-full"
+                onClick={switchToOwnerMode}
+                disabled={loading}
+                style={{ color: "var(--primary)", fontWeight: 700 }}
+              >
+                Volver al acceso principal
+              </button>
+            </div>
+          ) : (
+            <div style={{ display: "grid", gap: "18px" }}>
+              <div
+                style={{
+                  display: "grid",
+                  gap: "10px",
+                  padding: "16px",
+                  borderRadius: "18px",
+                  background: "rgba(56,189,248,.08)",
+                  border: "1px solid rgba(56,189,248,.18)",
+                }}
+              >
+                <div
                   style={{
-                    position: "absolute",
-                    right: "12px",
-                    top: "50%",
-                    transform: "translateY(-50%)",
-                    background: "none",
-                    border: "none",
-                    color: "var(--text-3)",
-                    cursor: "pointer",
-                    padding: "4px",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
+                    fontSize: "11px",
+                    fontWeight: 800,
+                    letterSpacing: ".08em",
+                    textTransform: "uppercase",
+                    color: "#bae6fd",
                   }}
                 >
-                  {showPassword ? (
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M9.88 9.88l-3.29-3.29m7.53.61A10 10 0 0 1 21.84 12a11.59 11.59 0 0 1-3.69 4.39M15 15a3 3 0 0 1-3-3l6-6" />
-                      <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.12 13.12 0 0 1-1.55 2.35m-5.32 1.93A10.43 10.43 0 0 1 12 19c-7 0-10-7-10-7a13.12 13.12 0 0 1 1.55-2.35" />
-                      <line x1="1" y1="1" x2="23" y2="23" />
-                    </svg>
-                  ) : (
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                      <circle cx="12" cy="12" r="3" />
-                    </svg>
-                  )}
-                </button>
+                  Alta nueva
+                </div>
+                <div style={{ fontSize: "14px", color: "#e2e8f0", lineHeight: 1.6 }}>
+                  Si todavia no tienes cuenta, crea tu negocio y empieza con una experiencia pensada para vender de verdad.
+                </div>
+                <Link href="/register" className="btn btn-primary btn-full" style={{ textDecoration: "none" }}>
+                  Crear mi cuenta
+                </Link>
               </div>
-              <button type="submit" className="btn btn-primary btn-full" disabled={loading}>
-                {loading ? "Cargando..." : "Ingresar"}
-              </button>
-            </form>
 
-            
+              <form onSubmit={handleCredentialsSubmit} style={{ display: "grid", gap: "14px" }}>
+                <div style={{ display: "grid", gap: "6px" }}>
+                  <label style={{ fontSize: "12px", color: "var(--text-2)", fontWeight: 700 }}>Email</label>
+                  <input
+                    type="email"
+                    className="input"
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                    required
+                    autoComplete="email"
+                    placeholder="vos@negocio.com"
+                  />
+                </div>
+
+                <div style={{ display: "grid", gap: "6px" }}>
+                  <label style={{ fontSize: "12px", color: "var(--text-2)", fontWeight: 700 }}>
+                    Contrasena
+                  </label>
+                  <div style={{ position: "relative" }}>
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      className="input"
+                      value={password}
+                      onChange={(event) => setPassword(event.target.value)}
+                      required
+                      autoComplete="current-password"
+                      placeholder="Tu contrasena"
+                      style={{ paddingRight: "48px" }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((current) => !current)}
+                      aria-label={showPassword ? "Ocultar contrasena" : "Mostrar contrasena"}
+                      style={{
+                        position: "absolute",
+                        right: "12px",
+                        top: "50%",
+                        transform: "translateY(-50%)",
+                        background: "none",
+                        border: "none",
+                        color: "var(--text-3)",
+                        cursor: "pointer",
+                        padding: 0,
+                        fontWeight: 700,
+                      }}
+                    >
+                      {showPassword ? "Ocultar" : "Ver"}
+                    </button>
+                  </div>
+                </div>
+
+                <button type="submit" className="btn btn-primary btn-lg btn-full" disabled={loading}>
+                  {loading ? "Entrando..." : "Entrar a Clikit"}
+                </button>
+              </form>
+
               <a
                 href="/reset-password"
                 style={{
@@ -584,22 +793,21 @@ export default function LoginExperience({
                   textAlign: "center",
                 }}
               >
-                Olvidé mi contraseña
+                Olvide mi contrasena
               </a>
-            
 
-            <button
-              className="btn-ghost"
-              onClick={switchToEmployeeMode}
-              disabled={loading}
-              style={{ fontSize: "14px", color: "var(--primary)", fontWeight: 700 }}
-            >
-              Soy Empleado
-            </button>
-          </>
-        )}
+              <button
+                className="btn btn-ghost btn-full"
+                onClick={switchToEmployeeMode}
+                disabled={loading}
+                style={{ color: "var(--primary)", fontWeight: 700 }}
+              >
+                Entrar como equipo
+              </button>
+            </div>
+          )}
+        </section>
       </div>
-
     </div>
   );
 }

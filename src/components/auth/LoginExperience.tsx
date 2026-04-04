@@ -309,7 +309,7 @@ export default function LoginExperience({
           <p style={{ fontSize: "13px", color: "var(--text-2)" }}>
             {mode === "employee"
               ? "Entrá con el codigo de tu sucursal y tu identidad."
-              : "IngresÃ¡ a tu negocio y retomÃ¡ la operaciÃ³n en segundos."}
+              : "Ingresá a tu negocio y retoma la operación en segundos."}
           </p>
         </div>
 
@@ -333,7 +333,7 @@ export default function LoginExperience({
             {employeeStep === "key" && (
               <>
                 <p style={{ fontSize: "13px", color: "var(--text-2)", textAlign: "center" }}>
-                  Ingresá el código o abrí el enlace que te compartió el responsable del kiosco.
+                  Ingresá el código o abrí el enlace que te compartió el responsable.
                 </p>
                 <input
                   type="text"
@@ -509,10 +509,10 @@ export default function LoginExperience({
                 Alta nueva
               </div>
               <div style={{ fontSize: "14px", color: "var(--text)" }}>
-                Si todavía no tenés cuenta, hacé el alta en una pantalla separada y más completa.
+                Si todavía no tenés cuenta, podes registrarte y crear tu negocio en minutos.
               </div>
               <Link href="/register" className="btn btn-primary btn-full" style={{ textDecoration: "none" }}>
-                Crear cuenta
+                Empezar ahora
               </Link>
             </div>
 

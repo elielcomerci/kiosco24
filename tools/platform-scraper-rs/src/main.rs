@@ -48,7 +48,7 @@ use crate::{
     r2::R2Storage,
     remote::Kiosco24Client,
     review::generate_review_html,
-    scrapers::{carrefour::CarrefourScraper, coto::CotoScraper},
+    scrapers::{carrefour::CarrefourScraper, coto::CotoScraper, pricely::PricelyScraper},
 };
 
 #[tokio::main]
@@ -89,6 +89,7 @@ fn emit_staged_product_event(product: &BufferedProduct, sync_status: &str) {
         json!({
             "type": "staged_product",
             "id": product.id,
+            "businessActivity": product.business_activity,
             "name": product.name,
             "barcode": product.barcode,
             "brand": product.brand,
@@ -134,6 +135,7 @@ async fn stage_buffered_product(
     let record = StageProductRecord {
         id: product.id.clone(),
         run_id: product.run_id.clone(),
+        business_activity: product.business_activity.clone(),
         source,
         barcode: product.barcode.clone(),
         name: product.name.clone(),
@@ -263,9 +265,11 @@ async fn handle_scan(
 
     let output_dir = PathBuf::from(&config.review_output_dir);
     let requested_root_url = args.root_url.clone().or_else(|| config.default_root_url.clone());
+    let requested_business_activity = args.business_activity.trim().to_uppercase();
     let (
         run_id,
         scan_url,
+        effective_business_activity,
         effective_root_url,
         scan_progress_path,
         mut scan_progress,
@@ -285,6 +289,7 @@ async fn handle_scan(
             .root_url
             .clone()
             .or_else(|| requested_root_url.clone());
+        let effective_business_activity = run.business_activity.trim().to_uppercase();
         let scan_progress_path = scan_progress_path_for_run(&output_dir, resume_run_id);
         let mut scan_progress = read_scan_progress_checkpoint(&scan_progress_path)
             .await?
@@ -315,13 +320,21 @@ async fn handle_scan(
         (
             resume_run_id.to_string(),
             run.category_url,
+            effective_business_activity,
             effective_root_url,
             scan_progress_path,
             scan_progress,
             resume_position,
         )
     } else {
-        let run_id = create_run(pool, args.source, &args.url, requested_root_url.as_deref()).await?;
+        let run_id = create_run(
+            pool,
+            args.source,
+            &requested_business_activity,
+            &args.url,
+            requested_root_url.as_deref(),
+        )
+        .await?;
         let scan_progress_path = scan_progress_path_for_run(&output_dir, &run_id);
         let scan_progress = ScanProgressCheckpoint::new(
             &run_id,
@@ -335,6 +348,7 @@ async fn handle_scan(
         (
             run_id,
             args.url.clone(),
+            requested_business_activity,
             requested_root_url,
             scan_progress_path,
             scan_progress,
@@ -351,6 +365,7 @@ async fn handle_scan(
         "Checkpoint de scan: {}",
         scan_progress_path.display()
     ));
+    print_line(format!("Rubro operativo del run: {}", effective_business_activity));
     if let Some(resume) = resume_position.as_ref() {
         print_line(format!(
             "Retomando scan desde categoria {} pagina {}.",
@@ -410,6 +425,20 @@ async fn handle_scan(
                         product_tx
                             .send(ScanStreamMessage::Product(product))
                             .map_err(|_| anyhow::anyhow!("Se cerrÃ³ el canal de procesamiento del scan."))
+                    },
+                )
+            }
+            models::ScraperSource::Pricely => {
+                let scraper = PricelyScraper::new(min_delay, max_delay);
+                let product_tx = tx.clone();
+                scraper.scan_with_handler(
+                    &scan_url,
+                    scan_root_url.as_deref(),
+                    scan_args.limit,
+                    |product| {
+                        product_tx
+                            .send(ScanStreamMessage::Product(product))
+                            .map_err(|_| anyhow::anyhow!("Se cerró el canal de procesamiento del scan."))
                     },
                 )
             }
@@ -474,6 +503,7 @@ async fn handle_scan(
 
                     let buffered = BufferedProduct::from_input(
                         &run_id,
+                        &effective_business_activity,
                         args.source,
                         &product,
                         Some(build_content_hash(&product)),
@@ -624,7 +654,7 @@ async fn handle_publish(
     }
 
     let product = row_to_input(&row);
-    let response = publish_product(config, pool, remote, &product).await?;
+    let response = publish_product(config, pool, remote, &product, &row.business_activity).await?;
 
     print_line(format!(
         "Publicado {} -> {}",
@@ -704,7 +734,7 @@ async fn handle_resolve_safe(
                     continue;
                 }
 
-                match publish_product(config, pool, remote, &product).await {
+                match publish_product(config, pool, remote, &product, &row.business_activity).await {
                     Ok(response) => {
                         mark_published(pool, &row.id, Some(&response.product.id)).await?;
                         published += 1;
@@ -785,7 +815,14 @@ async fn handle_review(
 
             match selection {
                 0 => {
-                    let response = publish_product(config, pool, remote, &row_to_input(row)).await?;
+                    let response = publish_product(
+                        config,
+                        pool,
+                        remote,
+                        &row_to_input(row),
+                        &row.business_activity,
+                    )
+                    .await?;
                     mark_published(pool, &row.id, Some(&response.product.id)).await?;
                     print_line(format!("Publicado {}", row.name));
                 }
@@ -887,6 +924,7 @@ async fn publish_product(
     pool: &sqlx::PgPool,
     remote: &Kiosco24Client,
     product: &ScrapedProductInput,
+    business_activity: &str,
 ) -> Result<remote::PublishResponse> {
     if config.use_remote_api {
         match remote.publish_product(product).await {
@@ -900,7 +938,7 @@ async fn publish_product(
         }
     }
 
-    let published = upsert_platform_product_direct(pool, product).await?;
+    let published = upsert_platform_product_direct(pool, product, business_activity).await?;
     Ok(remote::PublishResponse {
         localized_image: product.image.clone(),
         product: published,

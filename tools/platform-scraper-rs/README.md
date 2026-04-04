@@ -4,6 +4,7 @@ Scraper local en Rust para nutrir la base colaborativa de `kiosco24`.
 
 Que hace:
 - scrapea catalogos desde URLs de categoria
+- soporta multiples fuentes (`Carrefour`, `Coto`, `Pricely`)
 - sigue paginacion tipo `?page=2`
 - puede recorrer Carrefour desde la home usando una lista curada de categorias principales
 - descarga y localiza imagenes en `media.zap.com.ar` via Cloudflare R2
@@ -58,6 +59,12 @@ Escanear una categoria puntual de Carrefour:
 
 ```powershell
 C:\Users\eliel\.cargo\bin\cargo.exe run -- scan --source carrefour --url "https://www.carrefour.com.ar/almacen" --root-url "https://www.carrefour.com.ar/"
+```
+
+Escanear una categoria puntual de Pricely:
+
+```powershell
+C:\Users\eliel\.cargo\bin\cargo.exe run -- scan --source pricely --business-activity KIOSCO --url "https://pricely.ar/category/303" --root-url "https://pricely.ar/"
 ```
 
 Escanear arrancando desde una pagina especifica:
@@ -122,6 +129,7 @@ C:\Users\eliel\.cargo\bin\cargo.exe build --release
 2. Despues podes ejecutar:
 
 - [Escanear Carrefour.cmd](/c:/Users/eliel/kiosco24/tools/platform-scraper-rs/Escanear%20Carrefour.cmd)
+- [Escanear Pricely.cmd](/c:/Users/eliel/kiosco24/Escanear%20Pricely.cmd)
 
 Ese launcher:
 - recorre Carrefour desde la home usando las categorias curadas
@@ -134,6 +142,12 @@ Si preferis correrlo por PowerShell y limitar una pasada de prueba:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File "C:\Users\eliel\kiosco24\tools\platform-scraper-rs\scripts\run-carrefour-review.ps1" -Limit 5
+```
+
+Para Pricely podes lanzar una corrida nueva orientada por categoria:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File "C:\Users\eliel\kiosco24\tools\platform-scraper-rs\scripts\run-pricely-review.ps1" -Category "https://pricely.ar/category/303" -BusinessActivity KIOSCO -Limit 50
 ```
 
 Si queres reanudar manualmente desde el launcher:
@@ -152,6 +166,8 @@ Flujo validado contra Carrefour:
 - guardado en Neon (`ScrapeRun` + `ScrapedProduct`)
 - publish directo a `PlatformProduct`
 - compare posterior devolviendo `MATCHED`
+
+Para Pricely la primera version trabaja especialmente bien cuando el producto ya trae el EAN en la URL (`/product/<ean>`), porque eso permite nacer con `barcode` fresco desde la grilla sin depender del detalle.
 
 ## Tablas Prisma
 

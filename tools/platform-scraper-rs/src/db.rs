@@ -22,6 +22,7 @@ pub async fn connect(database_url: &str) -> Result<PgPool> {
 pub async fn create_run(
     pool: &PgPool,
     source: ScraperSource,
+    business_activity: &str,
     category_url: &str,
     root_url: Option<&str>,
 ) -> Result<String> {
@@ -29,12 +30,13 @@ pub async fn create_run(
     let now = Utc::now();
     let row = sqlx::query(
         r#"
-        INSERT INTO "ScrapeRun" ("id", "source", "rootUrl", "categoryUrl", "status", "startedAt", "createdAt", "updatedAt")
-        VALUES ($1, $2::"ScraperSource", $3, $4, $5::"ScrapeRunStatus", $6, $7, $8)
+        INSERT INTO "ScrapeRun" ("id", "businessActivity", "source", "rootUrl", "categoryUrl", "status", "startedAt", "createdAt", "updatedAt")
+        VALUES ($1, $2, $3::"ScraperSource", $4, $5, $6::"ScrapeRunStatus", $7, $8, $9)
         RETURNING id
         "#,
     )
     .bind(&run_id)
+    .bind(business_activity.trim().to_uppercase())
     .bind(source.as_db_value())
     .bind(root_url)
     .bind(category_url)
@@ -102,6 +104,7 @@ pub async fn insert_scraped_product(pool: &PgPool, record: &StageProductRecord) 
         INSERT INTO "ScrapedProduct" (
           "id",
           "runId",
+          "businessActivity",
           "source",
           "barcode",
           "name",
@@ -126,8 +129,8 @@ pub async fn insert_scraped_product(pool: &PgPool, record: &StageProductRecord) 
         VALUES (
           $1,
           $2,
-          $3::"ScraperSource",
-          $4,
+          $3,
+          $4::"ScraperSource",
           $5,
           $6,
           $7,
@@ -138,14 +141,15 @@ pub async fn insert_scraped_product(pool: &PgPool, record: &StageProductRecord) 
           $12,
           $13,
           $14,
-          $15::"ScrapedProductSyncStatus",
-          $16::"ScrapedProductReviewAction",
-          $17,
+          $15,
+          $16::"ScrapedProductSyncStatus",
+          $17::"ScrapedProductReviewAction",
           $18,
           $19,
           $20,
           $21,
-          $22
+          $22,
+          $23
         )
         ON CONFLICT ("id") DO NOTHING
         RETURNING id
@@ -153,6 +157,7 @@ pub async fn insert_scraped_product(pool: &PgPool, record: &StageProductRecord) 
     )
     .bind(&record.id)
     .bind(&record.run_id)
+    .bind(record.business_activity.trim().to_uppercase())
     .bind(record.source.as_db_value())
     .bind(&record.barcode)
     .bind(&record.name)
@@ -191,6 +196,7 @@ pub async fn list_run_products(
         SELECT
           id,
           "runId",
+          "businessActivity",
           barcode,
           name,
           brand,
@@ -253,6 +259,7 @@ pub async fn get_product(pool: &PgPool, product_id: &str) -> Result<ScrapedProdu
         SELECT
           id,
           "runId",
+          "businessActivity",
           barcode,
           name,
           brand,
@@ -414,6 +421,7 @@ pub async fn get_run(pool: &PgPool, run_id: &str) -> Result<ScrapeRunRow> {
         r#"
         SELECT
           id,
+          "businessActivity",
           "source"::text AS source,
           "rootUrl",
           "categoryUrl",
@@ -470,6 +478,7 @@ fn map_scraped_product_row(row: PgRow) -> Result<ScrapedProductRow> {
     Ok(ScrapedProductRow {
         id: row.try_get("id")?,
         run_id: row.try_get("runId")?,
+        business_activity: row.try_get("businessActivity")?,
         barcode: row.try_get("barcode")?,
         name: row.try_get("name")?,
         brand: row.try_get("brand")?,
@@ -598,6 +607,7 @@ pub async fn find_platform_match_by_barcode(
 pub async fn upsert_platform_product_direct(
     pool: &PgPool,
     product: &ScrapedProductInput,
+    business_activity: &str,
 ) -> Result<PublishedRemoteProduct> {
     let barcode = product
         .barcode
@@ -653,6 +663,7 @@ pub async fn upsert_platform_product_direct(
             r#"
             INSERT INTO "PlatformProduct" (
               id,
+              "businessActivity",
               barcode,
               name,
               brand,
@@ -673,13 +684,15 @@ pub async fn upsert_platform_product_direct(
               $6,
               $7,
               $8,
-              'APPROVED',
               $9,
-              $10
+              'APPROVED',
+              $10,
+              $11
             )
             "#,
         )
         .bind(&id)
+        .bind(business_activity.trim().to_uppercase())
         .bind(&product.barcode)
         .bind(&product.name)
         .bind(&product.brand)

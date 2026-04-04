@@ -979,6 +979,7 @@ enum PlatformProductSubmissionStatus {
 enum ScraperSource {
   CARREFOUR
   COTO
+  PRICELY
 }
 
 enum ScrapeRunStatus {

@@ -8,6 +8,7 @@ use serde_json::Value;
 pub enum ScraperSource {
     Carrefour,
     Coto,
+    Pricely,
 }
 
 impl ScraperSource {
@@ -15,6 +16,7 @@ impl ScraperSource {
         match self {
             Self::Carrefour => "CARREFOUR",
             Self::Coto => "COTO",
+            Self::Pricely => "PRICELY",
         }
     }
 
@@ -22,6 +24,7 @@ impl ScraperSource {
         match value {
             "CARREFOUR" => Some(Self::Carrefour),
             "COTO" => Some(Self::Coto),
+            "PRICELY" => Some(Self::Pricely),
             _ => None,
         }
     }
@@ -110,6 +113,8 @@ pub enum Commands {
 pub struct ScanArgs {
     #[arg(long, value_enum)]
     pub source: ScraperSource,
+    #[arg(long, default_value = "KIOSCO")]
+    pub business_activity: String,
     #[arg(long)]
     pub url: String,
     #[arg(long)]
@@ -242,6 +247,7 @@ pub struct CompareOutcome {
 pub struct StageProductRecord {
     pub id: String,
     pub run_id: String,
+    pub business_activity: String,
     pub source: ScraperSource,
     pub barcode: Option<String>,
     pub name: String,
@@ -263,6 +269,8 @@ pub struct ScrapedProductRow {
     pub id: String,
     #[sqlx(rename = "runId")]
     pub run_id: String,
+    #[sqlx(rename = "businessActivity")]
+    pub business_activity: String,
     pub barcode: Option<String>,
     pub name: String,
     pub brand: Option<String>,
@@ -304,6 +312,8 @@ pub struct ScrapedProductRow {
 pub struct ScrapeRunRow {
     pub id: String,
     pub source: String,
+    #[sqlx(rename = "businessActivity")]
+    pub business_activity: String,
     #[sqlx(rename = "rootUrl")]
     pub root_url: Option<String>,
     #[sqlx(rename = "categoryUrl")]

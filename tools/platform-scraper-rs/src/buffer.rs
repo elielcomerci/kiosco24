@@ -18,6 +18,8 @@ use crate::{
 pub struct BufferedProduct {
     pub id: String,
     pub run_id: String,
+    #[serde(default = "default_business_activity")]
+    pub business_activity: String,
     pub source: String,
     pub barcode: Option<String>,
     pub name: String,
@@ -36,6 +38,7 @@ pub struct BufferedProduct {
 impl BufferedProduct {
     pub fn from_input(
         run_id: &str,
+        business_activity: &str,
         source: ScraperSource,
         product: &ScrapedProductInput,
         content_hash: Option<String>,
@@ -43,6 +46,7 @@ impl BufferedProduct {
         Self {
             id: Uuid::new_v4().to_string(),
             run_id: run_id.to_string(),
+            business_activity: business_activity.trim().to_uppercase(),
             source: source.as_db_value().to_string(),
             barcode: product.barcode.clone(),
             name: product.name.clone(),
@@ -58,6 +62,10 @@ impl BufferedProduct {
             created_at: Utc::now().to_rfc3339(),
         }
     }
+}
+
+fn default_business_activity() -> String {
+    "KIOSCO".to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

@@ -30,7 +30,7 @@ import { calculateTrialInfo, getTrialMessage } from "@/lib/trial-manager";
 import { savePendingSale } from "@/lib/offline/db";
 import { useOnlineStatus } from "@/lib/offline/sync";
 import { useIsDesktop } from "@/lib/hooks";
-import { playAudio } from "@/lib/audio";
+import { playAudio, preloadAudio } from "@/lib/audio";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -501,6 +501,18 @@ export default function CajaPage() {
   }, [products]);
 
   useEffect(() => {
+    // Preload system sounds for zero-delay playback
+    preloadAudio([
+      "/blip.wav",
+      "/promo.wav",
+      "/tap.wav",
+      "/turno.wav",
+      "/scanner.wav",
+      "/hello_k24.wav",
+    ]);
+  }, []);
+
+  useEffect(() => {
     const currentPromosCount = promoResult?.applications?.length ?? 0;
     if (currentPromosCount > prevPromosCountRef.current) {
       void playAudio("/promo.wav", 0.7);
@@ -838,6 +850,7 @@ export default function CajaPage() {
       const shift = await res.json();
       setActiveShift(shift);
       setShowOpenShift(false);
+      void playAudio("/turno.wav", 0.6);
       fetchStats();
     } else {
       const data = await res.json().catch(() => null);
@@ -867,6 +880,7 @@ export default function CajaPage() {
       setActiveShift(null);
       setShowCloseShift(false);
       setShowOpenShift(true);
+      void playAudio("/turno.wav", 0.6);
       fetchStats();
     } else {
       const data = await res.json().catch(() => null);
@@ -896,6 +910,7 @@ export default function CajaPage() {
       setShowTransferShift(false);
       setTicket([]);
       setReceivedAmount("");
+      void playAudio("/turno.wav", 0.6);
       fetchStats();
     } else {
       const data = await res.json().catch(() => null);
@@ -1588,6 +1603,7 @@ export default function CajaPage() {
 
   const handleBarcodeScan = useCallback((result: string) => {
     setShowScanner(false);
+    void playAudio("/scanner.wav", 0.7);
 
     // 1. Buscar en productos base
     const product = visibleProducts.find(p => p.barcode === result);

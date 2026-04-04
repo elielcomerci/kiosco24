@@ -16,6 +16,23 @@ if (typeof window !== "undefined") {
 }
 
 /**
+ * Preloads a list of audio URLs to ensure zero-latency playback.
+ * All preloaded HTMLAudioElements are stored in the internal cache.
+ */
+export function preloadAudio(urls: string[]) {
+  if (typeof window === "undefined") return;
+
+  urls.forEach((url) => {
+    if (!audioCache.has(url)) {
+      const audio = new Audio(url);
+      // We don't need to await the load, the browser will fetch it in background
+      audio.load();
+      audioCache.set(url, audio);
+    }
+  });
+}
+
+/**
  * Play a sound effect from the public folder.
  * Optimized for low latency: restarts audio immediately if already playing.
  */
@@ -68,7 +85,6 @@ export function warmupAudio() {
   if (typeof window === "undefined") return;
 
   const unlock = () => {
-    // Just playing a short/silent sound or just clearing the event is enough
     document.removeEventListener("click", unlock);
     document.removeEventListener("touchstart", unlock);
     document.removeEventListener("keydown", unlock);

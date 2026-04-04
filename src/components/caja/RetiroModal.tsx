@@ -10,20 +10,29 @@ interface RetiroModalProps {
   onClose: () => void;
   onSuccess: () => void;
   employeeId?: string;
+  onSubscriptionRequired?: (message: string) => void;
 }
 
-export default function RetiroModal({ onClose, onSuccess, employeeId }: RetiroModalProps) {
+export default function RetiroModal({
+  onClose,
+  onSuccess,
+  employeeId,
+  onSubscriptionRequired,
+}: RetiroModalProps) {
   const params = useParams();
   const branchId = params.branchId as string;
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   const handleConfirm = async () => {
     if (!amount) return;
     setLoading(true);
+    setError("");
+
     try {
-      await fetch("/api/retiros", {
+      const response = await fetch("/api/retiros", {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
@@ -31,6 +40,20 @@ export default function RetiroModal({ onClose, onSuccess, employeeId }: RetiroMo
         },
         body: JSON.stringify({ amount: parseFloat(amount), note, createdByEmployeeId: employeeId }),
       });
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        if (response.status === 402) {
+          onSubscriptionRequired?.(
+            data?.error || "Necesitas una suscripcion activa para registrar retiros.",
+          );
+          return;
+        }
+
+        setError(data?.error || "No se pudo registrar el retiro.");
+        return;
+      }
+
       onSuccess();
     } finally {
       setLoading(false);
@@ -64,6 +87,21 @@ export default function RetiroModal({ onClose, onSuccess, employeeId }: RetiroMo
             <span style={{ color: "var(--text-3)" }}>$0</span>
           )}
         </div>
+
+        {error ? (
+          <div
+            style={{
+              padding: "12px 14px",
+              borderRadius: "14px",
+              background: "rgba(239,68,68,.12)",
+              border: "1px solid rgba(239,68,68,.22)",
+              color: "#fecaca",
+              fontSize: "13px",
+            }}
+          >
+            {error}
+          </div>
+        ) : null}
 
         <NumPad value={amount} onChange={setAmount} />
 

@@ -1,13 +1,11 @@
+import { NextRequest, NextResponse } from "next/server";
+
 import { auth } from "@/lib/auth";
 import { getBranchId } from "@/lib/branch";
 import { prisma } from "@/lib/prisma";
-import { NextRequest, NextResponse } from "next/server";
+import { getSubscriptionPriceOverrideForEmail } from "@/lib/subscription-price-overrides";
+import { resolveSubscriptionPricing } from "@/lib/subscription-offers";
 
-// GET /api/subscription/status
-// Devuelve el estado de la suscripción y trial del kiosco
-// Reglas de trial:
-// - Solo suscripciones PENDING sin activeGrant reciben trial
-// - ACTIVE o ACTIVE_GRANT no reciben trial
 export async function GET(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) {
@@ -25,13 +23,15 @@ export async function GET(req: NextRequest) {
       kioscoId: true,
       kiosco: {
         select: {
+          subscriptionOfferPriceArs: true,
+          subscriptionOfferFreezeEndsAt: true,
+          subscriptionWelcomeOfferShownAt: true,
           subscription: {
             select: {
               id: true,
               status: true,
-              trialStartsAt: true,
-              trialEndsAt: true,
               managementUrl: true,
+              updatedAt: true,
             },
           },
           accessGrants: {
@@ -49,114 +49,44 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Branch not found" }, { status: 404 });
   }
 
-  const subscription = branch.kiosco.subscription;
   const now = new Date();
-  const activeGrant = branch.kiosco.accessGrants.find(
-    (g) => g.startsAt <= now && g.endsAt >= now
-  );
+  const activeGrant = branch.kiosco.accessGrants.find((grant) => grant.startsAt <= now && grant.endsAt >= now);
+  const priceOverride =
+    session.user.role === "EMPLOYEE"
+      ? null
+      : await getSubscriptionPriceOverrideForEmail(session.user.email);
+  const pricing = resolveSubscriptionPricing({
+    emailOverrideAmount: priceOverride?.amount ?? null,
+    offerPriceArs: branch.kiosco.subscriptionOfferPriceArs,
+    offerFreezeEndsAt: branch.kiosco.subscriptionOfferFreezeEndsAt,
+  });
 
-  console.log("[Subscription API] Kiosco:", branch.kioscoId);
-  console.log("[Subscription API] Subscription status:", subscription?.status);
-  console.log("[Subscription API] Access grants count:", branch.kiosco.accessGrants.length);
-  console.log("[Subscription API] Active grant:", activeGrant ? "FOUND" : "NONE");
-
-  // Si hay activeGrant, no asignar trial - el usuario está en grace period
-  if (activeGrant) {
-    console.log("[Subscription API] Returning with activeGrant");
-    return NextResponse.json({
-      subscription: subscription ? {
-        id: subscription.id,
-        status: subscription.status,
-        trialStartsAt: subscription.trialStartsAt,
-        trialEndsAt: subscription.trialEndsAt,
-        managementUrl: subscription.managementUrl,
-      } : null,
-      hasActiveSubscription: false,
-      hasActiveGrant: true,
-    });
-  }
-
-  // Si no hay suscripción, crear una en estado PENDING con trial
-  if (!subscription) {
-    const trialStartsAt = now;
-    const trialEndsAt = new Date(now.getTime() + 24 * 60 * 60 * 1000); // 24 horas
-
-    const newSubscription = await prisma.subscription.create({
-      data: {
-        kioscoId: branch.kioscoId,
-        status: "PENDING",
-        trialStartsAt,
-        trialEndsAt,
-      },
-      select: {
-        id: true,
-        status: true,
-        trialStartsAt: true,
-        trialEndsAt: true,
-        managementUrl: true,
-      },
-    });
-
-    return NextResponse.json({
-      subscription: newSubscription,
-      hasActiveSubscription: false,
-      hasActiveGrant: false,
-    });
-  }
-
-  // Si la suscripción es ACTIVE, no tocar el trial
-  if (subscription.status === "ACTIVE") {
-    return NextResponse.json({
-      subscription: {
-        id: subscription.id,
-        status: subscription.status,
-        trialStartsAt: subscription.trialStartsAt,
-        trialEndsAt: subscription.trialEndsAt,
-        managementUrl: subscription.managementUrl,
-      },
-      hasActiveSubscription: true,
-      hasActiveGrant: false,
-    });
-  }
-
-  // Si la suscripción existe pero no tiene trial, y es PENDING, asignarle uno
-  if (!subscription.trialStartsAt || !subscription.trialEndsAt) {
-    const trialStartsAt = now;
-    const trialEndsAt = new Date(now.getTime() + 24 * 60 * 60 * 1000); // 24 horas
-
-    const updatedSubscription = await prisma.subscription.update({
-      where: { id: subscription.id },
-      data: {
-        trialStartsAt,
-        trialEndsAt,
-      },
-      select: {
-        id: true,
-        status: true,
-        trialStartsAt: true,
-        trialEndsAt: true,
-        managementUrl: true,
-      },
-    });
-
-    return NextResponse.json({
-      subscription: updatedSubscription,
-      hasActiveSubscription: false,
-      hasActiveGrant: false,
-    });
-  }
-
-  // Si llegamos acá, la suscripción tiene trial y no es ACTIVE
-  // (las ACTIVE ya retornaron antes)
   return NextResponse.json({
-    subscription: {
-      id: subscription.id,
-      status: subscription.status,
-      trialStartsAt: subscription.trialStartsAt,
-      trialEndsAt: subscription.trialEndsAt,
-      managementUrl: subscription.managementUrl,
+    subscription: branch.kiosco.subscription
+      ? {
+          id: branch.kiosco.subscription.id,
+          status: branch.kiosco.subscription.status,
+          managementUrl: branch.kiosco.subscription.managementUrl,
+          updatedAt: branch.kiosco.subscription.updatedAt,
+        }
+      : null,
+    hasActiveSubscription: branch.kiosco.subscription?.status === "ACTIVE",
+    hasActiveGrant: Boolean(activeGrant),
+    pricing: {
+      amountArs: pricing.amountArs,
+      source: pricing.source,
+      freezeEndsAt: pricing.freezeEndsAt?.toISOString() ?? null,
     },
-    hasActiveSubscription: false,
-    hasActiveGrant: false,
+    welcomeOffer: {
+      canShow:
+        session.user.role !== "EMPLOYEE" &&
+        branch.kiosco.subscription?.status !== "ACTIVE" &&
+        !branch.kiosco.subscriptionWelcomeOfferShownAt &&
+        Boolean(branch.kiosco.subscriptionOfferPriceArs) &&
+        Boolean(branch.kiosco.subscriptionOfferFreezeEndsAt),
+      shownAt: branch.kiosco.subscriptionWelcomeOfferShownAt?.toISOString() ?? null,
+      priceArs: branch.kiosco.subscriptionOfferPriceArs,
+      freezeEndsAt: branch.kiosco.subscriptionOfferFreezeEndsAt?.toISOString() ?? null,
+    },
   });
 }

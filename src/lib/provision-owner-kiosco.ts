@@ -10,6 +10,8 @@ type ProvisionOwnerKioscoInput = {
   kioscoName: string;
   mainBusinessActivity?: string | null;
   seedDefaultCatalog?: boolean;
+  subscriptionOfferPriceArs?: number | null;
+  subscriptionOfferFreezeEndsAt?: Date | null;
 };
 
 async function provisionOwnerKioscoWithClient(
@@ -19,6 +21,8 @@ async function provisionOwnerKioscoWithClient(
     kioscoName,
     mainBusinessActivity = null,
     seedDefaultCatalog = true,
+    subscriptionOfferPriceArs = null,
+    subscriptionOfferFreezeEndsAt = null,
   }: ProvisionOwnerKioscoInput,
 ) {
   const kiosco = await tx.kiosco.create({
@@ -26,6 +30,8 @@ async function provisionOwnerKioscoWithClient(
       name: kioscoName,
       ownerId,
       mainBusinessActivity,
+      subscriptionOfferPriceArs,
+      subscriptionOfferFreezeEndsAt,
     },
   });
 
@@ -101,6 +107,8 @@ export async function provisionOwnerKiosco({
   kioscoName,
   mainBusinessActivity = null,
   seedDefaultCatalog = true,
+  subscriptionOfferPriceArs = null,
+  subscriptionOfferFreezeEndsAt = null,
 }: ProvisionOwnerKioscoInput, tx?: Prisma.TransactionClient) {
   if (tx) {
     return provisionOwnerKioscoWithClient(tx, {
@@ -108,6 +116,8 @@ export async function provisionOwnerKiosco({
       kioscoName,
       mainBusinessActivity,
       seedDefaultCatalog,
+      subscriptionOfferPriceArs,
+      subscriptionOfferFreezeEndsAt,
     });
   }
 
@@ -117,6 +127,8 @@ export async function provisionOwnerKiosco({
       kioscoName,
       mainBusinessActivity,
       seedDefaultCatalog,
+      subscriptionOfferPriceArs,
+      subscriptionOfferFreezeEndsAt,
     }),
   );
 }

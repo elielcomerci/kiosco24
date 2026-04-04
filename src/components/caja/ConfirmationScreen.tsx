@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { formatARS } from "@/lib/utils";
+
 import { formatSaleItemWeightLabel, getSaleItemSubtotal } from "@/lib/sale-item";
+import { formatARS } from "@/lib/utils";
 
 interface TicketItem {
   name: string;
@@ -27,8 +28,16 @@ interface ConfirmationScreenProps {
   onEmitTicket: () => void;
   onEmitInvoice: () => void;
   canEmitTicket?: boolean;
+  canEmitInvoice?: boolean;
   ticketActionLabel?: string;
   pauseAutoClose?: boolean;
+  title?: string;
+  subtitle?: string;
+  description?: string;
+  primaryActionLabel?: string;
+  primaryActionLoadingLabel?: string;
+  primaryActionLoading?: boolean;
+  footerText?: string;
 }
 
 export default function ConfirmationScreen({
@@ -39,8 +48,16 @@ export default function ConfirmationScreen({
   onEmitTicket,
   onEmitInvoice,
   canEmitTicket = true,
+  canEmitInvoice = true,
   ticketActionLabel = "EMITIR TICKET",
   pauseAutoClose = false,
+  title = "VENTA REGISTRADA",
+  subtitle,
+  description,
+  primaryActionLabel = "NUEVA VENTA",
+  primaryActionLoadingLabel = "Procesando...",
+  primaryActionLoading = false,
+  footerText,
 }: ConfirmationScreenProps) {
   const [seconds, setSeconds] = useState(30);
 
@@ -70,6 +87,13 @@ export default function ConfirmationScreen({
     CREDIT: sale.creditCustomerName ? `Fiado - ${sale.creditCustomerName}` : "Fiado",
   }[sale.paymentMethod];
 
+  const effectiveSubtitle = subtitle ?? payLabel;
+  const effectiveFooterText =
+    footerText ??
+    (pauseAutoClose
+      ? "El cierre automatico se pausa mientras revisas el ticket."
+      : `Se cierra automaticamente en ${seconds} seg...`);
+
   return (
     <div
       className="animate-slide-up"
@@ -97,17 +121,32 @@ export default function ConfirmationScreen({
           animation: "pulse-green 1.5s ease infinite",
         }}
       >
-        ✓
+        {"\u2713"}
       </div>
 
       <div style={{ textAlign: "center" }}>
         <h2 style={{ fontSize: "22px", fontWeight: 700, color: "var(--primary)", marginBottom: "4px" }}>
-          VENTA REGISTRADA
+          {title}
         </h2>
-        <p style={{ color: "var(--text-2)", fontSize: "14px" }}>{payLabel}</p>
+        {effectiveSubtitle ? (
+          <p style={{ color: "var(--text-2)", fontSize: "14px" }}>{effectiveSubtitle}</p>
+        ) : null}
+        {description ? (
+          <p
+            style={{
+              color: "var(--text-2)",
+              fontSize: "14px",
+              lineHeight: 1.6,
+              maxWidth: "420px",
+              margin: "8px auto 0",
+            }}
+          >
+            {description}
+          </p>
+        ) : null}
         {sale.ticketNumber ? (
           <p style={{ color: "var(--text-3)", fontSize: "12px", marginTop: "6px" }}>
-            Ticket N° {String(sale.ticketNumber).padStart(6, "0")}
+            Ticket No. {String(sale.ticketNumber).padStart(6, "0")}
           </p>
         ) : null}
       </div>
@@ -184,19 +223,22 @@ export default function ConfirmationScreen({
             {ticketActionLabel}
           </button>
         ) : null}
-        <button className="btn btn-ghost" style={{ width: "100%" }} onClick={onEmitInvoice} disabled={!sale.id}>
-          FACTURA
-        </button>
-        <button className="btn btn-green" style={{ width: "100%", gridColumn: "1 / -1" }} onClick={onListo}>
-          NUEVA VENTA
+        {canEmitInvoice ? (
+          <button className="btn btn-ghost" style={{ width: "100%" }} onClick={onEmitInvoice} disabled={!sale.id}>
+            FACTURA
+          </button>
+        ) : null}
+        <button
+          className="btn btn-green"
+          style={{ width: "100%", gridColumn: "1 / -1" }}
+          onClick={onListo}
+          disabled={primaryActionLoading}
+        >
+          {primaryActionLoading ? primaryActionLoadingLabel : primaryActionLabel}
         </button>
       </div>
 
-      <p style={{ color: "var(--text-3)", fontSize: "12px" }}>
-        {pauseAutoClose
-          ? "El cierre automatico se pausa mientras revisas el ticket."
-          : `Se cierra automaticamente en ${seconds} seg...`}
-      </p>
+      <p style={{ color: "var(--text-3)", fontSize: "12px" }}>{effectiveFooterText}</p>
     </div>
   );
 }

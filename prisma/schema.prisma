@@ -114,6 +114,9 @@ model Kiosco {
   address                    String?
   city                       String?
   phone                      String?
+  subscriptionOfferPriceArs  Int?                        @map("subscription_offer_price_ars")
+  subscriptionOfferFreezeEndsAt DateTime?                @map("subscription_offer_freeze_ends_at")
+  subscriptionWelcomeOfferShownAt DateTime?              @map("subscription_welcome_offer_shown_at")
   ownerId                    String                      @unique
   owner                      User                        @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   branches                   Branch[]

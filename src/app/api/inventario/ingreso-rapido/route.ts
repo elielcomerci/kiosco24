@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { RestockEventType, RestockValuationStatus } from "@prisma/client";
 
-import { guardOperationalAccess } from "@/lib/access-control";
+import { guardSetupAccess } from "@/lib/access-control";
 import { auth } from "@/lib/auth";
 import { getBranchContext } from "@/lib/branch";
 import {
@@ -109,7 +109,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const accessResponse = await guardOperationalAccess(session.user);
+    const accessResponse = await guardSetupAccess(session.user);
     if (accessResponse) {
       return accessResponse;
     }

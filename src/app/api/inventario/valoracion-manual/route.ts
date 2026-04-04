@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { guardOperationalAccess } from "@/lib/access-control";
+import { guardSetupAccess } from "@/lib/access-control";
 import { auth } from "@/lib/auth";
 import { getBranchContext } from "@/lib/branch";
 import {
@@ -40,7 +40,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const accessResponse = await guardOperationalAccess(session.user);
+  const accessResponse = await guardSetupAccess(session.user);
   if (accessResponse) {
     return accessResponse;
   }
@@ -122,7 +122,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const accessResponse = await guardOperationalAccess(session.user);
+  const accessResponse = await guardSetupAccess(session.user);
   if (accessResponse) {
     return accessResponse;
   }

@@ -17,20 +17,29 @@ interface GastoModalProps {
   onClose: () => void;
   onSuccess: () => void;
   employeeId?: string;
+  onSubscriptionRequired?: (message: string) => void;
 }
 
-export default function GastoModal({ onClose, onSuccess, employeeId }: GastoModalProps) {
+export default function GastoModal({
+  onClose,
+  onSuccess,
+  employeeId,
+  onSubscriptionRequired,
+}: GastoModalProps) {
   const params = useParams();
   const branchId = params.branchId as string;
   const [amount, setAmount] = useState("");
   const [reason, setReason] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   const handleConfirm = async () => {
     if (!amount || !reason) return;
     setLoading(true);
+    setError("");
+
     try {
-      await fetch("/api/gastos", {
+      const response = await fetch("/api/gastos", {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
@@ -38,6 +47,20 @@ export default function GastoModal({ onClose, onSuccess, employeeId }: GastoModa
         },
         body: JSON.stringify({ amount: parseFloat(amount), reason, createdByEmployeeId: employeeId }),
       });
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        if (response.status === 402) {
+          onSubscriptionRequired?.(
+            data?.error || "Necesitas una suscripcion activa para registrar gastos.",
+          );
+          return;
+        }
+
+        setError(data?.error || "No se pudo registrar el gasto.");
+        return;
+      }
+
       onSuccess();
     } finally {
       setLoading(false);
@@ -68,6 +91,21 @@ export default function GastoModal({ onClose, onSuccess, employeeId }: GastoModa
             <span style={{ color: "var(--text-3)" }}>$0</span>
           )}
         </div>
+
+        {error ? (
+          <div
+            style={{
+              padding: "12px 14px",
+              borderRadius: "14px",
+              background: "rgba(239,68,68,.12)",
+              border: "1px solid rgba(239,68,68,.22)",
+              color: "#fecaca",
+              fontSize: "13px",
+            }}
+          >
+            {error}
+          </div>
+        ) : null}
 
         <NumPad value={amount} onChange={setAmount} />
 

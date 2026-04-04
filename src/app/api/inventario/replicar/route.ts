@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { guardOperationalAccess } from "@/lib/access-control";
+import { guardSetupAccess } from "@/lib/access-control";
 import { auth } from "@/lib/auth";
 import { getBranchContext } from "@/lib/branch";
 import { applyInventoryCorrectionToCostLayers } from "@/lib/inventory-cost-consumption";
@@ -33,7 +33,7 @@ export async function POST(req: Request) {
     }
 
     if (copyStock) {
-      const accessResponse = await guardOperationalAccess(session.user);
+      const accessResponse = await guardSetupAccess(session.user);
       if (accessResponse) {
         return accessResponse;
       }

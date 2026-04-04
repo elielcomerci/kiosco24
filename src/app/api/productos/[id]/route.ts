@@ -356,7 +356,6 @@ export async function PATCH(
       { status: 402 },
     );
   }
-  const hasOperationalAccess = access.allowed;
 
   const { kioscoId, branchId } = await getBranchContext(req, session.user.id);
   if (!kioscoId || !branchId) {
@@ -470,16 +469,6 @@ export async function PATCH(
 
     return variant.stock !== (currentVariantStockById.get(variant.id) ?? 0);
   });
-
-  if (!hasOperationalAccess && (simpleStockChanged || variantStockChanged)) {
-    return NextResponse.json(
-      {
-        error: "Puedes editar la ficha del producto, pero para mover stock o registrar ajustes primero activa la suscripcion.",
-        code: "NO_SUBSCRIPTION_OPERATIONAL",
-      },
-      { status: 402 },
-    );
-  }
 
   const currentVariantIds = product.variants.map((variant) => variant.id);
   const submittedVariantIds = normalizedVariants

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { auth } from "@/lib/auth";
-import { guardOperationalAccess } from "@/lib/access-control";
+import { guardSetupAccess } from "@/lib/access-control";
 import { getBranchId } from "@/lib/branch";
 import { prisma } from "@/lib/prisma";
 import { getDefaultTicketSettings, isTicketPrintMode } from "@/lib/ticketing";
@@ -12,7 +12,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const accessResponse = await guardOperationalAccess(session.user);
+  const accessResponse = await guardSetupAccess(session.user);
   if (accessResponse) {
     return accessResponse;
   }
@@ -71,7 +71,7 @@ export async function PUT(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const accessResponse = await guardOperationalAccess(session.user);
+  const accessResponse = await guardSetupAccess(session.user);
   if (accessResponse) {
     return accessResponse;
   }

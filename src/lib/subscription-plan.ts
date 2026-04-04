@@ -17,7 +17,7 @@ export function formatSubscriptionPrice(amount = resolveSubscriptionPrice()) {
 }
 
 export function getSubscriptionPromoLabel(amount = resolveSubscriptionPrice()) {
-  return `Probalo a solo ${formatSubscriptionPrice(amount)} por mes.`;
+  return `Activalo por ${formatSubscriptionPrice(amount)} por mes.`;
 }
 
 export const SUBSCRIPTION_PRICE_ARS = resolveSubscriptionPrice();

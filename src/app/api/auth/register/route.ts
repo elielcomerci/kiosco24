@@ -8,6 +8,7 @@ import {
 } from "@/lib/business-activities-store";
 import { prisma } from "@/lib/prisma";
 import { provisionOwnerKiosco } from "@/lib/provision-owner-kiosco";
+import { buildNewAccountSubscriptionOffer } from "@/lib/subscription-offers";
 
 type RegisterPayload = {
   firstName?: string;
@@ -65,6 +66,7 @@ export async function POST(req: Request) {
     const seedDefaultCatalog = await shouldSeedDefaultCatalogForBusinessActivity(
       mainBusinessActivity,
     );
+    const subscriptionOffer = buildNewAccountSubscriptionOffer();
 
     const created = await prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
@@ -84,6 +86,8 @@ export async function POST(req: Request) {
           kioscoName: businessName,
           mainBusinessActivity,
           seedDefaultCatalog,
+          subscriptionOfferPriceArs: subscriptionOffer.priceArs,
+          subscriptionOfferFreezeEndsAt: subscriptionOffer.freezeEndsAt,
         },
         tx,
       );
@@ -110,6 +114,10 @@ export async function POST(req: Request) {
       },
       branchId: created.branchId,
       seededDefaultCatalog: seedDefaultCatalog,
+      subscriptionOffer: {
+        priceArs: subscriptionOffer.priceArs,
+        freezeEndsAt: subscriptionOffer.freezeEndsAt.toISOString(),
+      },
     });
   } catch (error) {
     const details = error instanceof Error ? error.message : "Unknown error";

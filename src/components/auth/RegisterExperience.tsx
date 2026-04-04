@@ -10,10 +10,6 @@ import {
   getBusinessActivityOptionFromList,
   type BusinessActivityOption,
 } from "@/lib/business-activities";
-import {
-  SUBSCRIPTION_CANCEL_LABEL,
-  SUBSCRIPTION_PROMO_LABEL,
-} from "@/lib/subscription-plan";
 
 const AUTH_TIMEOUT_MS = 15000;
 
@@ -93,7 +89,10 @@ export default function RegisterExperience({
         return;
       }
 
-      const callbackUrl = typeof data.branchId === "string" ? `/${data.branchId}/productos` : "/";
+      const callbackUrl =
+        typeof data.branchId === "string"
+          ? `/${data.branchId}/productos?welcome-subscription=1`
+          : "/";
       const result = await withTimeout(
         signIn("credentials", {
           email,
@@ -195,7 +194,7 @@ export default function RegisterExperience({
           </div>
 
           <div style={{ color: "#94a3b8", fontSize: "12px", lineHeight: 1.6 }}>
-            {SUBSCRIPTION_PROMO_LABEL} {SUBSCRIPTION_CANCEL_LABEL}
+            Cuando entres por primera vez te vamos a ofrecer activar la suscripción o seguir preparando el negocio antes de vender.
           </div>
         </section>
 

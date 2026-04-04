@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { formatARS, applyPercentage } from "@/lib/utils";
 import {
@@ -19,6 +19,7 @@ import InventoryValuationModal from "@/components/products/InventoryValuationMod
 import ProductThumb from "@/components/products/ProductThumb";
 import ProductsActionsMenu from "@/components/products/ProductsActionsMenu";
 import RestockHistoryModal from "@/components/products/RestockHistoryModal";
+import WelcomeSubscriptionOfferModal from "@/components/subscription/WelcomeSubscriptionOfferModal";
 import BackButton from "@/components/ui/BackButton";
 import ModalPortal from "@/components/ui/ModalPortal";
 import PrintablePage from "@/components/print/PrintablePage";
@@ -5048,9 +5049,12 @@ function PlatformBulkSyncModal({
 
 export default function ProductosPage() {
   const params = useParams();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const branchId = params.branchId as string;
   const { data: session } = useSession();
   const isOwner = session?.user?.role === "OWNER";
+  const wantsWelcomeSubscription = searchParams.get("welcome-subscription") === "1";
 
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -5088,6 +5092,24 @@ export default function ProductosPage() {
   const [syncingPlatformCatalog, setSyncingPlatformCatalog] = useState(false);
   const [catalogNotice, setCatalogNotice] = useState<string | null>(null);
   const [exportingCatalog, setExportingCatalog] = useState(false);
+  const [showWelcomeOfferModal, setShowWelcomeOfferModal] = useState(false);
+  const [welcomeOfferLoading, setWelcomeOfferLoading] = useState(false);
+  const [welcomeOfferError, setWelcomeOfferError] = useState("");
+  const [welcomeOffer, setWelcomeOffer] = useState<{
+    priceArs: number;
+    freezeEndsAt: string | null;
+  } | null>(null);
+
+  const clearWelcomeSubscriptionFlag = useCallback(() => {
+    if (!wantsWelcomeSubscription) {
+      return;
+    }
+
+    const nextParams = new URLSearchParams(searchParams.toString());
+    nextParams.delete("welcome-subscription");
+    const nextQuery = nextParams.toString();
+    router.replace(nextQuery ? `/${branchId}/productos?${nextQuery}` : `/${branchId}/productos`);
+  }, [branchId, router, searchParams, wantsWelcomeSubscription]);
 
   const fetchBranches = useCallback(async () => {
     if (branchesLoaded) return;
@@ -5157,6 +5179,95 @@ export default function ProductosPage() {
       window.clearTimeout(timeoutId);
     };
   }, [catalogNotice]);
+
+  useEffect(() => {
+    if (!wantsWelcomeSubscription || !isOwner) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadWelcomeOffer = async () => {
+      try {
+        const response = await fetch("/api/subscription/status", {
+          headers: { "x-branch-id": branchId },
+          cache: "no-store",
+        });
+        const data = await response.json().catch(() => null);
+
+        if (!response.ok || cancelled) {
+          clearWelcomeSubscriptionFlag();
+          return;
+        }
+
+        if (data?.welcomeOffer?.canShow && typeof data?.welcomeOffer?.priceArs === "number") {
+          setWelcomeOffer({
+            priceArs: data.welcomeOffer.priceArs,
+            freezeEndsAt:
+              typeof data.welcomeOffer.freezeEndsAt === "string"
+                ? data.welcomeOffer.freezeEndsAt
+                : null,
+          });
+          setShowWelcomeOfferModal(true);
+          return;
+        }
+
+        clearWelcomeSubscriptionFlag();
+      } catch {
+        if (!cancelled) {
+          clearWelcomeSubscriptionFlag();
+        }
+      }
+    };
+
+    void loadWelcomeOffer();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [branchId, clearWelcomeSubscriptionFlag, isOwner, wantsWelcomeSubscription]);
+
+  const dismissWelcomeOffer = useCallback(async () => {
+    try {
+      await fetch("/api/subscription/welcome-offer", {
+        method: "POST",
+        headers: { "x-branch-id": branchId },
+      });
+    } finally {
+      setShowWelcomeOfferModal(false);
+      setWelcomeOfferError("");
+      clearWelcomeSubscriptionFlag();
+    }
+  }, [branchId, clearWelcomeSubscriptionFlag]);
+
+  const handleActivateWelcomeOffer = useCallback(async () => {
+    setWelcomeOfferLoading(true);
+    setWelcomeOfferError("");
+
+    try {
+      const response = await fetch("/api/subscription/create", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-branch-id": branchId,
+        },
+        body: JSON.stringify({ origin: "WELCOME_MODAL" }),
+      });
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok || !data?.init_point) {
+        setWelcomeOfferError(data?.error || "No se pudo generar el link de pago.");
+        setWelcomeOfferLoading(false);
+        return;
+      }
+
+      clearWelcomeSubscriptionFlag();
+      window.location.href = data.init_point;
+    } catch {
+      setWelcomeOfferError("No se pudo conectar con Mercado Pago ahora.");
+      setWelcomeOfferLoading(false);
+    }
+  }, [branchId, clearWelcomeSubscriptionFlag]);
 
   const filtered = products.filter((p) => {
     const normalizedSearch = search.toLowerCase();
@@ -6020,6 +6131,17 @@ export default function ProductosPage() {
             </div>
           </div>
         </ModalPortal>
+      )}
+
+      {showWelcomeOfferModal && welcomeOffer && (
+        <WelcomeSubscriptionOfferModal
+          priceArs={welcomeOffer.priceArs}
+          freezeEndsAt={welcomeOffer.freezeEndsAt}
+          loading={welcomeOfferLoading}
+          error={welcomeOfferError}
+          onActivate={() => void handleActivateWelcomeOffer()}
+          onSkip={() => void dismissWelcomeOffer()}
+        />
       )}
 
       {/* Product Create/Edit Modal */}

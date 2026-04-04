@@ -12,30 +12,37 @@ import {
 type Props = {
   canCreateSubscription: boolean;
   managementUrl: string | null;
-  specialPriceArs?: number | null;
+  priceArs?: number;
+  compareAtPriceArs?: number | null;
+  origin?: string;
 };
 
 export default function SubscriptionActions({
   canCreateSubscription,
   managementUrl,
-  specialPriceArs = null,
+  priceArs = SUBSCRIPTION_PRICE_ARS,
+  compareAtPriceArs = null,
+  origin = "SUBSCRIPTION_PAGE",
 }: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const hasSpecialPrice =
-    typeof specialPriceArs === "number" &&
-    Number.isFinite(specialPriceArs) &&
-    specialPriceArs > 0 &&
-    specialPriceArs < SUBSCRIPTION_PRICE_ARS;
-  const effectivePriceLabel = formatSubscriptionPrice(hasSpecialPrice ? specialPriceArs : SUBSCRIPTION_PRICE_ARS);
+    typeof compareAtPriceArs === "number" &&
+    Number.isFinite(compareAtPriceArs) &&
+    compareAtPriceArs > priceArs;
+  const effectivePriceLabel = formatSubscriptionPrice(priceArs);
 
   const handleStartSubscription = async () => {
     setLoading(true);
     setError("");
 
     try {
-      const response = await fetch("/api/subscription/create", { method: "POST" });
+      const response = await fetch("/api/subscription/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ origin }),
+      });
       const data = await response.json();
 
       if (!response.ok || !data?.init_point) {
@@ -90,19 +97,19 @@ export default function SubscriptionActions({
       >
         {hasSpecialPrice ? (
           <div style={{ display: "grid", gap: "6px" }}>
-            <strong style={{ color: "var(--green)" }}>Precio especial activo para esta cuenta</strong>
+            <strong style={{ color: "var(--green)" }}>Precio disponible para esta cuenta</strong>
             <div style={{ display: "flex", alignItems: "baseline", gap: "10px", flexWrap: "wrap" }}>
               <span style={{ textDecoration: "line-through", opacity: 0.7 }}>
-                {formatSubscriptionPrice(SUBSCRIPTION_PRICE_ARS)}
+                {formatSubscriptionPrice(compareAtPriceArs)}
               </span>
               <span style={{ fontSize: "22px", fontWeight: 800, color: "var(--green)" }}>
-                {formatSubscriptionPrice(specialPriceArs)}
+                {formatSubscriptionPrice(priceArs)}
               </span>
             </div>
             <span>{SUBSCRIPTION_CANCEL_LABEL}</span>
           </div>
         ) : (
-          `${getSubscriptionPromoLabel()} ${SUBSCRIPTION_CANCEL_LABEL}`
+          `${getSubscriptionPromoLabel(priceArs)} ${SUBSCRIPTION_CANCEL_LABEL}`
         )}
       </div>
 

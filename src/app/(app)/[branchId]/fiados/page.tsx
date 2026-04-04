@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import PrintablePage from "@/components/print/PrintablePage";
+import OperationalSubscriptionModal from "@/components/subscription/OperationalSubscriptionModal";
 import { useRegisterShortcuts } from "@/components/ui/BranchWorkspace";
 import ModalPortal from "@/components/ui/ModalPortal";
 import { formatARS } from "@/lib/utils";
@@ -23,7 +24,6 @@ function phoneHref(phone: string): string {
 
 export default function FiadosPage() {
   const params = useParams();
-  const router = useRouter();
   const branchId = params.branchId as string;
   const [customers, setCustomers] = useState<CreditCustomer[]>([]);
   const [loading, setLoading] = useState(true);
@@ -31,6 +31,10 @@ export default function FiadosPage() {
   const [cobrarCustomer, setCobrarCustomer] = useState<CreditCustomer | null>(null);
   const [payAmount, setPayAmount] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [subscriptionPromptMessage, setSubscriptionPromptMessage] = useState("");
+  const [showSubscriptionPrompt, setShowSubscriptionPrompt] = useState(false);
+  const [activatingSubscription, setActivatingSubscription] = useState(false);
+  const [subscriptionPromptError, setSubscriptionPromptError] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   const fetchCustomers = useCallback(async () => {
@@ -75,7 +79,7 @@ export default function FiadosPage() {
       (customer.name.toLowerCase().includes(searchLower) ||
         customer.phone?.toLowerCase().includes(searchLower) ||
         false) &&
-      customer.balance > 0
+      customer.balance > 0,
   );
 
   const shortcuts = useMemo(
@@ -89,7 +93,7 @@ export default function FiadosPage() {
         action: () => searchInputRef.current?.focus(),
       },
     ],
-    []
+    [],
   );
 
   useRegisterShortcuts(shortcuts);
@@ -115,12 +119,9 @@ export default function FiadosPage() {
       const data = await res.json().catch(() => null);
       if (!res.ok) {
         if (res.status === 402) {
-          const shouldOpen = window.confirm(
-            `${data?.error || "Necesitas una suscripcion activa para registrar cobros."}\n\n¿Quieres ir a Suscripcion ahora?`,
-          );
-          if (shouldOpen) {
-            router.push("/suscripcion");
-          }
+          setSubscriptionPromptMessage(data?.error || "Necesitas una suscripcion activa para registrar cobros.");
+          setSubscriptionPromptError("");
+          setShowSubscriptionPrompt(true);
           return;
         }
         setError(data?.error || "No se pudo registrar el cobro.");
@@ -134,6 +135,34 @@ export default function FiadosPage() {
       console.error(paymentError);
       setError("No se pudo registrar el cobro.");
       setLoading(false);
+    }
+  };
+
+  const handleActivateSubscription = async () => {
+    setActivatingSubscription(true);
+    setSubscriptionPromptError("");
+
+    try {
+      const response = await fetch("/api/subscription/create", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-branch-id": branchId,
+        },
+        body: JSON.stringify({ origin: "OPERATIONAL_GATE" }),
+      });
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok || !data?.init_point) {
+        setSubscriptionPromptError(data?.error || "No se pudo generar el link de pago.");
+        setActivatingSubscription(false);
+        return;
+      }
+
+      window.location.href = data.init_point;
+    } catch {
+      setSubscriptionPromptError("No se pudo conectar con el sistema de suscripciones.");
+      setActivatingSubscription(false);
     }
   };
 
@@ -190,7 +219,7 @@ export default function FiadosPage() {
                 className="card"
                 style={{ padding: "16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}
               >
-              <div>
+                <div>
                   <div style={{ fontWeight: 600, fontSize: "16px" }}>{customer.name}</div>
                   {customer.phone ? (
                     <a
@@ -204,7 +233,7 @@ export default function FiadosPage() {
                       {customer.phone}
                     </a>
                   ) : (
-                    <div style={{ color: "var(--text-3)", fontSize: "13px" }}>Sin teléfono</div>
+                    <div style={{ color: "var(--text-3)", fontSize: "13px" }}>Sin telefono</div>
                   )}
                   <div style={{ color: "var(--amber)", fontWeight: 700, marginTop: "4px" }}>
                     Debe {formatARS(customer.balance)}
@@ -233,70 +262,70 @@ export default function FiadosPage() {
               }}
             >
               <div className="modal animate-slide-up" onClick={(e) => e.stopPropagation()}>
-              <div>
-                <h2 style={{ fontSize: "20px", fontWeight: 700 }}>Cobrar fiado</h2>
-                <p style={{ color: "var(--text-2)", fontSize: "14px" }}>
-                  {cobrarCustomer.name} debe{" "}
-                  <strong style={{ color: "var(--amber)" }}>
-                    {formatARS(cobrarCustomer.balance)}
-                  </strong>
-                </p>
-                {cobrarCustomer.phone && (
-                  <p style={{ color: "var(--text-3)", fontSize: "13px", marginTop: "-6px" }}>
-                    Teléfono:{" "}
-                    <a
-                      href={phoneHref(cobrarCustomer.phone)}
-                      style={{ color: "var(--text-2)", textDecoration: "none" }}
-                    >
-                      {cobrarCustomer.phone}
-                    </a>
+                <div>
+                  <h2 style={{ fontSize: "20px", fontWeight: 700 }}>Cobrar fiado</h2>
+                  <p style={{ color: "var(--text-2)", fontSize: "14px" }}>
+                    {cobrarCustomer.name} debe{" "}
+                    <strong style={{ color: "var(--amber)" }}>
+                      {formatARS(cobrarCustomer.balance)}
+                    </strong>
                   </p>
-                )}
-              </div>
+                  {cobrarCustomer.phone && (
+                    <p style={{ color: "var(--text-3)", fontSize: "13px", marginTop: "-6px" }}>
+                      Telefono:{" "}
+                      <a
+                        href={phoneHref(cobrarCustomer.phone)}
+                        style={{ color: "var(--text-2)", textDecoration: "none" }}
+                      >
+                        {cobrarCustomer.phone}
+                      </a>
+                    </p>
+                  )}
+                </div>
 
-              <div
-                style={{
-                  background: "var(--surface-2)",
-                  border: "1px solid var(--border-2)",
-                  borderRadius: "var(--radius)",
-                  padding: "16px",
-                  textAlign: "center",
-                  fontSize: "32px",
-                  fontWeight: 800,
-                  minHeight: "56px",
-                }}
-              >
-                {payAmount ? (
-                  <span style={{ color: "var(--green)" }}>
-                    {formatARS(parseFloat(payAmount))}
-                  </span>
-                ) : (
-                  <span style={{ color: "var(--text-3)" }}>$0</span>
-                )}
-              </div>
-
-              <NumPad value={payAmount} onChange={setPayAmount} />
-
-              <div style={{ display: "flex", gap: "10px" }}>
-                <button
-                  className="btn btn-ghost"
-                  style={{ flex: 1 }}
-                  onClick={() => {
-                    setCobrarCustomer(null);
-                    setPayAmount("");
+                <div
+                  style={{
+                    background: "var(--surface-2)",
+                    border: "1px solid var(--border-2)",
+                    borderRadius: "var(--radius)",
+                    padding: "16px",
+                    textAlign: "center",
+                    fontSize: "32px",
+                    fontWeight: 800,
+                    minHeight: "56px",
                   }}
                 >
-                  Cancelar
-                </button>
-                <button
-                  className="btn btn-green"
-                  style={{ flex: 2 }}
-                  onClick={handleConfirmPay}
-                  disabled={!payAmount || loading}
-                >
-                  {loading ? "..." : "Confirmar cobro"}
-                </button>
-              </div>
+                  {payAmount ? (
+                    <span style={{ color: "var(--green)" }}>
+                      {formatARS(parseFloat(payAmount))}
+                    </span>
+                  ) : (
+                    <span style={{ color: "var(--text-3)" }}>$0</span>
+                  )}
+                </div>
+
+                <NumPad value={payAmount} onChange={setPayAmount} />
+
+                <div style={{ display: "flex", gap: "10px" }}>
+                  <button
+                    className="btn btn-ghost"
+                    style={{ flex: 1 }}
+                    onClick={() => {
+                      setCobrarCustomer(null);
+                      setPayAmount("");
+                    }}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    className="btn btn-green"
+                    style={{ flex: 2 }}
+                    onClick={handleConfirmPay}
+                    disabled={!payAmount || loading}
+                  >
+                    {loading ? "..." : "Confirmar cobro"}
+                  </button>
+                </div>
               </div>
             </div>
           </ModalPortal>
@@ -338,7 +367,7 @@ export default function FiadosPage() {
               <thead>
                 <tr>
                   <th>Cliente</th>
-                  <th>Teléfono</th>
+                  <th>Telefono</th>
                   <th>Saldo</th>
                 </tr>
               </thead>
@@ -355,7 +384,7 @@ export default function FiadosPage() {
                           {customer.phone}
                         </a>
                       ) : (
-                        "—"
+                        "-"
                       )}
                     </td>
                     <td>{formatARS(customer.balance)}</td>
@@ -366,6 +395,20 @@ export default function FiadosPage() {
           )}
         </section>
       </PrintablePage>
+
+      {showSubscriptionPrompt && (
+        <OperationalSubscriptionModal
+          message={subscriptionPromptMessage || "Necesitas una suscripcion activa para continuar."}
+          loading={activatingSubscription}
+          error={subscriptionPromptError}
+          onActivate={() => void handleActivateSubscription()}
+          onClose={() => {
+            if (activatingSubscription) return;
+            setShowSubscriptionPrompt(false);
+            setSubscriptionPromptError("");
+          }}
+        />
+      )}
     </>
   );
 }

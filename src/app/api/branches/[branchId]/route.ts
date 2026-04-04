@@ -1,5 +1,5 @@
 import { auth } from "@/lib/auth";
-import { guardOperationalAccess } from "@/lib/access-control";
+import { guardSetupAccess } from "@/lib/access-control";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 
@@ -13,7 +13,7 @@ export async function PATCH(
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
-  const accessResponse = await guardOperationalAccess(session.user);
+  const accessResponse = await guardSetupAccess(session.user);
   if (accessResponse) {
     return accessResponse;
   }

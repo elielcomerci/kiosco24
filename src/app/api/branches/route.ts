@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { guardOperationalAccess } from "@/lib/access-control";
+import { guardSetupAccess } from "@/lib/access-control";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
@@ -11,7 +11,7 @@ export async function GET() {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
-  const accessResponse = await guardOperationalAccess(session.user);
+  const accessResponse = await guardSetupAccess(session.user);
   if (accessResponse) {
     return accessResponse;
   }
@@ -45,7 +45,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
-  const accessResponse = await guardOperationalAccess(session.user);
+  const accessResponse = await guardSetupAccess(session.user);
   if (accessResponse) {
     return accessResponse;
   }

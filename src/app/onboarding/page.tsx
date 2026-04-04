@@ -49,7 +49,11 @@ export default function OnboardingPage() {
     setSubscriptionLoading(true);
 
     try {
-      const subRes = await fetch("/api/subscription/create", { method: "POST" });
+      const subRes = await fetch("/api/subscription/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ origin: "ONBOARDING" }),
+      });
       const subData = await subRes.json();
 
       if (subData.init_point) {
@@ -128,7 +132,7 @@ export default function OnboardingPage() {
               </button>
 
               <p style={{ textAlign: "center", fontSize: "12px", color: "var(--text-3)", marginTop: "-10px" }}>
-                Puedes cargar productos sin limite. La suscripcion se activa cuando quieras empezar a vender.
+                Podés cargar productos, stock y configuración desde ahora. La suscripción se activa cuando quieras empezar a operar.
               </p>
             </form>
           </>
@@ -139,7 +143,7 @@ export default function OnboardingPage() {
               {createdKioscoName || "Tu kiosco"} ya esta listo
             </h1>
             <p style={{ textAlign: "center", color: "var(--text-2)", margin: 0, fontSize: "15px" }}>
-              Puedes empezar a cargar productos ahora y activar la suscripcion cuando quieras operar ventas, cobros o movimientos.
+              Podés empezar a cargar productos, precios y stock ahora, y activar la suscripción cuando quieras vender, cobrar o usar la operación diaria.
             </p>
 
             <button

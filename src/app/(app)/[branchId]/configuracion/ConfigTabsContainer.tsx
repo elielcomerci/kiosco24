@@ -11,7 +11,7 @@ interface ConfigTabsContainerProps {
   loadingCurrentBranch: boolean;
   employees: Employee[];
   loadingEmployees: boolean;
-  subscription: { status: string; managementUrl: string | null } | null;
+  subscription: Subscription | null;
   loadingSubscription: boolean;
   creatingSubscription: boolean;
   subscriptionError: string | null;

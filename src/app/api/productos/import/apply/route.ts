@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { guardOperationalAccess } from "@/lib/access-control";
+import { guardSetupAccess } from "@/lib/access-control";
 import { auth } from "@/lib/auth";
 import { getBranchContext } from "@/lib/branch";
 import {
@@ -46,7 +46,7 @@ export async function POST(req: Request) {
     }
 
     if (scope === "everything" || scope === "stock" || scope === "lots") {
-      const accessResponse = await guardOperationalAccess(session.user);
+      const accessResponse = await guardSetupAccess(session.user);
       if (accessResponse) {
         return accessResponse;
       }

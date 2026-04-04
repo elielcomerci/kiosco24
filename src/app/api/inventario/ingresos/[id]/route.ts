@@ -1,7 +1,7 @@
 import { RestockEventType, RestockValuationStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
 
-import { guardOperationalAccess } from "@/lib/access-control";
+import { guardSetupAccess } from "@/lib/access-control";
 import { auth } from "@/lib/auth";
 import { getBranchContext } from "@/lib/branch";
 import { syncRestockItemCostLayer } from "@/lib/inventory-cost-layers";
@@ -49,7 +49,7 @@ export async function PATCH(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const accessResponse = await guardOperationalAccess(session.user);
+  const accessResponse = await guardSetupAccess(session.user);
   if (accessResponse) {
     return accessResponse;
   }

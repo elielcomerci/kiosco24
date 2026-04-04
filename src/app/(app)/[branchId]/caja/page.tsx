@@ -22,19 +22,13 @@ import ModalPortal from "@/components/ui/ModalPortal";
 import TicketModal from "@/components/ticket/TicketModal";
 import InvoiceModal from "@/components/fiscal/InvoiceModal";
 import type { InvoicePreviewData } from "@/lib/invoice-format";
-import TrialWelcomeModal from "@/components/trial/TrialWelcomeModal";
-import TrialBanner from "@/components/trial/TrialBanner";
 import DigitalSalesCarousel from "@/components/caja/DigitalSalesCarousel";
-import { calculateTrialInfo, getTrialMessage } from "@/lib/trial-manager";
+import OperationalSubscriptionModal from "@/components/subscription/OperationalSubscriptionModal";
 
 import { savePendingSale } from "@/lib/offline/db";
 import { useOnlineStatus } from "@/lib/offline/sync";
 import { useIsDesktop } from "@/lib/hooks";
 import { playAudio, preloadAudio } from "@/lib/audio";
-import {
-  LEGACY_TRIAL_WELCOME_STORAGE_KEY,
-  TRIAL_WELCOME_STORAGE_KEY,
-} from "@/lib/brand";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -115,6 +109,7 @@ interface ActiveShift {
   openingAmount: number;
   employeeId: string | null;
   employeeName: string;
+  isDemo?: boolean;
   employee?: {
     id: string;
     name: string;
@@ -395,6 +390,7 @@ export default function CajaPage() {
   }>({ enCaja: 0, ganancia: null, hasCosts: false });
   const [lastSale, setLastSale] = useState<Sale | null>(null);
   const [confirmedSale, setConfirmedSale] = useState<Sale | null>(null);
+  const [previewSale, setPreviewSale] = useState<Sale | null>(null);
   const [ticketSaleId, setTicketSaleId] = useState<string | null>(null);
   const [invoiceSaleId, setInvoiceSaleId] = useState<string | null>(null);
   const [invoiceDraft, setInvoiceDraft] = useState<InvoiceDraft | null>(null);
@@ -429,47 +425,18 @@ export default function CajaPage() {
   const [isTicketExpanded, setIsTicketExpanded] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
   
-  // Trial states
-  const [showTrialWelcome, setShowTrialWelcome] = useState(false);
-  const [trialDismissed, setTrialDismissed] = useState(false);
-  const [trialInfo, setTrialInfo] = useState<{
-    isInTrial: boolean;
-    remainingHours: number;
-    isExpired: boolean;
-  } | null>(null);
+  const [subscriptionPromptMessage, setSubscriptionPromptMessage] = useState("");
+  const [showSubscriptionPrompt, setShowSubscriptionPrompt] = useState(false);
+  const [activatingSubscription, setActivatingSubscription] = useState(false);
+  const [subscriptionPromptError, setSubscriptionPromptError] = useState("");
+  const [activatingPreviewSubscription, setActivatingPreviewSubscription] = useState(false);
+  const [previewSubscriptionError, setPreviewSubscriptionError] = useState("");
   
   const searchInputRef = useRef<HTMLInputElement>(null);
   const handleBarcodeScanRef = useRef<(code: string) => void>(() => {});
   const hasPlayedStartupRef = useRef(false);
   const prevPromosCountRef = useRef(0);
   const allowNegativeStock = products[0]?.allowNegativeStock ?? false;
-  
-  // Trial handlers
-  const markTrialWelcomeSeen = useCallback(() => {
-    localStorage.setItem(TRIAL_WELCOME_STORAGE_KEY, "true");
-    localStorage.setItem(LEGACY_TRIAL_WELCOME_STORAGE_KEY, "true");
-  }, []);
-
-  const handleTrialExplore = useCallback(() => {
-    // Guardar que el usuario ya vio el modal
-    markTrialWelcomeSeen();
-    setShowTrialWelcome(false);
-  }, [markTrialWelcomeSeen]);
-  
-  const handleTrialActivate = useCallback(() => {
-    // Guardar que el usuario ya vio el modal
-    markTrialWelcomeSeen();
-    setShowTrialWelcome(false);
-    router.push("/configuracion");
-  }, [markTrialWelcomeSeen, router]);
-  
-  const handleTrialBannerDismiss = useCallback(() => {
-    setTrialDismissed(true);
-  }, []);
-  
-  const handleTrialBannerActivate = useCallback(() => {
-    router.push("/configuracion");
-  }, [router]);
   
   const keyboardScanBufferRef = useRef("");
   const keyboardScanStartedAtRef = useRef(0);
@@ -532,7 +499,7 @@ export default function CajaPage() {
   const rawTotal = ticket.reduce((sum, item) => sum + getSaleItemSubtotal(item), 0);
   const total = promoResult ? promoResult.total : rawTotal;
   const cashSuggestions = getCashSuggestions(total);
-  const activeShiftId = activeShift?.id ?? null;
+  const activeShiftId = activeShift?.isDemo ? null : activeShift?.id ?? null;
   const shiftResponsibleName = activeShift?.employee?.name || activeShift?.employeeName || "Dueño";
   const canOperateCurrentShift = useMemo(() => {
     if (!activeShift) return false;
@@ -594,72 +561,6 @@ export default function CajaPage() {
       });
     }
   }, [activeShift]);
-
-  // ─── Trial Logic ───────────────────────────────────────────────────────
-  useEffect(() => {
-    async function checkTrial() {
-      try {
-        console.log("[Trial] Verificando estado de suscripción...");
-        const res = await fetch("/api/subscription/status", {
-          headers: { "x-branch-id": branchId },
-        });
-        
-        console.log("[Trial] Respuesta:", res.status);
-        
-        if (!res.ok) {
-          console.error("[Trial] Error en respuesta:", res.status);
-          return;
-        }
-        
-        const data = await res.json();
-        console.log("[Trial] Data:", data);
-        
-        const { trialStartsAt, trialEndsAt, status } = data.subscription || {};
-        const { hasActiveSubscription, hasActiveGrant } = data;
-        
-        // Si tiene suscripción activa o activeGrant, no mostrar trial
-        if (hasActiveSubscription || hasActiveGrant) {
-          console.log("[Trial] Usuario tiene suscripción activa o grace period - no mostrar trial");
-          setTrialInfo(null);
-          return;
-        }
-        
-        const trial = calculateTrialInfo(
-          trialStartsAt ? new Date(trialStartsAt) : null,
-          trialEndsAt ? new Date(trialEndsAt) : null,
-          hasActiveSubscription
-        );
-        
-        console.log("[Trial] Calculado:", trial);
-        
-        // Verificar si ya vio el modal de bienvenida (guardado en localStorage)
-        const hasSeenWelcome =
-          localStorage.getItem(TRIAL_WELCOME_STORAGE_KEY) === "true" ||
-          localStorage.getItem(LEGACY_TRIAL_WELCOME_STORAGE_KEY) === "true";
-        
-        setTrialInfo({
-          isInTrial: trial.isInTrial,
-          remainingHours: trial.remainingHours,
-          isExpired: trial.isExpired,
-        });
-        
-        // Mostrar modal de bienvenida SOLO si:
-        // 1. Está en trial y no expiró
-        // 2. No tiene suscripción activa
-        // 3. NO ha visto el modal antes
-        if (trial.isInTrial && !trial.isExpired && !hasActiveSubscription && !hasSeenWelcome) {
-          console.log("[Trial] Mostrando modal de bienvenida (primera vez)");
-          setShowTrialWelcome(true);
-        } else if (hasSeenWelcome) {
-          console.log("[Trial] Usuario ya vio el modal - no mostrar");
-        }
-      } catch (error) {
-        console.error("[Trial] Error checking status:", error);
-      }
-    }
-    
-    checkTrial();
-  }, [branchId]);
 
   // ─── Keyboard Shortcuts ───────────────────────────────────────────────────
   const resetKeyboardScannerState = useCallback(() => {
@@ -791,21 +692,66 @@ export default function CajaPage() {
 
   // ─── Startup Logic: Onboarding & Shift ──────────────────────────────────
   const promptSubscriptionActivation = useCallback((message: string) => {
-    // Si está en trial, permitir continuar
-    if (trialInfo?.isInTrial && !trialInfo?.isExpired) {
-      console.log("[Trial] Permitiendo operar durante trial");
-      return;
-    }
-    
-    // Si el trial expiró o no hay trial, mostrar mensaje de activación
-    const shouldOpen = window.confirm(
-      `${message}\n\nActiva la suscripcion para empezar a vender, cobrar y registrar movimientos.\n\n¿Quieres ir a Configuración ahora?`,
-    );
+    setSubscriptionPromptMessage(message);
+    setSubscriptionPromptError("");
+    setShowSubscriptionPrompt(true);
+  }, []);
 
-    if (shouldOpen) {
-      router.push("/configuracion");
+  const handleActivateSubscription = useCallback(async () => {
+    setActivatingSubscription(true);
+    setSubscriptionPromptError("");
+
+    try {
+      const response = await fetch("/api/subscription/create", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-branch-id": branchId,
+        },
+        body: JSON.stringify({ origin: "OPERATIONAL_GATE" }),
+      });
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok || !data?.init_point) {
+        setSubscriptionPromptError(data?.error || "No se pudo generar el link de pago.");
+        setActivatingSubscription(false);
+        return;
+      }
+
+      window.location.href = data.init_point;
+    } catch {
+      setSubscriptionPromptError("No se pudo conectar con el sistema de suscripciones.");
+      setActivatingSubscription(false);
     }
-  }, [router, trialInfo]);
+  }, [branchId]);
+
+  const handleActivatePreviewSubscription = useCallback(async () => {
+    setActivatingPreviewSubscription(true);
+    setPreviewSubscriptionError("");
+
+    try {
+      const response = await fetch("/api/subscription/create", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-branch-id": branchId,
+        },
+        body: JSON.stringify({ origin: "SALE_PREVIEW" }),
+      });
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok || !data?.init_point) {
+        setPreviewSubscriptionError(data?.error || "No se pudo generar el link de pago.");
+        setActivatingPreviewSubscription(false);
+        return;
+      }
+
+      window.location.href = data.init_point;
+    } catch {
+      setPreviewSubscriptionError("No se pudo conectar con el sistema de suscripciones.");
+      setActivatingPreviewSubscription(false);
+    }
+  }, [branchId]);
 
   const explainShiftLock = useCallback(() => {
     alert(`La caja está a nombre de ${shiftResponsibleName}. Transferí o cerrá el turno para operar con este usuario.`);
@@ -866,7 +812,17 @@ export default function CajaPage() {
     } else {
       const data = await res.json().catch(() => null);
       if (res.status === 402) {
-        promptSubscriptionActivation(data?.error || "Necesitas una suscripcion activa para abrir la caja.");
+        const demoShift = createDemoShift({ openingAmount, assignee });
+        setActiveShift(demoShift);
+        setShowOpenShift(false);
+        setShowCloseShift(false);
+        setShowTransferShift(false);
+        setCajaStats((prev) => ({
+          ...prev,
+          openingAmount,
+          enCaja: openingAmount,
+        }));
+        void playAudio("/turno.wav", 0.6);
         return;
       }
       alert(data?.error || "No se pudo abrir el turno.");
@@ -877,6 +833,20 @@ export default function CajaPage() {
     if (!activeShift) return;
     if (!canManageCurrentShift) {
       explainShiftLock();
+      return;
+    }
+    if (activeShift.isDemo) {
+      setActiveShift(null);
+      setShowCloseShift(false);
+      setShowOpenShift(true);
+      setTicket([]);
+      setReceivedAmount("");
+      setCajaStats((prev) => ({
+        ...prev,
+        openingAmount: undefined,
+        enCaja: 0,
+      }));
+      void playAudio("/turno.wav", 0.6);
       return;
     }
     const res = await fetch(`/api/turnos/${activeShift.id}/cerrar`, {
@@ -903,6 +873,26 @@ export default function CajaPage() {
     if (!activeShift) return;
     if (!canManageCurrentShift) {
       explainShiftLock();
+      return;
+    }
+    if (activeShift.isDemo) {
+      setActiveShift((current) =>
+        current
+          ? {
+              ...current,
+              employeeId: assignee.employeeId,
+              employeeName: assignee.employeeName,
+              employee: assignee.employeeId
+                ? {
+                    id: assignee.employeeId,
+                    name: assignee.employeeName,
+                  }
+                : null,
+            }
+          : current,
+      );
+      setShowTransferShift(false);
+      void playAudio("/turno.wav", 0.6);
       return;
     }
 
@@ -981,13 +971,17 @@ export default function CajaPage() {
         setActiveShift(shiftData);
         setShowOpenShift(false);
       } else {
+        if (activeShift?.isDemo) {
+          return;
+        }
+
         setActiveShift(null);
         setShowTransferShift(false);
         setShowCloseShift(false);
         setShowOpenShift(true);
       }
     } catch {}
-  }, [branchId]);
+  }, [activeShift?.isDemo, branchId]);
 
   const loadCajaData = useCallback(async () => {
     try {
@@ -1472,7 +1466,13 @@ export default function CajaPage() {
               } catch {}
               console.error("[Ventas] Error HTTP registrando venta:", res.status, errorText);
               if (res.status === 402 || serverCode === "NO_SUBSCRIPTION_OPERATIONAL") {
-                promptSubscriptionActivation(serverMessage || "Necesitas una suscripcion activa para registrar ventas.");
+                setPreviewSubscriptionError("");
+                setPreviewSale({
+                  ...newSale,
+                  ...(received ? { receivedAmount: received } : {}),
+                });
+                setShowCashNumpad(false);
+                void playAudio("/blip.wav", 0.8);
                 return;
               }
               alert(serverMessage || "No se pudo registrar la venta en el servidor. Intentá de nuevo en unos segundos.");
@@ -1835,6 +1835,38 @@ export default function CajaPage() {
   }
 
   // ─── Cash numpad overlay ──────────────────────────────────────────────────
+  if (previewSale) {
+    return (
+      <ConfirmationScreen
+        sale={previewSale}
+        onChange={
+          previewSale.paymentMethod === "CASH" && typeof previewSale.receivedAmount === "number"
+            ? Math.max(0, previewSale.receivedAmount - previewSale.total)
+            : null
+        }
+        onCorregir={() => {
+          setPreviewSale(null);
+          setPreviewSubscriptionError("");
+        }}
+        onListo={() => void handleActivatePreviewSubscription()}
+        onEmitTicket={() => {}}
+        onEmitInvoice={() => {}}
+        canEmitTicket={false}
+        canEmitInvoice={false}
+        pauseAutoClose
+        title="VENTA REGISTRADA"
+        description="Una vez que actives tu cuenta, esta es la velocidad que vas a tener en tu negocio."
+        primaryActionLabel="ACTIVA TU CUENTA PARA EMPEZAR"
+        primaryActionLoadingLabel="Generando link..."
+        primaryActionLoading={activatingPreviewSubscription}
+        footerText={
+          previewSubscriptionError ||
+          "Todavia no registramos esta venta. Activa tu cuenta y empeza a operar de verdad."
+        }
+      />
+    );
+  }
+
   if (showCashNumpad) {
     return (
       <div style={{ padding: "24px", display: "flex", flexDirection: "column", gap: "20px", minHeight: "100dvh" }}>
@@ -1943,6 +1975,23 @@ export default function CajaPage() {
           <span style={{ fontSize: "13px", color: "var(--text-3)", fontWeight: 600, display: "flex", gap: "8px", alignItems: "center" }}>
             {!isOnline && <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--amber)", display: "inline-block" }} />}
             TURNO: {activeShift.employee?.name || activeShift.employeeName || "Activo"}
+            {activeShift.isDemo ? (
+              <span
+                style={{
+                  padding: "2px 8px",
+                  borderRadius: "999px",
+                  background: "rgba(59,130,246,.14)",
+                  border: "1px solid rgba(59,130,246,.24)",
+                  color: "#bfdbfe",
+                  fontSize: "11px",
+                  fontWeight: 800,
+                  letterSpacing: ".06em",
+                  textTransform: "uppercase",
+                }}
+              >
+                Demo
+              </span>
+            ) : null}
           </span>
         ) : (
           <button
@@ -1993,6 +2042,23 @@ export default function CajaPage() {
           }}
         >
           {shiftLockMessage}
+        </div>
+      )}
+
+      {activeShift?.isDemo && (
+        <div
+          style={{
+            margin: "12px 16px 0",
+            padding: "12px 14px",
+            borderRadius: "14px",
+            border: "1px solid rgba(59, 130, 246, 0.3)",
+            background: "rgba(59, 130, 246, 0.12)",
+            color: "var(--text)",
+            fontSize: "13px",
+            fontWeight: 600,
+          }}
+        >
+          Modo demo activo. La caja se abrio visualmente con {formatARS(activeShift.openingAmount)}, pero no se registro un turno real todavia.
         </div>
       )}
 
@@ -2698,6 +2764,10 @@ export default function CajaPage() {
           employeeId={employeeId}
           onClose={() => setShowGasto(false)}
           onSuccess={() => { setShowGasto(false); fetchStats(); }}
+          onSubscriptionRequired={(message) => {
+            setShowGasto(false);
+            promptSubscriptionActivation(message);
+          }}
         />
       )}
       {showOtro && (
@@ -2714,6 +2784,10 @@ export default function CajaPage() {
           employeeId={employeeId}
           onClose={() => setShowRetiro(false)}
           onSuccess={() => { setShowRetiro(false); fetchStats(); }}
+          onSubscriptionRequired={(message) => {
+            setShowRetiro(false);
+            promptSubscriptionActivation(message);
+          }}
         />
       )}
       {showCredit && (
@@ -2977,23 +3051,38 @@ export default function CajaPage() {
         </ModalPortal>
       )}
 
-      {/* Trial Welcome Modal */}
-      {showTrialWelcome && trialInfo && (
-        <TrialWelcomeModal
-          remainingHours={trialInfo.remainingHours}
-          onExplore={handleTrialExplore}
-          onActivate={handleTrialActivate}
-        />
-      )}
-
-      {/* Trial Banner */}
-      {trialInfo?.isInTrial && !trialInfo.isExpired && !showTrialWelcome && !trialDismissed && (
-        <TrialBanner
-          remainingHours={trialInfo.remainingHours}
-          onActivate={handleTrialBannerActivate}
-          onDismiss={handleTrialBannerDismiss}
+      {showSubscriptionPrompt && (
+        <OperationalSubscriptionModal
+          message={subscriptionPromptMessage || "Necesitas una suscripcion activa para usar esta accion."}
+          loading={activatingSubscription}
+          error={subscriptionPromptError}
+          onActivate={() => void handleActivateSubscription()}
+          onClose={() => {
+            if (activatingSubscription) return;
+            setShowSubscriptionPrompt(false);
+            setSubscriptionPromptError("");
+          }}
         />
       )}
     </div>
   );
+}
+
+function createDemoShift(args: {
+  openingAmount: number;
+  assignee: ShiftAssignee;
+}): ActiveShift {
+  return {
+    id: `demo-shift-${Date.now()}`,
+    openingAmount: args.openingAmount,
+    employeeId: args.assignee.employeeId,
+    employeeName: args.assignee.employeeName,
+    isDemo: true,
+    employee: args.assignee.employeeId
+      ? {
+          id: args.assignee.employeeId,
+          name: args.assignee.employeeName,
+        }
+      : null,
+  };
 }

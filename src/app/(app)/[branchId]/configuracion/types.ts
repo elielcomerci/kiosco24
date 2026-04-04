@@ -39,4 +39,7 @@ export type TicketPrintMode = "STANDARD" | "THERMAL_58" | "THERMAL_80";
 export interface Subscription {
   status: string;
   managementUrl: string | null;
+  amountArs?: number | null;
+  pricingSource?: "DEFAULT" | "EMAIL_OVERRIDE" | "ACCOUNT_OFFER" | null;
+  freezeEndsAt?: string | null;
 }

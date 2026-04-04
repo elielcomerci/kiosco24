@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import { SUBSCRIPTION_CANCEL_LABEL, SUBSCRIPTION_PRICE_LABEL, SUBSCRIPTION_PROMO_LABEL } from "@/lib/subscription-plan";
+import { SUBSCRIPTION_CANCEL_LABEL, SUBSCRIPTION_PRICE_ARS, formatSubscriptionPrice, getSubscriptionPromoLabel } from "@/lib/subscription-plan";
 import type { Employee, Subscription } from "../types";
 
 interface EquipoTabProps {
@@ -86,10 +86,10 @@ export default function EquipoTab({
               ) : (
                 <>
                   <div style={{ fontSize: "14px", color: "var(--text-2)", lineHeight: 1.6 }}>
-                    <p style={{ margin: "0 0 8px" }}>{SUBSCRIPTION_PROMO_LABEL}</p>
-                    <p style={{ margin: 0, fontSize: "13px", color: "var(--text-3)" }}>{SUBSCRIPTION_PRICE_LABEL} {SUBSCRIPTION_CANCEL_LABEL}</p>
+                    <p style={{ margin: "0 0 8px" }}>{getSubscriptionPromoLabel(subscription?.amountArs ?? SUBSCRIPTION_PRICE_ARS)}</p>
+                    <p style={{ margin: 0, fontSize: "13px", color: "var(--text-3)" }}>{formatSubscriptionPrice(subscription?.amountArs ?? SUBSCRIPTION_PRICE_ARS)} {SUBSCRIPTION_CANCEL_LABEL}</p>
                   </div>
-                  {subscription ? (
+                  {subscription && subscription.status !== "NOT_CONFIGURED" ? (
                     <div style={{ borderTop: "1px solid var(--border)", paddingTop: "12px" }}>
                       <button
                         onClick={handleCreateSubscription}

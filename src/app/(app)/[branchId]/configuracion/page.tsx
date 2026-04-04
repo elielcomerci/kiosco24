@@ -9,14 +9,15 @@ import TicketModal from "@/components/ticket/TicketModal";
 import ThemeEditor from "@/components/ui/ThemeEditor";
 import {
   SUBSCRIPTION_CANCEL_LABEL,
-  SUBSCRIPTION_PRICE_LABEL,
-  SUBSCRIPTION_PROMO_LABEL,
+  SUBSCRIPTION_PRICE_ARS,
+  formatSubscriptionPrice,
+  getSubscriptionPromoLabel,
 } from "@/lib/subscription-plan";
 import { optimizeBrandingImage } from "@/lib/image-upload";
 import type { TicketPreviewData } from "@/lib/ticket-format";
 import { getTicketPrintModeLabel, type TicketPrintMode } from "@/lib/ticketing";
 import ConfigTabsContainer from "./ConfigTabsContainer";
-import type { Employee, Category, Branch, PricingMode, FiscalEnvironment } from "./types";
+import type { Employee, Category, Branch, PricingMode, FiscalEnvironment, Subscription } from "./types";
 import ZapAdSlot from "@/components/ads/ZapAdSlot";
 
 // ─── Employee Form Modal ───────────────────────────────────────────────────────
@@ -643,7 +644,7 @@ export default function ConfiguracionPage() {
   const [loadingTicketSettings, setLoadingTicketSettings] = useState(true);
   const [loadingFiscalSettings, setLoadingFiscalSettings] = useState(true);
 
-  const [subscription, setSubscription] = useState<{status: string, managementUrl: string | null} | null>(null);
+  const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [creatingSubscription, setCreatingSubscription] = useState(false);
   const [subscriptionError, setSubscriptionError] = useState<string | null>(null);
   const [cancelingSubscription, setCancelingSubscription] = useState(false);
@@ -811,7 +812,29 @@ export default function ConfiguracionPage() {
       const res = await fetch("/api/subscription/status");
       if (res.ok) {
         const data = await res.json();
-        setSubscription(data);
+        setSubscription(
+          data?.subscription
+            ? {
+                status: data.subscription.status,
+                managementUrl: data.subscription.managementUrl,
+                amountArs:
+                  typeof data?.pricing?.amountArs === "number" ? data.pricing.amountArs : null,
+                pricingSource:
+                  typeof data?.pricing?.source === "string" ? data.pricing.source : null,
+                freezeEndsAt:
+                  typeof data?.pricing?.freezeEndsAt === "string" ? data.pricing.freezeEndsAt : null,
+              }
+            : {
+                status: "NOT_CONFIGURED",
+                managementUrl: null,
+                amountArs:
+                  typeof data?.pricing?.amountArs === "number" ? data.pricing.amountArs : null,
+                pricingSource:
+                  typeof data?.pricing?.source === "string" ? data.pricing.source : null,
+                freezeEndsAt:
+                  typeof data?.pricing?.freezeEndsAt === "string" ? data.pricing.freezeEndsAt : null,
+              },
+        );
       }
     } catch {}
     setLoadingSubscription(false);
@@ -1226,7 +1249,11 @@ export default function ConfiguracionPage() {
     setCreatingSubscription(true);
     setSubscriptionError(null);
     try {
-      const res = await fetch("/api/subscription/create", { method: "POST" });
+      const res = await fetch("/api/subscription/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ origin: "SETTINGS" }),
+      });
       const data = await res.json().catch(() => null);
       if (res.ok && data?.init_point) {
         window.location.href = data.init_point;
@@ -2518,13 +2545,13 @@ export default function ConfiguracionPage() {
                   {subscription?.status === "ACTIVE" && <span style={{ color: "var(--green)", fontWeight: 600 }}>Activa ✔️</span>}
                   {subscription?.status === "PENDING" && <span style={{ color: "var(--amber)", fontWeight: 600 }}>Pendiente / Procesando ⏳</span>}
                   {subscription?.status === "CANCELLED" && <span style={{ color: "var(--red)", fontWeight: 600 }}>Cancelada ❌</span>}
-                  {!subscription && <span style={{ color: "var(--text-3)" }}>No configurada</span>}
+                  {(!subscription || subscription.status === "NOT_CONFIGURED") && <span style={{ color: "var(--text-3)" }}>No configurada</span>}
                 </div>
               </div>
-              <div style={{ fontSize: "20px", fontWeight: 800 }}>{SUBSCRIPTION_PRICE_LABEL}<span style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 500 }}> por mes</span></div>
+              <div style={{ fontSize: "20px", fontWeight: 800 }}>{formatSubscriptionPrice(subscription?.amountArs ?? SUBSCRIPTION_PRICE_ARS)}<span style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 500 }}> por mes</span></div>
             </div>
             <div style={{ fontSize: "12px", color: "var(--text-3)" }}>
-              {SUBSCRIPTION_PROMO_LABEL} {SUBSCRIPTION_CANCEL_LABEL}
+              {getSubscriptionPromoLabel(subscription?.amountArs ?? SUBSCRIPTION_PRICE_ARS)} {SUBSCRIPTION_CANCEL_LABEL}
             </div>
             
             {subscription?.managementUrl && (
@@ -2549,7 +2576,7 @@ export default function ConfiguracionPage() {
                   className="btn btn-sm btn-green" 
                   style={{ width: "100%", justifyContent: "center" }}
                 >
-                  {creatingSubscription ? "Generando link..." : (subscription ? "Generar nuevo link de pago" : "Suscribirse ahora")}
+                  {creatingSubscription ? "Generando link..." : (subscription && subscription.status !== "NOT_CONFIGURED" ? "Generar nuevo link de pago" : "Suscribirse ahora")}
                 </button>
                 {subscriptionError && (
                   <p style={{ color: "var(--red)", fontSize: "13px", marginTop: "8px", textAlign: "center", marginBottom: 0 }}>

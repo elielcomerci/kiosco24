@@ -32,7 +32,7 @@ export default function PlatformProductBackupManager() {
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
-      anchor.download = `kiosco24-platform-catalog-${new Date().toISOString().slice(0, 10)}.json`;
+      anchor.download = `clikit-platform-catalog-${new Date().toISOString().slice(0, 10)}.json`;
       document.body.appendChild(anchor);
       anchor.click();
       anchor.remove();

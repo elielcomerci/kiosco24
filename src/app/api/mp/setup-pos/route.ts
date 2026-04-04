@@ -2,7 +2,29 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { getBranchId } from "@/lib/branch";
+import { getMercadoPagoPosExternalIds } from "@/lib/brand";
 import { getMpAccessTokenForBranch } from "@/lib/mp-token";
+
+async function findExistingPosId(externalIds: readonly string[], headers: HeadersInit) {
+  for (const externalId of externalIds) {
+    const searchRes = await fetch(
+      `https://api.mercadopago.com/pos?external_id=${externalId}`,
+      { headers }
+    );
+
+    if (!searchRes.ok) {
+      continue;
+    }
+
+    const searchData = await searchRes.json();
+    const existingPosId = searchData.results?.[0]?.external_id;
+    if (existingPosId) {
+      return existingPosId;
+    }
+  }
+
+  return null;
+}
 
 /**
  * POST /api/mp/setup-pos
@@ -85,8 +107,12 @@ export async function POST(req: NextRequest) {
 
   // ── 2. Caja / POS (idempotente por external_id) ──────────────────────────
   // Usamos el branchId como external_id para que sea único y re-ejecutable
-  const externalPosId = `kiosco24-pos-${branchId}`;
+  const [externalPosId, legacyExternalPosId] = getMercadoPagoPosExternalIds(branchId);
   let posId = branch.mpPosId;
+
+  if (!posId) {
+    posId = await findExistingPosId([externalPosId, legacyExternalPosId], mpHeaders);
+  }
 
   if (!posId) {
     const posRes = await fetch("https://api.mercadopago.com/pos", {
@@ -104,13 +130,12 @@ export async function POST(req: NextRequest) {
       const err = await posRes.json();
       // Si MP responde "ya existe" (409) buscamos por external_id antes de fallar
       if (posRes.status === 409) {
-        const searchRes = await fetch(
-          `https://api.mercadopago.com/pos?external_id=${externalPosId}`,
-          { headers: mpHeaders }
-        );
-        if (searchRes.ok) {
-          const searchData = await searchRes.json();
-          posId = searchData.results?.[0]?.external_id ?? externalPosId;
+        posId = await findExistingPosId([externalPosId, legacyExternalPosId], mpHeaders);
+        if (!posId) {
+          return NextResponse.json(
+            { error: "No se pudo encontrar la caja existente en MercadoPago.", detail: err },
+            { status: 502 }
+          );
         }
       } else {
         console.error("[MP setup-pos] Error creando caja:", err);

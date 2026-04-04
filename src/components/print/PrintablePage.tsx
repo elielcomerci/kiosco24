@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import BrandLogo from "@/components/branding/BrandLogo";
 import { useBranchWorkspace } from "@/components/ui/BranchWorkspace";
+import { LEGACY_PRINT_EVENT, PRINT_EVENT } from "@/lib/brand";
 
 export default function PrintablePage({
   title,
@@ -21,11 +23,13 @@ export default function PrintablePage({
     const refreshTimestamp = () => setPrintedAt(new Date());
 
     window.addEventListener("beforeprint", refreshTimestamp);
-    window.addEventListener("kiosco24:print", refreshTimestamp as EventListener);
+    window.addEventListener(PRINT_EVENT, refreshTimestamp as EventListener);
+    window.addEventListener(LEGACY_PRINT_EVENT, refreshTimestamp as EventListener);
 
     return () => {
       window.removeEventListener("beforeprint", refreshTimestamp);
-      window.removeEventListener("kiosco24:print", refreshTimestamp as EventListener);
+      window.removeEventListener(PRINT_EVENT, refreshTimestamp as EventListener);
+      window.removeEventListener(LEGACY_PRINT_EVENT, refreshTimestamp as EventListener);
     };
   }, []);
 
@@ -46,7 +50,9 @@ export default function PrintablePage({
           )}
 
           <div>
-            <div className="print-sheet__eyebrow">Kiosco24</div>
+            <div className="print-sheet__eyebrow">
+              <BrandLogo tone="blue" width={88} />
+            </div>
             <h1 className="print-sheet__title">{title}</h1>
             <div className="print-sheet__subtitle">
               {branch.name}

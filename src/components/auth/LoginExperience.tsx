@@ -2,6 +2,7 @@
 
 import { signIn } from "next-auth/react";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import BrandLogo from "@/components/branding/BrandLogo";
 import {
   SUBSCRIPTION_CANCEL_LABEL,
   SUBSCRIPTION_PROMO_LABEL,
@@ -306,16 +307,12 @@ export default function LoginExperience({
         background: "var(--bg)",
       }}
     >
-      <div style={{ textAlign: "center" }}>
-        <div
-          style={{
-            fontSize: "48px",
-            marginBottom: "12px",
-            filter: "drop-shadow(0 0 20px rgba(34,197,94,0.3))",
-          }}
-        >
-          {"\uD83C\uDFEA"}
-        </div>
+      <div style={{ textAlign: "center", display: "grid", justifyItems: "center", gap: "14px" }}>
+        <BrandLogo
+          tone="white"
+          width={210}
+          style={{ filter: "drop-shadow(0 0 22px rgba(143,102,255,0.24))" }}
+        />
         <h1
           style={{
             fontSize: "28px",
@@ -325,7 +322,7 @@ export default function LoginExperience({
             marginBottom: "8px",
           }}
         >
-          Kiosco24
+          Clikit
         </h1>
         <p
           style={{

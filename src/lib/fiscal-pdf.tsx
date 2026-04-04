@@ -314,10 +314,10 @@ function InvoicePdfDocument({
   return (
     <Document
       title={`Factura C ${voucherNumber}`}
-      author="Kiosco24"
+      author="Clikit"
       subject="Factura C"
-      creator="Kiosco24"
-      producer="Kiosco24"
+      creator="Clikit"
+      producer="Clikit"
     >
       <Page
         size={{ width: receiptWidth, height: RECEIPT_PAGE_HEIGHT }}

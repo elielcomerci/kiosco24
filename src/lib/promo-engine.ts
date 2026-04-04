@@ -1,5 +1,5 @@
 /**
- * Motor de Promociones — Kiosco24
+ * Motor de Promociones — Clikit
  *
  * Función pura: recibe el estado actual del carrito + las promociones vigentes
  * y devuelve los items ajustados + metadatos de auditoría.

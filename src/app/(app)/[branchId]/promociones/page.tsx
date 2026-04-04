@@ -7,7 +7,7 @@ import PromocionesClient from "./PromocionesClient";
 import "./promociones.css"; // CSS isolation for this module
 
 export const metadata = {
-  title: "Promociones - Kiosco24",
+  title: "Promociones - Clikit",
 };
 
 export default async function PromocionesPage({

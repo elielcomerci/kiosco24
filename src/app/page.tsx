@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import BrandLogo from "@/components/branding/BrandLogo";
 import { auth, signOut } from "@/lib/auth";
 import { isPlatformAdmin } from "@/lib/platform-admin";
 import { prisma } from "@/lib/prisma";
@@ -124,8 +125,8 @@ export default async function LandingPage() {
           zIndex: 20,
         }}
       >
-        <div style={{ display: "grid", gap: "2px" }}>
-          <div style={{ fontSize: "23px", fontWeight: 900, letterSpacing: "-0.04em" }}>Kiosco24</div>
+        <div style={{ display: "grid", gap: "8px" }}>
+          <BrandLogo tone="white" width={152} />
           <div style={{ color: "#94a3b8", fontSize: "12px", letterSpacing: ".08em", textTransform: "uppercase" }}>
             Sistema operativo para kioscos
           </div>
@@ -468,7 +469,10 @@ export default async function LandingPage() {
           color: "#64748b",
         }}
       >
-        Kiosco24 by ZAP.
+        <span style={{ display: "inline-grid", justifyItems: "center", gap: "10px" }}>
+          <BrandLogo tone="white" width={118} />
+          <span>Clikit by ZAP.</span>
+        </span>
       </footer>
     </div>
   );

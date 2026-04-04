@@ -28,7 +28,7 @@ export default function TicketPreview({
       ) : null}
 
       <header className="ticket-preview__header">
-        <h2 className="ticket-preview__branch">{ticket.branchName || "Kiosco24"}</h2>
+        <h2 className="ticket-preview__branch">{ticket.branchName || "Clikit"}</h2>
         {ticket.showAddress && ticket.branchAddress ? (
           <div className="ticket-preview__meta-line">{ticket.branchAddress}</div>
         ) : null}

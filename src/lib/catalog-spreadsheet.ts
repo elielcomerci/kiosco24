@@ -197,7 +197,7 @@ export function buildCatalogWorkbook(input: {
   const workbook = XLSX.utils.book_new();
 
   const infoRows = [
-    ["Kiosco24", "Plantilla de catalogo"],
+    ["Clikit", "Plantilla de catalogo"],
     ["Sucursal origen", input.branchName],
     ["Generado", input.generatedAt.toISOString()],
     ["Modo de precios", input.pricingMode],

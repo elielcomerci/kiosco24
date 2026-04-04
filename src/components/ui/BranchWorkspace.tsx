@@ -11,6 +11,7 @@ import {
 } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import ModalPortal from "@/components/ui/ModalPortal";
+import { LEGACY_PRINT_EVENT, PRINT_EVENT } from "@/lib/brand";
 import { useIsDesktop } from "@/lib/hooks";
 
 export interface BranchWorkspaceBranch {
@@ -200,7 +201,8 @@ export function BranchWorkspaceProvider({
 
   const requestPrint = useCallback(() => {
     document.body.classList.add("print-rich");
-    window.dispatchEvent(new CustomEvent("kiosco24:print"));
+    window.dispatchEvent(new CustomEvent(PRINT_EVENT));
+    window.dispatchEvent(new CustomEvent(LEGACY_PRINT_EVENT));
     window.setTimeout(() => {
       window.print();
     }, 40);

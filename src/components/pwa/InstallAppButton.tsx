@@ -152,20 +152,20 @@ export default function InstallAppButton({ compact = false }: InstallAppButtonPr
 
                 {platform.isIOS ? (
                   <div style={{ display: "grid", gap: "10px", color: "var(--text-2)", lineHeight: 1.5 }}>
-                    <div>1. Abre Kiosco24 en Safari.</div>
+                    <div>1. Abre Clikit en Safari.</div>
                     <div>2. Toca Compartir.</div>
                     <div>3. Elige Agregar a pantalla de inicio.</div>
                   </div>
                 ) : platform.isFirefox ? (
                   <div style={{ display: "grid", gap: "10px", color: "var(--text-2)", lineHeight: 1.5 }}>
                     <div>Firefox no ofrece una instalacion PWA completa como Chrome o Edge.</div>
-                    <div>Para instalarla como app, abre Kiosco24 en Chrome o Edge.</div>
+                    <div>Para instalarla como app, abre Clikit en Chrome o Edge.</div>
                   </div>
                 ) : (
                   <div style={{ display: "grid", gap: "10px", color: "var(--text-2)", lineHeight: 1.5 }}>
-                    <div>1. Abre Kiosco24 en Chrome o Edge.</div>
+                    <div>1. Abre Clikit en Chrome o Edge.</div>
                     <div>2. Si el navegador no muestra el popup, usa el menu.</div>
-                    <div>3. Busca Instalar app, Instalar Kiosco24 o Crear acceso directo.</div>
+                    <div>3. Busca Instalar app, Instalar Clikit o Crear acceso directo.</div>
                   </div>
                 )}
 

@@ -2,7 +2,7 @@
  * GET /api/partner/verify
  *
  * Endpoint usado por tienda.zap para verificar que un accessKey
- * pertenece a un Branch activo en kiosco24 y obtener su branding.
+ * pertenece a un Branch activo en Clikit y obtener su branding.
  *
  * Requiere la cabecera interna:
  *   X-Partner-Secret: <PARTNER_INTERNAL_SECRET>

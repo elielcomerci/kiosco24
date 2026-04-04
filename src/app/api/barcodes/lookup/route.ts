@@ -71,7 +71,7 @@ export async function GET(req: Request) {
       `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json?fields=product_name,generic_name,brands,quantity,image_front_url,image_url`,
       {
         headers: {
-          "User-Agent": "Kiosco24/1.0 (barcode lookup)",
+          "User-Agent": "Clikit/1.0 (barcode lookup)",
         },
         signal: controller.signal,
       }

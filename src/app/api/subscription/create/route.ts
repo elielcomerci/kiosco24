@@ -47,7 +47,7 @@ export async function POST() {
   };
 
   const payload = {
-    reason: "Suscripción Mensual - Kiosco24",
+    reason: "Suscripción Mensual - Clikit",
     auto_recurring: {
       frequency: 1,
       frequency_type: "months",
@@ -61,7 +61,7 @@ export async function POST() {
   };
 
   if (priceOverride) {
-    payload.reason = "Suscripcion Mensual Especial - Kiosco24";
+    payload.reason = "Suscripcion Mensual Especial - Clikit";
   }
 
   payload.auto_recurring.transaction_amount = transactionAmount;

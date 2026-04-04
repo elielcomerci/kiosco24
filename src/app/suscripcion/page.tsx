@@ -13,6 +13,7 @@ import {
   formatSubscriptionPrice,
   getSubscriptionPromoLabel,
 } from "@/lib/subscription-plan";
+import BrandLogo from "@/components/branding/BrandLogo";
 import SubscriptionActions from "@/components/subscription/SubscriptionActions";
 import { redirect } from "next/navigation";
 
@@ -158,8 +159,11 @@ export default async function SubscriptionPage({
       >
         {freshAccess.allowed && isMercadoPagoReturn ? (
           <div style={{ display: "flex", flexDirection: "column", gap: "16px", textAlign: "center", padding: "16px 0" }}>
+            <div style={{ display: "flex", justifyContent: "center" }}>
+              <BrandLogo tone="white" width={168} />
+            </div>
             <div style={{ fontSize: "56px" }}>{"\uD83C\uDF89"}</div>
-            <h1 style={{ fontSize: "28px", margin: 0, fontWeight: 800 }}>¡Gracias por sumarte a Kiosco24!</h1>
+            <h1 style={{ fontSize: "28px", margin: 0, fontWeight: 800 }}>¡Gracias por sumarte a Clikit!</h1>
             <p style={{ color: "var(--text-2)", margin: 0, lineHeight: 1.6, fontSize: "16px" }}>
               El cobro se está procesando. Ya podés disfrutar de todas las herramientas exclusivas para manejar tu negocio al siguiente nivel.
             </p>
@@ -168,7 +172,7 @@ export default async function SubscriptionPage({
               className="btn btn-primary btn-lg" 
               style={{ marginTop: "16px", textDecoration: "none", width: "100%", justifyContent: "center" }}
             >
-              Ir a mi Kiosco
+              Ir a Clikit
             </a>
           </div>
         ) : (

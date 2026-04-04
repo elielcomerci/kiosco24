@@ -526,7 +526,7 @@ export default function VentasReportPDF({ data }: { data: ReportData }) {
             styles.footer
           }
         >
-          Generado el {new Date().toLocaleString("es-AR")} - Kiosco24
+          Generado el {new Date().toLocaleString("es-AR")} - Clikit
         </Text>
       </Page>
     </Document>

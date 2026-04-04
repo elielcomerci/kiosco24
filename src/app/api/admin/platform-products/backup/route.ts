@@ -76,7 +76,7 @@ export async function GET() {
     status: 200,
     headers: {
       "Content-Type": "application/json; charset=utf-8",
-      "Content-Disposition": `attachment; filename="kiosco24-platform-catalog-${new Date()
+      "Content-Disposition": `attachment; filename="clikit-platform-catalog-${new Date()
         .toISOString()
         .slice(0, 10)}.json"`,
     },

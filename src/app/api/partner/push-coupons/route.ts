@@ -1,7 +1,7 @@
 /**
  * POST /api/partner/push-coupons
  *
- * Proxy interno de kiosco24 → tienda.zap.
+ * Proxy interno de Clikit → tienda.zap.
  * El frontend del kiosco llama a este endpoint con los datos del lote
  * de cupones (incluyendo el PDF pre-renderizado en base64).
  *

@@ -178,7 +178,7 @@ export default function CatalogSpreadsheetModal({
           <div>
             <h2 style={{ fontSize: "22px", fontWeight: 800, margin: 0 }}>Importar plantilla</h2>
             <p style={{ margin: "6px 0 0", color: "var(--text-3)", fontSize: "13px" }}>
-              Subí un XLSX exportado desde Kiosco24 y revisá el impacto antes de aplicar.
+              Subí un XLSX exportado desde Clikit y revisá el impacto antes de aplicar.
             </p>
           </div>
           <button className="btn btn-sm btn-ghost" onClick={onClose}>Cerrar</button>

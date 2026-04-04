@@ -151,7 +151,7 @@ export default function CouponGeneratorModal({
       // 1. Generar PDF
       const { blob, rawCoupons } = await generatePdfBlob();
 
-      // 2. Subir directamente el Blob a Cloudflare R2 usando el endpoint de Kiosco24
+      // 2. Subir directamente el Blob a Cloudflare R2 usando el endpoint de Clikit
       const formData = new FormData();
       const filename = `cupones-${promotion.name.replace(/\s+/g, "-").toLowerCase()}-${Date.now()}.pdf`;
       formData.append("file", blob, filename);

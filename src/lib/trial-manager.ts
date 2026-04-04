@@ -85,7 +85,7 @@ export function getTrialMessage(hours: number): {
   if (hours >= 12) {
     return {
       title: "Período de prueba activo",
-      description: `Tenés ${formatTrialTime(hours)} para explorar Kiosco24 sin límites.`,
+      description: `Tenés ${formatTrialTime(hours)} para explorar Clikit sin límites.`,
       urgency: "low",
     };
   }
@@ -100,7 +100,7 @@ export function getTrialMessage(hours: number): {
   
   return {
     title: "Período de prueba finalizado",
-    description: "Activá tu suscripción para seguir usando Kiosco24.",
+    description: "Activá tu suscripción para seguir usando Clikit.",
     urgency: "high",
   };
 }

@@ -1,7 +1,8 @@
 import { openDB } from "idb";
+import { LEGACY_OFFLINE_DB_NAME, OFFLINE_DB_NAME } from "@/lib/brand";
 
-const DB_NAME = "kiosco24-db";
 const STORE_NAME = "pending_sales";
+let dbNamePromise: Promise<string> | null = null;
 
 type PendingSaleRecord = {
   id?: number;
@@ -15,8 +16,32 @@ type PendingSaleRecord = {
   creditCustomerId?: string | null;
 };
 
+async function resolveDbName() {
+  if (typeof indexedDB === "undefined" || typeof indexedDB.databases !== "function") {
+    return LEGACY_OFFLINE_DB_NAME;
+  }
+
+  const databases = await indexedDB.databases();
+  if (databases.some((database) => database.name === OFFLINE_DB_NAME)) {
+    return OFFLINE_DB_NAME;
+  }
+  if (databases.some((database) => database.name === LEGACY_OFFLINE_DB_NAME)) {
+    return LEGACY_OFFLINE_DB_NAME;
+  }
+
+  return OFFLINE_DB_NAME;
+}
+
+function getResolvedDbName() {
+  if (!dbNamePromise) {
+    dbNamePromise = resolveDbName();
+  }
+
+  return dbNamePromise;
+}
+
 export async function getDb() {
-  return openDB(DB_NAME, 1, {
+  return openDB(await getResolvedDbName(), 1, {
     upgrade(db) {
       if (!db.objectStoreNames.contains(STORE_NAME)) {
         db.createObjectStore(STORE_NAME, { keyPath: "id", autoIncrement: true });

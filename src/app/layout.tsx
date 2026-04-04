@@ -5,16 +5,16 @@ import { GeistSans } from "geist/font/sans";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Kiosco24",
-  description: "POS rapido para kioscos argentinos",
+  title: "Clikit",
+  description: "POS rapido para kioscos y comercios argentinos",
   manifest: "/manifest.json",
   icons: {
-    icon: "/favicon.ico",
+    icon: [{ url: "/clikit.svg", type: "image/svg+xml" }],
     apple: "/apple-touch-icon.png",
   },
   appleWebApp: {
     capable: true,
-    title: "Kiosco24",
+    title: "Clikit",
     statusBarStyle: "default",
   },
 };

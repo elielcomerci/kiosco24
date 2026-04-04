@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { isSoundEnabled, toggleSound } from "@/lib/audio";
+import { LEGACY_SOUND_TOGGLE_EVENT, SOUND_TOGGLE_EVENT } from "@/lib/brand";
 
 export default function SoundToggle() {
   const [enabled, setEnabled] = useState(true);
@@ -14,8 +15,12 @@ export default function SoundToggle() {
       setEnabled(e.detail);
     };
 
-    window.addEventListener("kiosco24_sound_toggle", handleToggle);
-    return () => window.removeEventListener("kiosco24_sound_toggle", handleToggle);
+    window.addEventListener(SOUND_TOGGLE_EVENT, handleToggle);
+    window.addEventListener(LEGACY_SOUND_TOGGLE_EVENT, handleToggle);
+    return () => {
+      window.removeEventListener(SOUND_TOGGLE_EVENT, handleToggle);
+      window.removeEventListener(LEGACY_SOUND_TOGGLE_EVENT, handleToggle);
+    };
   }, []);
 
   const handleToggle = () => {

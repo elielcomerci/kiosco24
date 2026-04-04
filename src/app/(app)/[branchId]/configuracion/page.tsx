@@ -2512,7 +2512,7 @@ export default function ConfiguracionPage() {
           <div className="card" style={{ padding: "16px", display: "flex", flexDirection: "column", gap: "12px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div>
-                <div style={{ fontWeight: 700, fontSize: "15px" }}>Suscripción Mensual a Kiosco24</div>
+                <div style={{ fontWeight: 700, fontSize: "15px" }}>Suscripción Mensual a Clikit</div>
                 <div style={{ fontSize: "13px", color: "var(--text-3)", marginTop: "2px" }}>
                   Estado: {' '}
                   {subscription?.status === "ACTIVE" && <span style={{ color: "var(--green)", fontWeight: 600 }}>Activa ✔️</span>}

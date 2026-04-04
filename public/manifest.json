@@ -1,7 +1,7 @@
 {
-  "name": "Kiosco 24",
-  "short_name": "Kiosco24",
-  "description": "El sistema de ventas mas rapido para tu kiosco.",
+  "name": "Clikit",
+  "short_name": "Clikit",
+  "description": "El sistema de ventas mas rapido para tu negocio.",
   "id": "/",
   "start_url": "/",
   "scope": "/",
@@ -33,7 +33,7 @@
   ],
   "shortcuts": [
     {
-      "name": "Abrir Kiosco24",
+      "name": "Abrir Clikit",
       "short_name": "Abrir",
       "url": "/"
     },

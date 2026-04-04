@@ -31,6 +31,10 @@ import { savePendingSale } from "@/lib/offline/db";
 import { useOnlineStatus } from "@/lib/offline/sync";
 import { useIsDesktop } from "@/lib/hooks";
 import { playAudio, preloadAudio } from "@/lib/audio";
+import {
+  LEGACY_TRIAL_WELCOME_STORAGE_KEY,
+  TRIAL_WELCOME_STORAGE_KEY,
+} from "@/lib/brand";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -441,18 +445,23 @@ export default function CajaPage() {
   const allowNegativeStock = products[0]?.allowNegativeStock ?? false;
   
   // Trial handlers
+  const markTrialWelcomeSeen = useCallback(() => {
+    localStorage.setItem(TRIAL_WELCOME_STORAGE_KEY, "true");
+    localStorage.setItem(LEGACY_TRIAL_WELCOME_STORAGE_KEY, "true");
+  }, []);
+
   const handleTrialExplore = useCallback(() => {
     // Guardar que el usuario ya vio el modal
-    localStorage.setItem("kiosco24_trial_welcome_seen", "true");
+    markTrialWelcomeSeen();
     setShowTrialWelcome(false);
-  }, []);
+  }, [markTrialWelcomeSeen]);
   
   const handleTrialActivate = useCallback(() => {
     // Guardar que el usuario ya vio el modal
-    localStorage.setItem("kiosco24_trial_welcome_seen", "true");
+    markTrialWelcomeSeen();
     setShowTrialWelcome(false);
     router.push("/configuracion");
-  }, [router]);
+  }, [markTrialWelcomeSeen, router]);
   
   const handleTrialBannerDismiss = useCallback(() => {
     setTrialDismissed(true);
@@ -624,7 +633,9 @@ export default function CajaPage() {
         console.log("[Trial] Calculado:", trial);
         
         // Verificar si ya vio el modal de bienvenida (guardado en localStorage)
-        const hasSeenWelcome = localStorage.getItem("kiosco24_trial_welcome_seen") === "true";
+        const hasSeenWelcome =
+          localStorage.getItem(TRIAL_WELCOME_STORAGE_KEY) === "true" ||
+          localStorage.getItem(LEGACY_TRIAL_WELCOME_STORAGE_KEY) === "true";
         
         setTrialInfo({
           isInTrial: trial.isInTrial,

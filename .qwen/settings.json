@@ -16,7 +16,13 @@
       "Bash(git push)",
       "Bash(dir *)",
       "Bash(git diff *)",
-      "Bash(branchid]/caja/page.tsx)"
+      "Bash(branchid]/caja/page.tsx)",
+      "Bash(cargo check)",
+      "Bash(cargo clippy)",
+      "Bash(cargo build *)",
+      "Bash(cargo run *)",
+      "Bash(cargo add *)",
+      "Bash(copy *)"
     ]
   },
   "$version": 3

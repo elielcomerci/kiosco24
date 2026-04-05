@@ -2,14 +2,17 @@ use anyhow::{Context, Result};
 use chrono::Utc;
 use serde_json::Value;
 use sqlx::{postgres::{PgPoolOptions, PgRow}, PgPool, Row};
+use std::collections::BTreeMap;
 use uuid::Uuid;
 
-use crate::models::{
-    CompareOutcome, RemoteMatchedVariant, RemoteProductSnapshot, ReviewAction, RunStatus,
-    ScrapeRunRow, ScrapedProductInput, ScrapedProductRow, ScraperSource, StageProductRecord,
-    SyncStatus,
+use crate::{
+    models::{
+        CompareOutcome, RemoteMatchedVariant, RemoteProductSnapshot, ReviewAction, RunStatus,
+        ScrapeRunRow, ScrapedProductInput, ScrapedProductRow, ScraperSource, StageProductRecord,
+        SyncStatus,
+    },
+    remote::PublishedRemoteProduct,
 };
-use crate::remote::PublishedRemoteProduct;
 
 pub async fn connect(database_url: &str) -> Result<PgPool> {
     PgPoolOptions::new()
@@ -718,4 +721,30 @@ pub async fn upsert_platform_product_direct(
         image: product.image.clone(),
         status: Some("APPROVED".to_string()),
     })
+}
+
+/// Fetch the last known price for each barcode from previously completed runs.
+/// Returns a map of barcode -> price_raw.
+pub async fn fetch_last_known_prices(pool: &PgPool) -> Result<BTreeMap<String, String>> {
+    let rows = sqlx::query(
+        r#"
+        SELECT DISTINCT ON (barcode) barcode, "priceRaw"
+        FROM "ScrapedProduct"
+        WHERE barcode IS NOT NULL
+          AND "priceRaw" IS NOT NULL
+          AND "priceRaw" != ''
+        ORDER BY barcode, "createdAt" DESC
+        "#,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let mut prices = BTreeMap::new();
+    for row in rows {
+        let barcode: String = row.try_get("barcode")?;
+        let price_raw: String = row.try_get("priceRaw")?;
+        prices.insert(barcode, price_raw);
+    }
+
+    Ok(prices)
 }

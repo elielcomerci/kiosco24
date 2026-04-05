@@ -15,6 +15,7 @@ pub fn generate_review_html(
     run: &ScrapeRunRow,
     products: &[ScrapedProductRow],
     output_dir: &Path,
+    admin_review_url: Option<&str>,
 ) -> Result<PathBuf> {
     fs::create_dir_all(output_dir).with_context(|| {
         format!(
@@ -57,13 +58,17 @@ pub fn generate_review_html(
   <h1>Review del run {}</h1>
   <p>Fuente: {} | URL categoría: {} | Estado: {}</p>
   <p>Productos listados: {}</p>
+  <p>Este review muestra productos en staging interno. Todavia no fueron publicados en la base colaborativa.</p>
+  <p>La edicion real antes de publicar se hace en el panel admin del scraper.</p>
+  {}
 </section>
 "#,
         escape_html(&run.id),
         escape_html(&run.source),
         escape_html(&run.category_url),
         escape_html(&run.status),
-        products.len()
+        products.len(),
+        render_admin_cta(admin_review_url)
     ));
 
     html.push_str(r#"<section class="grid">"#);
@@ -76,6 +81,8 @@ pub fn generate_review_html(
         let remote_category = json_string(remote, "categoryName");
         let remote_presentation = json_string(remote, "presentation");
         let remote_description = json_string(remote, "description");
+        let product_admin_url = admin_review_url
+            .map(|base| format!("{base}#scraped-product-{}", product.id));
 
         html.push_str(&format!(
             r#"<article class="card">
@@ -83,6 +90,7 @@ pub fn generate_review_html(
   <p><strong>ID:</strong> {}</p>
   <p><strong>Barcode:</strong> {}</p>
   <div>{}</div>
+  {}
   <div class="columns">
     <section>
       <h3>Scrapeado</h3>
@@ -127,6 +135,7 @@ pub fn generate_review_html(
                 .map(|field| format!(r#"<span class="pill">{}</span>"#, escape_html(field)))
                 .collect::<Vec<_>>()
                 .join(""),
+            render_admin_inline_link(product_admin_url.as_deref()),
             escape_html(&product.name),
             escape_html(product.brand.as_deref().unwrap_or("—")),
             escape_html(product.category_name.as_deref().unwrap_or("—")),
@@ -166,6 +175,26 @@ fn render_image(url: Option<&str>) -> String {
             format!(r#"<img src="{}" alt="preview" />"#, escape_html(value))
         }
         _ => "<p>Sin imagen.</p>".to_string(),
+    }
+}
+
+fn render_admin_cta(url: Option<&str>) -> String {
+    match url {
+        Some(value) => format!(
+            r#"<p><a href="{}" target="_blank" rel="noreferrer" style="display:inline-block;padding:12px 16px;border-radius:12px;background:#38bdf8;color:#082f49;font-weight:800;text-decoration:none;">Abrir editor real en admin</a></p>"#,
+            escape_html(value)
+        ),
+        None => "<p>No se pudo construir el link al panel admin para este run.</p>".to_string(),
+    }
+}
+
+fn render_admin_inline_link(url: Option<&str>) -> String {
+    match url {
+        Some(value) => format!(
+            r#"<p><a href="{}" target="_blank" rel="noreferrer">Editar este producto en admin</a></p>"#,
+            escape_html(value)
+        ),
+        None => String::new(),
     }
 }
 

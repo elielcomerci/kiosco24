@@ -338,6 +338,7 @@ model PlatformProductSubmission {
   name                  String
   brand                 String?
   categoryName          String?
+  subcategoryLabel      String?
   description           String?
   presentation          String?
   image                 String?
@@ -404,6 +405,7 @@ model ScrapedProduct {
   name                  String
   brand                 String?
   categoryName          String?
+  subcategoryLabel      String?
   description           String?
   presentation          String?
   priceRaw              String?
@@ -428,6 +430,7 @@ model ScrapedProduct {
   @@index([syncStatus, createdAt])
   @@index([remotePlatformProductId])
   @@index([businessActivity, syncStatus, createdAt])
+  @@index([subcategoryLabel])
 }
 
 model InventoryRecord {

@@ -1,0 +1,704 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Clikit Catalog Monitor</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #07111d;
+      --panel: rgba(15, 28, 43, 0.96);
+      --panel-2: rgba(19, 37, 56, 0.96);
+      --line: #28415d;
+      --text: #eef6ff;
+      --muted: #9eb6ce;
+      --accent: #64c4ff;
+      --ok: #24d67b;
+      --danger: #ff6b6b;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: radial-gradient(circle at top, #10233a 0%, var(--bg) 58%);
+      color: var(--text);
+      font-family: system-ui, sans-serif;
+      padding: 18px;
+    }
+    .wrap {
+      max-width: 1420px;
+      margin: 0 auto;
+      display: grid;
+      gap: 16px;
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      padding: 18px 20px;
+      box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
+    }
+    .hero {
+      display: grid;
+      gap: 18px;
+    }
+    .hero-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: start;
+      flex-wrap: wrap;
+    }
+    .hero h1 {
+      margin: 0 0 6px;
+      font-size: 30px;
+    }
+    .muted {
+      color: var(--muted);
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: rgba(100, 196, 255, 0.12);
+      color: #d9ecff;
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .badge.offline {
+      background: rgba(255, 107, 107, 0.14);
+      border-color: rgba(255, 107, 107, 0.4);
+      color: #ffd1d1;
+    }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 14px;
+    }
+    .stat {
+      background: var(--panel-2);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 16px;
+    }
+    .label {
+      color: var(--muted);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+    }
+    .value {
+      margin-top: 6px;
+      font-size: 24px;
+      font-weight: 800;
+    }
+    .value.compact {
+      font-size: 16px;
+      line-height: 1.45;
+      word-break: break-word;
+    }
+    .toolbar {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .action {
+      border: 1px solid rgba(100, 196, 255, 0.4);
+      border-radius: 12px;
+      background: rgba(100, 196, 255, 0.12);
+      color: #cfeeff;
+      padding: 11px 14px;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .action.secondary {
+      border-color: rgba(158, 182, 206, 0.26);
+      background: rgba(158, 182, 206, 0.08);
+      color: var(--text);
+    }
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: #18314a;
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .pill.ok {
+      background: rgba(36, 214, 123, 0.12);
+      border-color: rgba(36, 214, 123, 0.42);
+      color: #86f1b7;
+    }
+    .pill.warn {
+      background: rgba(245, 185, 66, 0.12);
+      border-color: rgba(245, 185, 66, 0.42);
+      color: #ffd88a;
+    }
+    .hero-meta {
+      display: grid;
+      gap: 8px;
+    }
+    .hero-links {
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+    .hero-links a {
+      color: var(--accent);
+      text-decoration: none;
+      font-weight: 700;
+    }
+    .resume-form {
+      display: grid;
+      grid-template-columns: minmax(0, 2fr) minmax(180px, 220px) auto auto;
+      gap: 12px;
+      align-items: end;
+    }
+    .resume-field {
+      display: grid;
+      gap: 6px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .resume-field input {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #081320;
+      color: var(--text);
+      padding: 11px 12px;
+      font: inherit;
+    }
+    .resume-command {
+      margin: 0;
+      padding: 12px 14px;
+      border-radius: 14px;
+      background: #081320;
+      border: 1px solid var(--line);
+      color: #d9ecff;
+      font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+      font-size: 13px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .error-box {
+      padding: 14px 16px;
+      border-radius: 16px;
+      background: rgba(255, 107, 107, 0.12);
+      border: 1px solid rgba(255, 107, 107, 0.4);
+      color: #ffc2c2;
+      font-weight: 700;
+      display: none;
+    }
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 2fr) minmax(320px, 1fr);
+      gap: 16px;
+    }
+    .products {
+      display: grid;
+      gap: 14px;
+    }
+    .product-card {
+      display: grid;
+      grid-template-columns: 116px minmax(0, 1fr);
+      gap: 16px;
+      background: var(--panel-2);
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      padding: 14px;
+      align-items: center;
+    }
+    .product-image img, .image-placeholder {
+      width: 100%;
+      height: 100px;
+      object-fit: contain;
+      border-radius: 16px;
+      background: #ffffff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #44576d;
+      font-weight: 700;
+    }
+    .product-top {
+      display: flex;
+      gap: 16px;
+      justify-content: space-between;
+      align-items: start;
+    }
+    .product-top h3 {
+      margin: 0 0 4px;
+      font-size: 20px;
+    }
+    .meta {
+      margin: 10px 0 12px;
+      color: var(--muted);
+    }
+    .product-footer {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      font-size: 13px;
+    }
+    .product-footer a {
+      color: var(--accent);
+      text-decoration: none;
+      font-weight: 700;
+    }
+    .logs {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      display: grid;
+      gap: 10px;
+      font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+      font-size: 13px;
+    }
+    .logs li {
+      padding: 10px 12px;
+      border-radius: 14px;
+      background: var(--panel-2);
+      border: 1px solid var(--line);
+    }
+    .empty {
+      padding: 24px;
+      border-radius: 18px;
+      border: 1px dashed var(--line);
+      color: var(--muted);
+      text-align: center;
+    }
+    @media (max-width: 1080px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+      .resume-form {
+        grid-template-columns: 1fr;
+      }
+      .product-card {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="panel hero">
+      <div class="hero-top">
+        <div>
+          <h1>Clikit Catalog Monitor</h1>
+          <div class="muted">
+            Seguimiento en vivo de corridas del catalogo colaborativo. Desde aca acompanias el scrapeo, validas el staging y saltas al editor real sin friccion.
+          </div>
+        </div>
+        <div class="toolbar">
+          <span class="badge" id="connectionBadge">Conectando visor...</span>
+          <button type="button" class="action secondary" id="refreshViewer">Refrescar ahora</button>
+        </div>
+      </div>
+
+      <div class="stats">
+        <div class="stat">
+          <div class="label">Fase</div>
+          <div class="value" id="phaseValue">Preparando</div>
+        </div>
+        <div class="stat">
+          <div class="label">Run</div>
+          <div class="value compact" id="runValue">Todavia sin run id</div>
+        </div>
+        <div class="stat">
+          <div class="label">Productos listos</div>
+          <div class="value" id="extractedValue">0</div>
+        </div>
+        <div class="stat">
+          <div class="label">Pagina actual</div>
+          <div class="value" id="pageValue">-</div>
+        </div>
+      </div>
+
+      <div class="chips" id="progressChips"></div>
+      <div class="chips" id="statusChips"></div>
+
+      <div class="hero-meta">
+        <div class="muted" id="categoryValue">Categoria objetivo: esperando datos...</div>
+        <div class="muted" id="timestampsValue">Ultima actualizacion: sin datos</div>
+        <div class="hero-links" id="heroLinks"></div>
+      </div>
+
+      <div class="resume-form">
+        <label class="resume-field">
+          <span>Categoria Pricely</span>
+          <input id="resumeCategoryUrl" type="text" />
+        </label>
+        <label class="resume-field">
+          <span>Rubro</span>
+          <input id="resumeBusinessActivity" type="text" />
+        </label>
+        <button type="button" class="action" id="copyResumeCommand">Copiar comando</button>
+        <button type="button" class="action secondary" id="resetResumeDefaults">Usar datos del run</button>
+      </div>
+
+      <pre class="resume-command" id="resumeCommandPreview"></pre>
+      <div class="error-box" id="errorBox"></div>
+    </section>
+
+    <section class="layout">
+      <section class="panel">
+        <h2 style="margin-top:0;">Productos del run</h2>
+        <p class="muted">Se refresca cada 2 segundos con lo ultimo del buffer y del staging interno.</p>
+        <div id="productsPagination" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:8px;flex-wrap:wrap;">
+          <div class="chips" id="productsPageInfo"></div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <button type="button" class="action secondary" id="prevProductsPage" style="padding:8px 14px;font-size:14px;">&larr; Anterior</button>
+            <div class="chips" id="pageButtons"></div>
+            <button type="button" class="action secondary" id="nextProductsPage" style="padding:8px 14px;font-size:14px;">Siguiente &rarr;</button>
+          </div>
+        </div>
+        <div class="products" id="productsList">
+          <div class="empty">Esperando productos...</div>
+        </div>
+      </section>
+
+      <aside class="panel">
+        <h2 style="margin-top:0;">Actividad del run</h2>
+        <ul class="logs" id="logsList">
+          <li>Esperando actividad...</li>
+        </ul>
+      </aside>
+    </section>
+  </div>
+
+  <script>
+    (() => {
+      const stateUrl = "./state.json";
+      const storageKey = "clikit-pricely-launch";
+      const scriptPath = "C:\\Users\\eliel\\kiosco24\\tools\\platform-scraper-rs\\scripts\\run-pricely-review.ps1";
+      const defaultCategoryUrl = "https://pricely.ar/category/65";
+      const defaultBusinessActivity = "KIOSCO";
+      let suggestedLaunch = {
+        categoryUrl: defaultCategoryUrl,
+        businessActivity: defaultBusinessActivity,
+      };
+      let hasStoredLaunch = false;
+
+      const phaseValue = document.getElementById("phaseValue");
+      const runValue = document.getElementById("runValue");
+      const extractedValue = document.getElementById("extractedValue");
+      const pageValue = document.getElementById("pageValue");
+      const progressChips = document.getElementById("progressChips");
+      const statusChips = document.getElementById("statusChips");
+      const categoryValue = document.getElementById("categoryValue");
+      const timestampsValue = document.getElementById("timestampsValue");
+      const heroLinks = document.getElementById("heroLinks");
+      const productsList = document.getElementById("productsList");
+      const logsList = document.getElementById("logsList");
+      const errorBox = document.getElementById("errorBox");
+      const connectionBadge = document.getElementById("connectionBadge");
+      const categoryInput = document.getElementById("resumeCategoryUrl");
+      const businessActivityInput = document.getElementById("resumeBusinessActivity");
+      const preview = document.getElementById("resumeCommandPreview");
+      const copyButton = document.getElementById("copyResumeCommand");
+      const resetButton = document.getElementById("resetResumeDefaults");
+      const refreshButton = document.getElementById("refreshViewer");
+      const productsPageInfo = document.getElementById("productsPageInfo");
+      const pageButtonsEl = document.getElementById("pageButtons");
+      const prevBtn = document.getElementById("prevProductsPage");
+      const nextBtn = document.getElementById("nextProductsPage");
+
+      const PRODUCTS_PER_PAGE = 20;
+      let allProducts = [];
+      let productsPage = 0;
+
+      try {
+        const stored = JSON.parse(localStorage.getItem(storageKey) || "null");
+        if (stored && typeof stored === "object") {
+          if (typeof stored.categoryUrl === "string" && stored.categoryUrl.trim()) {
+            categoryInput.value = stored.categoryUrl.trim();
+            hasStoredLaunch = true;
+          }
+          if (typeof stored.businessActivity === "string" && stored.businessActivity.trim()) {
+            businessActivityInput.value = stored.businessActivity.trim().toUpperCase();
+            hasStoredLaunch = true;
+          }
+        }
+      } catch (_) {
+      }
+
+      function escapeHtml(value) {
+        return String(value ?? "")
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/\"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      }
+
+      function toFileUrl(value) {
+        if (!value) return "";
+        return "file:///" + String(value).replace(/\\/g, "/").replace(/^([A-Za-z]):/, "$1:");
+      }
+
+      function formatDate(value) {
+        if (!value) return "sin datos";
+        const parsed = new Date(value);
+        if (Number.isNaN(parsed.getTime())) return String(value);
+        return parsed.toLocaleString("es-AR", { hour12: false });
+      }
+
+      function buildLaunchValues() {
+        const categoryUrl = (categoryInput.value || suggestedLaunch.categoryUrl || defaultCategoryUrl).trim() || defaultCategoryUrl;
+        const businessActivity = (businessActivityInput.value || suggestedLaunch.businessActivity || defaultBusinessActivity)
+          .trim().toUpperCase() || defaultBusinessActivity;
+        return { categoryUrl, businessActivity };
+      }
+
+      const updateResumeCommand = () => {
+        const values = buildLaunchValues();
+        const command =
+          'powershell -ExecutionPolicy Bypass -File "' +
+          scriptPath +
+          '" -Category "' +
+          values.categoryUrl +
+          '" -BusinessActivity "' +
+          values.businessActivity +
+          '"';
+        preview.textContent = command;
+        try {
+          localStorage.setItem(storageKey, JSON.stringify(values));
+        } catch (_) {
+        }
+      };
+
+      function renderChips(container, chips) {
+        container.innerHTML = chips.join("");
+      }
+
+      function renderLinks(data) {
+        const links = [];
+        if (data.reviewUrl) {
+          links.push('<a href="' + escapeHtml(data.reviewUrl) + '" target="_blank" rel="noreferrer">Abrir editor admin</a>');
+        }
+        if (data.reviewPath) {
+          links.push('<a href="' + escapeHtml(toFileUrl(data.reviewPath)) + '" target="_blank" rel="noreferrer">Abrir review local</a>');
+        }
+        if (data.currentPageUrl) {
+          links.push('<a href="' + escapeHtml(data.currentPageUrl) + '" target="_blank" rel="noreferrer">Abrir pagina actual</a>');
+        }
+        if (data.bufferPath) {
+          links.push('<span class="muted">Buffer: ' + escapeHtml(data.bufferPath) + "</span>");
+        }
+        heroLinks.innerHTML = links.length ? links.join("") : '<span class="muted">Todavia no hay links disponibles.</span>';
+      }
+
+      function renderProducts(products) {
+        if (!Array.isArray(products) || !products.length) {
+          productsList.innerHTML = '<div class="empty">Todavia no hay productos listos para mostrar.</div>';
+          productsPageInfo.innerHTML = "";
+          pageButtonsEl.innerHTML = "";
+          prevBtn.style.display = "none";
+          nextBtn.style.display = "none";
+          return;
+        }
+
+        const totalPages = Math.ceil(products.length / PRODUCTS_PER_PAGE);
+        const page = Math.min(Math.max(0, productsPage), totalPages - 1);
+        const start = page * PRODUCTS_PER_PAGE;
+        const end = Math.min(start + PRODUCTS_PER_PAGE, products.length);
+        const pageProducts = products.slice(start, end);
+
+        productsPageInfo.innerHTML = '<span class="pill">Pagina ' + (page + 1) + " de " + totalPages + " (" + products.length + " total)</span>";
+
+        let btns = [];
+        const maxVisible = 7;
+        let startP = Math.max(0, page - 3);
+        let endP = Math.min(totalPages, startP + maxVisible);
+        if (endP - startP < maxVisible) startP = Math.max(0, endP - maxVisible);
+        for (let i = startP; i < endP; i++) {
+          if (i === page) {
+            btns.push('<span class="pill ok" style="cursor:default;">' + (i + 1) + '</span>');
+          } else {
+            btns.push('<span class="pill" data-page="' + i + '" style="cursor:pointer;">' + (i + 1) + '</span>');
+          }
+        }
+        pageButtonsEl.innerHTML = btns.join("");
+
+        pageButtonsEl.querySelectorAll('[data-page]').forEach(el => {
+          el.addEventListener("click", () => {
+            productsPage = parseInt(el.dataset.page);
+            renderProducts(allProducts);
+          });
+        });
+
+        prevBtn.style.display = page > 0 ? "" : "none";
+        nextBtn.style.display = page < totalPages - 1 ? "" : "none";
+
+        productsList.innerHTML = pageProducts.map((product) => {
+          const imageHtml = product.image
+            ? '<img src="' + escapeHtml(product.image) + '" alt="preview" />'
+            : '<div class="image-placeholder">Sin imagen</div>';
+          const status = escapeHtml(product.syncStatus || "PENDING");
+          const category = escapeHtml(product.categoryName || "Sin categoria");
+          const presentation = escapeHtml(product.presentation || "Sin presentacion");
+          const barcode = escapeHtml(product.barcode || "(sin EAN)");
+          const sourceLink = product.sourceUrl
+            ? '<a href="' + escapeHtml(product.sourceUrl) + '" target="_blank" rel="noreferrer">Ver origen</a>'
+            : '<span class="muted">Sin origen</span>';
+
+          return ''
+            + '<article class="product-card">'
+            + '  <div class="product-image">' + imageHtml + '</div>'
+            + '  <div class="product-body">'
+            + '    <div class="product-top">'
+            + '      <div>'
+            + '        <h3>' + escapeHtml(product.name || "Sin nombre") + '</h3>'
+            + '        <p class="muted">' + barcode + '</p>'
+            + '      </div>'
+            + '      <span class="pill">' + status + '</span>'
+            + '    </div>'
+            + '    <p class="meta">' + category + ' | ' + presentation + '</p>'
+            + '    <div class="product-footer">'
+            + '      <span class="muted">ID: ' + escapeHtml(product.id || "-") + '</span>'
+            +        sourceLink
+            + '    </div>'
+            + '  </div>'
+            + '</article>';
+        }).join("");
+      }
+
+      function renderLogs(logs) {
+        if (!Array.isArray(logs) || !logs.length) {
+          logsList.innerHTML = "<li>Esperando actividad...</li>";
+          return;
+        }
+        logsList.innerHTML = logs.map((line) => "<li>" + escapeHtml(line) + "</li>").join("");
+      }
+
+      function renderDashboard(data) {
+        phaseValue.textContent = data.phase || "Preparando";
+        runValue.textContent = data.runId || "Todavia sin run id";
+        extractedValue.textContent = String(data.extractedCount || 0);
+        pageValue.textContent = data.currentPageNumber ? String(data.currentPageNumber) : "-";
+
+        const categoryLabel = data.currentCategoryUrl || "Esperando categoria";
+        categoryValue.textContent = "Categoria objetivo: " + categoryLabel;
+        timestampsValue.textContent = "Ultima actualizacion: " + formatDate(data.lastUpdated) + " | Inicio: " + formatDate(data.startedAt);
+
+        renderChips(progressChips, [
+          '<span class="pill">Fuente: ' + escapeHtml(data.source || "PRICELY") + "</span>",
+          '<span class="pill">Rubro: ' + escapeHtml(data.businessActivity || "KIOSCO") + "</span>",
+          '<span class="pill warn">En buffer: ' + escapeHtml(data.bufferedCount || 0) + "</span>",
+          '<span class="pill ok">En staging: ' + escapeHtml(data.stagedCount || 0) + "</span>",
+          '<span class="pill">Pendientes: ' + escapeHtml(data.pendingCount || 0) + "</span>",
+          '<span class="pill">Categorias: ' + escapeHtml(data.currentCategoryIndex || 0) + " / " + escapeHtml(data.categoriesTotal || 0) + "</span>",
+        ]);
+
+        const statusEntries = Object.entries(data.statusCounts || {});
+        if (statusEntries.length) {
+          renderChips(statusChips, statusEntries.map(([key, value]) => {
+            return '<span class="pill">' + escapeHtml(key) + ": " + escapeHtml(value) + "</span>";
+          }));
+        } else {
+          renderChips(statusChips, ['<span class="pill">Sin resumen todavia</span>']);
+        }
+
+        renderLinks(data);
+
+        const newProducts = data.products || [];
+        allProducts = newProducts;
+        const totalPages = Math.ceil(allProducts.length / PRODUCTS_PER_PAGE) || 1;
+        if (productsPage >= totalPages) productsPage = totalPages - 1;
+        renderProducts(allProducts);
+
+        renderLogs(data.logs || []);
+
+        if (data.error) {
+          errorBox.style.display = "block";
+          errorBox.textContent = data.error;
+        } else {
+          errorBox.style.display = "none";
+          errorBox.textContent = "";
+        }
+
+        if (data && typeof data === "object") {
+          suggestedLaunch = {
+            categoryUrl: (data.currentCategoryUrl || defaultCategoryUrl),
+            businessActivity: (data.businessActivity || defaultBusinessActivity),
+          };
+          if (!hasStoredLaunch && !categoryInput.value) {
+            categoryInput.value = suggestedLaunch.categoryUrl;
+          }
+          if (!hasStoredLaunch && !businessActivityInput.value) {
+            businessActivityInput.value = String(suggestedLaunch.businessActivity || defaultBusinessActivity);
+          }
+        }
+
+        updateResumeCommand();
+      }
+
+      async function loadDashboardState() {
+        try {
+          const response = await fetch(stateUrl + "?ts=" + Date.now(), { cache: "no-store" });
+          if (!response.ok) throw new Error("HTTP " + response.status);
+          const data = await response.json();
+          connectionBadge.textContent = "Monitor conectado";
+          connectionBadge.classList.remove("offline");
+          renderDashboard(data || {});
+        } catch (error) {
+          connectionBadge.textContent = "Sin conexion con el monitor local";
+          connectionBadge.classList.add("offline");
+          if (!productsList.children.length) {
+            productsList.innerHTML = '<div class="empty">No pude leer state.json todavia.</div>';
+          }
+        }
+      }
+
+      categoryInput.addEventListener("input", updateResumeCommand);
+      businessActivityInput.addEventListener("input", updateResumeCommand);
+      refreshButton.addEventListener("click", loadDashboardState);
+      resetButton.addEventListener("click", () => {
+        hasStoredLaunch = false;
+        categoryInput.value = suggestedLaunch.categoryUrl || defaultCategoryUrl;
+        businessActivityInput.value = String(suggestedLaunch.businessActivity || defaultBusinessActivity);
+        updateResumeCommand();
+      });
+      copyButton.addEventListener("click", async () => {
+        updateResumeCommand();
+        try {
+          await navigator.clipboard.writeText(preview.textContent);
+          const previous = copyButton.textContent;
+          copyButton.textContent = "Copiado";
+          setTimeout(() => { copyButton.textContent = previous; }, 1400);
+        } catch (_) {
+          copyButton.textContent = "Copialo manualmente";
+        }
+      });
+      prevBtn.addEventListener("click", () => {
+        if (productsPage > 0) { productsPage--; renderProducts(allProducts); }
+      });
+      nextBtn.addEventListener("click", () => {
+        const totalPages = Math.ceil(allProducts.length / PRODUCTS_PER_PAGE);
+        if (productsPage < totalPages - 1) { productsPage++; renderProducts(allProducts); }
+      });
+
+      updateResumeCommand();
+      loadDashboardState();
+      setInterval(loadDashboardState, 2000);
+    })();
+  </script>
+</body>
+</html>

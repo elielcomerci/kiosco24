@@ -31,7 +31,7 @@ use crate::{
     },
     config::AppConfig,
     db::{
-        connect, create_run, find_platform_match_by_barcode, finish_run, get_product, get_run,
+        connect, create_run, fetch_last_known_prices, find_platform_match_by_barcode, finish_run, get_product, get_run,
         insert_scraped_product, list_run_products, mark_error, mark_keep_remote, mark_published,
         mark_skipped, resume_run, summarize_run, update_compare_outcome,
         upsert_platform_product_direct,
@@ -431,10 +431,17 @@ async fn handle_scan(
             models::ScraperSource::Pricely => {
                 let scraper = PricelyScraper::new(min_delay, max_delay);
                 let product_tx = tx.clone();
+                let page_tx = tx.clone();
                 scraper.scan_with_handler(
                     &scan_url,
                     scan_root_url.as_deref(),
                     scan_args.limit,
+                    resume_position_for_scan,
+                    |page_progress| {
+                        page_tx
+                            .send(ScanStreamMessage::PageCompleted(page_progress))
+                            .map_err(|_| anyhow::anyhow!("Se cerró el canal de progreso del scan."))
+                    },
                     |product| {
                         product_tx
                             .send(ScanStreamMessage::Product(product))
@@ -449,6 +456,20 @@ async fn handle_scan(
     let mut counters = BTreeMap::<String, usize>::new();
     let mut buffered_total = 0usize;
     let mut pending_queue = VecDeque::<BufferedProduct>::new();
+
+    // Load last known prices from DB
+    let last_known_prices = match fetch_last_known_prices(pool).await {
+        Ok(prices) => {
+            print_line(format!("Precios conocidos cargados: {} barcodes.", prices.len()));
+            prices
+        }
+        Err(error) => {
+            print_error(format!("No se pudieron cargar precios conocidos: {}", error));
+            BTreeMap::new()
+        }
+    };
+
+    let last_known_prices_for_scan = last_known_prices.clone();
 
     let processing_result: Result<()> = async {
         while let Some(message) = rx.recv().await {
@@ -480,6 +501,16 @@ async fn handle_scan(
                     }
 
                     let mut product = normalize_scraped_product(&raw_product);
+
+                    // Fill price from last known if not present
+                    if product.price_raw.is_none() {
+                        if let Some(barcode) = &product.barcode {
+                            if let Some(known_price) = last_known_prices_for_scan.get(barcode) {
+                                product.price_raw = Some(known_price.clone());
+                            }
+                        }
+                    }
+
                     if product.image.is_none() {
                         if let Some(image_source_url) = product.image_source_url.clone() {
                             match storage
@@ -491,11 +522,8 @@ async fn handle_scan(
                                 .await
                             {
                                 Ok(localized) => product.image = Some(localized),
-                                Err(error) => {
-                                    print_error(format!(
-                                        "  ! No pude localizar imagen para {}: {}",
-                                        product.name, error
-                                    ))
+                                Err(_error) => {
+                                    // Skip silently - don't fail scan for missing images
                                 }
                             }
                         }
@@ -572,14 +600,15 @@ async fn handle_scan(
             print_line(format!("Run {run_id} completo."));
             print_line(format!("Productos scrapeados: {scraped_total}"));
             print_line(format!("Productos bufferizados: {buffered_total}"));
-            print_line(format!("Productos cargados a staging: {staged_total}"));
+            print_line(format!("Productos cargados a staging interno: {staged_total}"));
+            print_line("Todavia no se publicaron en la base colaborativa.");
             if pending_total > 0 {
                 print_line(format!("Pendientes de flush: {pending_total}"));
                 print_line("El buffer quedÃ³ listo para retomar la carga sin perder progreso.");
             }
             print_line(format!("Archivo: {}", buffer_path.display()));
             print_line(format!(
-                "UsÃ¡ 'cargo run -- resolve-safe --run-id {run_id}' para publicar nuevos y omitir coincidencias exactas antes del review."
+                "UsÃ¡ 'cargo run -- resolve-safe --run-id {run_id}' cuando quieras publicar en la base colaborativa los nuevos y omitir coincidencias exactas."
             ));
             print_line("UsÃ¡ 'cargo run -- flush --buffer-path <archivo>' para completar o reintentar la carga a la DB.");
             for (status, total) in counters {
@@ -784,10 +813,17 @@ async fn handle_review(
 ) -> Result<()> {
     let run = get_run(pool, &args.run_id).await?;
     let products = list_run_products(pool, &args.run_id, args.only_conflicts).await?;
-    let report_path = generate_review_html(&run, &products, &config.review_output_dir)?;
+    let admin_review_url = build_scraper_admin_url(&config.kiosco24_base_url, &run.id, &run.business_activity);
+    let report_path = generate_review_html(
+        &run,
+        &products,
+        &config.review_output_dir,
+        Some(&admin_review_url),
+    )?;
     let summary = summarize_run(pool, &args.run_id).await?;
 
     print_line(format!("Reporte generado: {}", report_path.display()));
+    print_line(format!("Editor admin: {admin_review_url}"));
     for (status, total) in summary {
         print_line(format!("  - {status}: {total}"));
     }
@@ -1127,5 +1163,12 @@ fn open_html_report(path: &PathBuf) -> Result<()> {
         .spawn()
         .context("No pude abrir el reporte HTML.")?;
     Ok(())
+}
+
+fn build_scraper_admin_url(base_url: &str, run_id: &str, business_activity: &str) -> String {
+    let normalized_base = base_url.trim_end_matches('/');
+    format!(
+        "{normalized_base}/admin/productos/scraper?run={run_id}&activity={business_activity}"
+    )
 }
 

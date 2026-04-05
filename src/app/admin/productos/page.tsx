@@ -26,19 +26,15 @@ import PlatformProductBackupManager from "@/app/admin/productos/PlatformProductB
 import PlatformProductBulkImporter from "@/app/admin/productos/PlatformProductBulkImporter";
 import PlatformImagePushManager from "@/app/admin/productos/PlatformImagePushManager";
 import PlatformProductQuickEditor from "@/app/admin/productos/PlatformProductQuickEditor";
-
-const platformChangeLabels: Record<PlatformDraftChangeField, string> = {
-  barcode: "Codigo de barras",
-  businessActivity: "Rubro",
-  name: "Nombre",
-  brand: "Marca",
-  categoryName: "Categoria",
-  description: "Descripcion",
-  presentation: "Presentacion",
-  image: "Imagen",
-  variants: "Variantes",
-};
-
+import {
+  formatDiffValue,
+  platformChangeLabels,
+  formatVariantDiffValue,
+  type DiffRow,
+  type ComparisonProduct,
+  type PlatformDraft,
+} from "@/lib/platform-diff";
+import ProductDiffTable from "@/components/admin/ProductDiffTable";
 type SubmissionDiffSource = {
   barcode: string | null;
   businessActivity: string;
@@ -73,117 +69,6 @@ type SubmissionComparisonProduct = NonNullable<SubmissionDiffSource["platformPro
   id: string;
 };
 
-function formatDiffValue(value?: string | null, emptyLabel = "Sin dato") {
-  const normalized = value?.trim();
-  return normalized ? normalized : emptyLabel;
-}
-
-function formatVariantDiffValue(
-  variants?: Array<{
-    name: string;
-    barcode: string | null;
-  }> | null,
-) {
-  if (!variants || variants.length === 0) {
-    return "Sin variantes";
-  }
-
-  return variants
-    .map((variant) => `${variant.name}${variant.barcode ? ` | ${variant.barcode}` : ""}`)
-    .join(" · ");
-}
-
-function buildSubmissionDiffRows(submission: SubmissionDiffSource) {
-  const draft = {
-    barcode: submission.barcode,
-    businessActivity: submission.businessActivity,
-    name: submission.name,
-    brand: submission.brand,
-    categoryName: submission.categoryName,
-    description: submission.description,
-    presentation: submission.presentation,
-    image: submission.image,
-    variants: submission.variants.map((variant) => ({
-      name: variant.name,
-      barcode: variant.barcode,
-    })),
-  };
-
-  return getPlatformDraftChanges(submission.platformProduct ?? null, draft).map((field) => {
-    switch (field) {
-      case "barcode":
-        return {
-          field,
-          label: platformChangeLabels[field],
-          current: formatDiffValue(submission.platformProduct?.barcode, "Sin barcode base"),
-          next: formatDiffValue(submission.barcode, "Sin barcode base"),
-        };
-      case "businessActivity":
-        return {
-          field,
-          label: platformChangeLabels[field],
-          current: submission.platformProduct?.businessActivity ?? "KIOSCO",
-          next: submission.businessActivity,
-        };
-      case "name":
-        return {
-          field,
-          label: platformChangeLabels[field],
-          current: formatDiffValue(submission.platformProduct?.name, "Sin nombre"),
-          next: formatDiffValue(submission.name, "Sin nombre"),
-        };
-      case "brand":
-        return {
-          field,
-          label: platformChangeLabels[field],
-          current: formatDiffValue(submission.platformProduct?.brand),
-          next: formatDiffValue(submission.brand),
-        };
-      case "categoryName":
-        return {
-          field,
-          label: platformChangeLabels[field],
-          current: formatDiffValue(submission.platformProduct?.categoryName, "Sin categoria"),
-          next: formatDiffValue(submission.categoryName, "Sin categoria"),
-        };
-      case "description":
-        return {
-          field,
-          label: platformChangeLabels[field],
-          current: formatDiffValue(submission.platformProduct?.description, "Sin descripcion"),
-          next: formatDiffValue(submission.description, "Sin descripcion"),
-        };
-      case "presentation":
-        return {
-          field,
-          label: platformChangeLabels[field],
-          current: formatDiffValue(submission.platformProduct?.presentation),
-          next: formatDiffValue(submission.presentation),
-        };
-      case "image":
-        return {
-          field,
-          label: platformChangeLabels[field],
-          current: submission.platformProduct?.image ? "Imagen cargada" : "Sin imagen",
-          next: submission.image ? "Imagen cargada" : "Sin imagen",
-        };
-      case "variants":
-        return {
-          field,
-          label: platformChangeLabels[field],
-          current: formatVariantDiffValue(submission.platformProduct?.variants),
-          next: formatVariantDiffValue(submission.variants),
-        };
-      default:
-        return {
-          field,
-          label: platformChangeLabels[field],
-          current: "Sin dato",
-          next: "Sin dato",
-        };
-    }
-  });
-}
 
 async function resolveSubmissionComparisonProduct(submission: {
   barcode: string | null;
@@ -235,6 +120,111 @@ async function ensurePlatformAdmin() {
   }
 
   return session;
+}
+
+function buildSubmissionDiffRows(submission: SubmissionDiffSource) {
+  const draft: PlatformDraft = {
+    barcode: submission.barcode,
+    businessActivity: submission.businessActivity,
+    name: submission.name,
+    brand: submission.brand,
+    categoryName: submission.categoryName,
+    description: submission.description,
+    presentation: submission.presentation,
+    image: submission.image,
+    variants: submission.variants.map((variant) => ({
+      name: variant.name,
+      barcode: variant.barcode,
+    })),
+  };
+
+  const comparisonProduct = submission.platformProduct ? {
+    id: submission.platformProduct.id ?? "",
+    barcode: submission.platformProduct.barcode,
+    businessActivity: submission.platformProduct.businessActivity,
+    name: submission.platformProduct.name,
+    brand: submission.platformProduct.brand,
+    categoryName: submission.platformProduct.categoryName,
+    description: submission.platformProduct.description,
+    presentation: submission.platformProduct.presentation,
+    image: submission.platformProduct.image,
+    variants: submission.platformProduct.variants.map(v => ({ name: v.name, barcode: v.barcode }))
+  } : null;
+
+  return getPlatformDraftChanges(comparisonProduct, draft).map((field) => {
+    switch (field) {
+      case "barcode":
+        return {
+          field,
+          label: platformChangeLabels[field],
+          current: formatDiffValue(comparisonProduct?.barcode, "Sin barcode base"),
+          next: formatDiffValue(submission.barcode, "Sin barcode base"),
+        };
+      case "businessActivity":
+        return {
+          field,
+          label: platformChangeLabels[field],
+          current: comparisonProduct?.businessActivity ?? "KIOSCO",
+          next: submission.businessActivity,
+        };
+      case "name":
+        return {
+          field,
+          label: platformChangeLabels[field],
+          current: formatDiffValue(comparisonProduct?.name, "Sin nombre"),
+          next: formatDiffValue(submission.name, "Sin nombre"),
+        };
+      case "brand":
+        return {
+          field,
+          label: platformChangeLabels[field],
+          current: formatDiffValue(comparisonProduct?.brand),
+          next: formatDiffValue(submission.brand),
+        };
+      case "categoryName":
+        return {
+          field,
+          label: platformChangeLabels[field],
+          current: formatDiffValue(comparisonProduct?.categoryName, "Sin categoria"),
+          next: formatDiffValue(submission.categoryName, "Sin categoria"),
+        };
+      case "description":
+        return {
+          field,
+          label: platformChangeLabels[field],
+          current: formatDiffValue(comparisonProduct?.description, "Sin descripcion"),
+          next: formatDiffValue(submission.description, "Sin descripcion"),
+        };
+      case "presentation":
+        return {
+          field,
+          label: platformChangeLabels[field],
+          current: formatDiffValue(comparisonProduct?.presentation),
+          next: formatDiffValue(submission.presentation),
+        };
+      case "image":
+        return {
+          field,
+          label: platformChangeLabels[field],
+          current: comparisonProduct?.image ? "Imagen cargada" : "Sin imagen",
+          next: submission.image ? "Imagen cargada" : "Sin imagen",
+        };
+      case "variants":
+        return {
+          field,
+          label: platformChangeLabels[field],
+          current: formatVariantDiffValue(comparisonProduct?.variants),
+          next: formatVariantDiffValue(submission.variants),
+        };
+      default:
+        return {
+          field,
+          label: platformChangeLabels[field],
+          current: "Sin dato",
+          next: "Sin dato",
+        };
+    }
+  });
 }
 
 async function reviewSubmission(formData: FormData) {
@@ -299,9 +289,9 @@ async function reviewSubmission(formData: FormData) {
   const comparisonProduct = await resolveSubmissionComparisonProduct({
     barcode: submission.barcode,
     businessActivity: submission.businessActivity,
-    platformProduct: submission.platformProduct,
+    platformProduct: submission.platformProduct as any,
   });
-  const mergedDraft = buildPlatformSubmissionDraft(comparisonProduct, {
+  const mergedDraft = buildPlatformSubmissionDraft(comparisonProduct as any, {
     barcode: submission.barcode,
     businessActivity: submission.businessActivity,
     name: submission.name,
@@ -408,6 +398,7 @@ async function reviewSubmission(formData: FormData) {
 
   revalidatePath("/admin/productos");
 }
+
 
 async function ensureDefaultCatalogAction() {
   "use server";
@@ -961,45 +952,7 @@ export default async function AdminProductsPage() {
                         </div>
 
                         {comparisonProduct && (
-                          <div style={{ display: "grid", gap: "8px" }}>
-                            {diffRows.map((row) => (
-                              <div
-                                key={`${submission.id}-${row.field}-diff`}
-                                style={{
-                                  display: "grid",
-                                  gridTemplateColumns: "minmax(120px, 160px) minmax(0, 1fr) minmax(0, 1fr)",
-                                  gap: "10px",
-                                  alignItems: "start",
-                                  padding: "10px 12px",
-                                  borderRadius: "14px",
-                                  background: "rgba(2,6,23,.42)",
-                                  border: "1px solid rgba(148,163,184,.12)",
-                                }}
-                              >
-                                <div style={{ fontSize: "12px", color: "#94a3b8", fontWeight: 700 }}>{row.label}</div>
-                                <div>
-                                  <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: ".06em" }}>
-                                    Actual
-                                  </div>
-                                  <div style={{ color: "#cbd5e1", wordBreak: "break-word" }}>
-                                    {row.field === "businessActivity"
-                                      ? getBusinessActivityLabel(row.current, businessActivities)
-                                      : row.current}
-                                  </div>
-                                </div>
-                                <div>
-                                  <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: ".06em" }}>
-                                    Propuesto
-                                  </div>
-                                  <div style={{ color: "#f8fafc", wordBreak: "break-word" }}>
-                                    {row.field === "businessActivity"
-                                      ? getBusinessActivityLabel(row.next, businessActivities)
-                                      : row.next}
-                                  </div>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
+                          <ProductDiffTable rows={diffRows} />
                         )}
                       </div>
                     )}

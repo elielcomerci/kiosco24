@@ -110,17 +110,18 @@ function normalizeVariantPayload(variants: unknown): VariantPayload[] {
 
 async function resolveCategorySelection(kioscoId: string, categoryId: unknown) {
   if (typeof categoryId !== "string" || !categoryId) {
-    return { categoryId: null, categoryName: null };
+    return { categoryId: null, categoryName: null, businessActivities: [] };
   }
 
   const category = await prisma.category.findFirst({
     where: { id: categoryId, kioscoId },
-    select: { id: true, name: true },
+    select: { id: true, name: true, businessActivities: true },
   });
 
   return {
     categoryId: category?.id ?? null,
     categoryName: category?.name ?? null,
+    businessActivities: category?.businessActivities ?? [],
   };
 }
 
@@ -385,6 +386,7 @@ export async function PATCH(
     showInGrid,
     variants,
     platformSyncMode,
+    businessActivity,
   } = body;
 
   if (platformSyncMode !== undefined && session.user.role !== "OWNER") {
@@ -400,6 +402,7 @@ export async function PATCH(
       category: {
         select: {
           name: true,
+          businessActivities: true,
         },
       },
       variants: {
@@ -563,13 +566,26 @@ export async function PATCH(
     }
   }
 
+  const kioscoSettings = await prisma.kiosco.findUnique({
+    where: { id: kioscoId },
+    select: { pricingMode: true, mainBusinessActivity: true },
+  });
+  const defaultKioscoBusinessActivity = kioscoSettings?.mainBusinessActivity ?? "KIOSCO";
+
   const resolvedCategory =
     categoryId !== undefined
       ? await resolveCategorySelection(kioscoId, categoryId)
       : {
           categoryId: product.categoryId,
           categoryName: product.category?.name ?? null,
+          businessActivities: (product.category as any)?.businessActivities ?? [],
         };
+  
+  const effectiveBusinessActivity = 
+    businessActivity || 
+    (categoryId !== undefined ? resolvedCategory.businessActivities[0] : product.businessActivity) ||
+    defaultKioscoBusinessActivity;
+
   const normalizedName = name !== undefined ? normalizeCatalogTitle(name) : product.name;
   const normalizedBrand = brand !== undefined ? normalizeCatalogOptionalTitle(brand) : product.brand;
   const normalizedDescription =
@@ -599,16 +615,13 @@ export async function PATCH(
       : barcode !== undefined
         ? normalizedBarcode
         : product.barcode;
-  const kioscoSettings = await prisma.kiosco.findUnique({
-    where: { id: kioscoId },
-    select: { pricingMode: true, mainBusinessActivity: true },
-  });
+
   const lookupBarcode =
     effectiveBarcode ?? normalizedVariants.find((variant) => variant.barcode)?.barcode ?? null;
   const platformProduct = lookupBarcode
     ? await findApprovedPlatformProductByBarcode(
         lookupBarcode,
-        kioscoSettings?.mainBusinessActivity ?? "KIOSCO",
+        effectiveBusinessActivity,
       )
     : null;
   const nextPlatformSyncMode = normalizePlatformSyncMode(
@@ -634,6 +647,7 @@ export async function PATCH(
       ...(categoryId !== undefined && {
         categoryId: resolvedCategory.categoryId,
       }),
+      businessActivity: effectiveBusinessActivity,
       ...((barcode !== undefined || variants !== undefined) && {
         platformProductId: platformProduct?.id ?? null,
         platformSourceUpdatedAt: platformProduct?.updatedAt ?? null,
@@ -768,7 +782,7 @@ export async function PATCH(
   const platformSubmissionDraft = buildPlatformSubmissionDraft(platformProduct, {
     barcode: effectiveBarcode,
     businessActivity:
-      platformProduct?.businessActivity ?? kioscoSettings?.mainBusinessActivity ?? "KIOSCO",
+      platformProduct?.businessActivity ?? effectiveBusinessActivity,
     name: normalizedName,
     brand: normalizedBrand,
     categoryName: resolvedCategory.categoryName,
@@ -794,7 +808,7 @@ export async function PATCH(
       submittedFromKioscoId: kioscoId,
       barcode: platformSubmissionDraft.barcode,
       businessActivity:
-        platformProduct?.businessActivity ?? kioscoSettings?.mainBusinessActivity ?? "KIOSCO",
+        platformProduct?.businessActivity ?? effectiveBusinessActivity,
       name: platformSubmissionDraft.name,
       brand: platformSubmissionDraft.brand,
       categoryName: platformSubmissionDraft.categoryName,

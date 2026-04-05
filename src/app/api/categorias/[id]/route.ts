@@ -33,6 +33,7 @@ export async function PATCH(req: Request, props: { params: Promise<{ id: string 
       name: data.name !== undefined ? data.name : undefined,
       color: data.color !== undefined ? data.color : undefined,
       showInGrid: data.showInGrid !== undefined ? data.showInGrid : undefined,
+      businessActivities: data.businessActivities !== undefined ? data.businessActivities : undefined,
     },
   });
 

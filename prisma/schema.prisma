@@ -240,6 +240,7 @@ model Category {
   kioscoId   String
   kiosco     Kiosco    @relation(fields: [kioscoId], references: [id], onDelete: Cascade)
   products   Product[]
+  businessActivities String[]  @default(["KIOSCO"])
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
 
@@ -249,6 +250,7 @@ model Category {
 model Product {
   id                String            @id @default(cuid())
   name              String
+  businessActivity  String            @default("KIOSCO")
   barcode           String?
   internalCode      String?
   emoji             String?

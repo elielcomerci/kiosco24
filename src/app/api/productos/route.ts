@@ -688,6 +688,7 @@ export async function POST(req: Request) {
     showInGrid,
     variants,
     platformSyncMode,
+    businessActivity,
   } = body;
 
   if (platformSyncMode !== undefined && session.user.role !== "OWNER") {
@@ -714,22 +715,34 @@ export async function POST(req: Request) {
       select: { pricingMode: true, mainBusinessActivity: true },
     });
     const pricingMode = kioscoSettings?.pricingMode ?? DEFAULT_PRICING_MODE;
-    const currentBusinessActivity = kioscoSettings?.mainBusinessActivity ?? "KIOSCO";
-    const resolvedCategory = await resolveCategorySelection(kioscoId, categoryId);
+    const defaultKioscoBusinessActivity = kioscoSettings?.mainBusinessActivity ?? "KIOSCO";
+
+    // Resolve Category with its businessActivities
+    const resolvedCategory = categoryId
+      ? await prisma.category.findFirst({
+          where: { id: String(categoryId), kioscoId },
+          select: { id: true, name: true, businessActivities: true },
+        })
+      : null;
+
+    // Logic for effective businessActivity on the product
+    const effectiveBusinessActivity =
+      businessActivity || resolvedCategory?.businessActivities?.[0] || defaultKioscoBusinessActivity;
+
     const normalizedBarcode =
       normalizedVariants.length > 0 ? null : normalizeCatalogBarcode(barcode);
     const lookupBarcode =
       normalizedBarcode ?? normalizedVariants.find((variant) => variant.barcode)?.barcode ?? null;
     const platformProduct = lookupBarcode
-      ? await findApprovedPlatformProductByBarcode(lookupBarcode, currentBusinessActivity)
+      ? await findApprovedPlatformProductByBarcode(lookupBarcode, effectiveBusinessActivity)
       : null;
     const normalizedPlatformSyncMode = normalizePlatformSyncMode(platformSyncMode);
     const platformSubmissionDraft = buildPlatformSubmissionDraft(platformProduct, {
       barcode: normalizedBarcode,
-      businessActivity: platformProduct?.businessActivity ?? currentBusinessActivity,
+      businessActivity: platformProduct?.businessActivity ?? effectiveBusinessActivity,
       name: normalizedName,
       brand: normalizedBrand,
-      categoryName: resolvedCategory.categoryName,
+      categoryName: resolvedCategory?.name || null,
       description: normalizedDescription,
       presentation: normalizedPresentation,
       image: normalizedImage,
@@ -752,7 +765,8 @@ export async function POST(req: Request) {
         supplierName: normalizedSupplierName,
         notes: normalizedNotes,
         soldByWeight: typeof soldByWeight === "boolean" ? soldByWeight : false,
-        categoryId: resolvedCategory.categoryId,
+        categoryId: resolvedCategory?.id || null,
+        businessActivity: effectiveBusinessActivity,
         platformProductId: platformProduct?.id ?? null,
         platformSyncMode: normalizedPlatformSyncMode,
         platformSourceUpdatedAt: platformProduct?.updatedAt ?? null,

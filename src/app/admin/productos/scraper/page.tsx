@@ -23,6 +23,15 @@ import {
   normalizeCatalogOptionalTitle,
   normalizeCatalogTitle,
 } from "@/lib/catalog-text";
+import {
+  cleanText,
+  formatDiffValue,
+  platformChangeLabels,
+  type ComparisonProduct,
+  type DiffRow,
+  type PlatformDraft as ScrapedDraft,
+} from "@/lib/platform-diff";
+import ProductDiffTable from "@/components/admin/ProductDiffTable";
 import { listBusinessActivityOptions } from "@/lib/business-activities-store";
 import { isPlatformAdmin } from "@/lib/platform-admin";
 import { syncAutoProductsFromPlatformProduct } from "@/lib/platform-product-sync";
@@ -59,50 +68,6 @@ const scrapedProductReviewInclude = {
   },
 } as const;
 
-const platformChangeLabels: Record<PlatformDraftChangeField, string> = {
-  barcode: "Codigo de barras",
-  businessActivity: "Rubro",
-  name: "Nombre",
-  brand: "Marca",
-  categoryName: "Categoria",
-  description: "Descripcion",
-  presentation: "Presentacion",
-  image: "Imagen",
-  variants: "Variantes",
-};
-
-type ComparisonProduct = {
-  id: string;
-  barcode: string | null;
-  businessActivity: string;
-  name: string;
-  brand: string | null;
-  categoryName: string | null;
-  description: string | null;
-  presentation: string | null;
-  image: string | null;
-  status?: PlatformProductStatus;
-  variants: Array<{ id?: string; name: string; barcode: string | null }>;
-};
-
-type ScrapedDraft = {
-  barcode: string | null;
-  businessActivity: string;
-  name: string;
-  brand: string | null;
-  categoryName: string | null;
-  description: string | null;
-  presentation: string | null;
-  image: string | null;
-  variants: Array<{ name: string; barcode: string | null }>;
-};
-
-type DiffRow = {
-  field: PlatformDraftChangeField;
-  label: string;
-  current: string;
-  next: string;
-};
 
 type ScannedCategoryGroup = {
   categoryName: string;
@@ -161,15 +126,6 @@ function formatDate(date: Date) {
   return new Intl.DateTimeFormat("es-AR", { dateStyle: "medium", timeStyle: "short" }).format(date);
 }
 
-function cleanText(value?: string | null) {
-  const trimmed = value?.trim();
-  return trimmed ? trimmed : null;
-}
-
-function formatDiffValue(value?: string | null, emptyLabel = "Sin dato") {
-  const normalized = cleanText(value);
-  return normalized ?? emptyLabel;
-}
 
 function buildScrapedDraft(product: {
   barcode: string | null;
@@ -818,16 +774,8 @@ export default async function AdminScrapedProductsPage({
                   )}
 
                   {/* Diff rows */}
-                  {product.diffRows.length > 0 && product.comparisonProduct && (
-                    <div style={{ display: "grid", gap: "8px" }}>
-                      {product.diffRows.map((row) => (
-                        <div key={`${product.id}-${row.field}-diff`} style={{ display: "grid", gridTemplateColumns: "minmax(100px, 140px) 1fr 1fr", gap: "10px", alignItems: "start", padding: "10px 12px", borderRadius: "14px", background: "rgba(2,6,23,.42)", border: "1px solid rgba(148,163,184,.12)" }}>
-                          <div style={{ fontSize: "12px", color: "#94a3b8", fontWeight: 700 }}>{row.label}</div>
-                          <div><div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: ".06em" }}>Actual</div><div style={{ color: "#cbd5e1", wordBreak: "break-word" }}>{row.field === "businessActivity" ? getBusinessActivityLabel(row.current, businessActivities) : row.current}</div></div>
-                          <div><div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: ".06em" }}>Scrapeado</div><div style={{ color: "#f8fafc", wordBreak: "break-word" }}>{row.field === "businessActivity" ? getBusinessActivityLabel(row.next, businessActivities) : row.next}</div></div>
-                        </div>
-                      ))}
-                    </div>
+                  {product.comparisonProduct && (
+                    <ProductDiffTable rows={product.diffRows} />
                   )}
 
                   {/* Editable fields */}

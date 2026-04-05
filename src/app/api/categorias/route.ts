@@ -65,6 +65,7 @@ export async function POST(req: Request) {
       name: normalizedName,
       color: data.color || null,
       showInGrid: data.showInGrid !== undefined ? data.showInGrid : true,
+      businessActivities: data.businessActivities || ["KIOSCO"],
       kioscoId: kiosco.id,
     },
   });

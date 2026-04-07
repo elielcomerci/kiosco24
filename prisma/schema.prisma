@@ -292,6 +292,7 @@ model PlatformBusinessActivity {
   description        String?
   isActive           Boolean  @default(true)
   seedDefaultCatalog Boolean  @default(false)
+  defaultCategoryNames String[] @default([])
   sortOrder          Int      @default(0)
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
@@ -312,6 +313,7 @@ model PlatformProduct {
   variants     PlatformProductVariant[]
   submissions  PlatformProductSubmission[]
   scrapedProducts ScrapedProduct[]
+  priceObservations PlatformPriceObservation[]
   createdAt    DateTime                    @default(now())
   updatedAt    DateTime                    @updatedAt
 
@@ -387,6 +389,7 @@ model ScrapeRun {
   startedAt   DateTime        @default(now())
   finishedAt  DateTime?
   products    ScrapedProduct[]
+  priceObservations PlatformPriceObservation[]
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
 
@@ -422,6 +425,7 @@ model ScrapedProduct {
   remoteSnapshot        Json?
   conflictFields        Json?
   publishedAt           DateTime?
+  priceObservations     PlatformPriceObservation[]
   createdAt             DateTime                   @default(now())
   updatedAt             DateTime                   @updatedAt
 
@@ -431,6 +435,35 @@ model ScrapedProduct {
   @@index([remotePlatformProductId])
   @@index([businessActivity, syncStatus, createdAt])
   @@index([subcategoryLabel])
+}
+
+model PlatformPriceObservation {
+  id                 String           @id @default(cuid())
+  platformProductId  String?
+  platformProduct    PlatformProduct? @relation(fields: [platformProductId], references: [id], onDelete: SetNull)
+  scrapedProductId   String?
+  scrapedProduct     ScrapedProduct?  @relation(fields: [scrapedProductId], references: [id], onDelete: SetNull)
+  scrapeRunId        String?
+  scrapeRun          ScrapeRun?       @relation(fields: [scrapeRunId], references: [id], onDelete: SetNull)
+  businessActivity   String           @default("KIOSCO")
+  barcode            String?
+  source             ScraperSource
+  sourceUrl          String?
+  observedPriceRaw   String
+  observedPriceValue Float?
+  currency           String           @default("ARS")
+  observedAt         DateTime         @default(now())
+  isOutlier          Boolean          @default(false)
+  outlierReason      String?
+  snapshot           Json?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  @@index([platformProductId, observedAt])
+  @@index([barcode, observedAt])
+  @@index([businessActivity, observedAt])
+  @@index([source, observedAt])
+  @@index([scrapeRunId, observedAt])
 }
 
 model InventoryRecord {

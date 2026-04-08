@@ -1,5 +1,6 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
 import ConfigTabs from "@/components/ui/ConfigTabs";
 import { SucursalTab, ProductosTab, EquipoTab, SucursalesTab, AccesoTab } from "./tabs";
 import type { Employee, Category, Branch, PricingMode, FiscalEnvironment, TicketPrintMode, Subscription } from "./types";
@@ -111,6 +112,7 @@ interface ConfigTabsContainerProps {
 }
 
 export default function ConfigTabsContainer(props: ConfigTabsContainerProps) {
+  const searchParams = useSearchParams();
   const {
     branchId,
     isOwner,
@@ -134,9 +136,11 @@ export default function ConfigTabsContainer(props: ConfigTabsContainerProps) {
     mpSetupLoading,
     mpSetupError,
   } = props;
+  const initialTabId = searchParams.get("tab")?.trim() || undefined;
 
   return (
     <ConfigTabs
+      initialTabId={initialTabId}
       tabs={[
         {
           id: "sucursal",
@@ -191,7 +195,7 @@ export default function ConfigTabsContainer(props: ConfigTabsContainerProps) {
           ),
         },
         {
-          id: "sucursal-multiple",
+          id: "sucursales",
           label: "Sucursales",
           icon: "🏬",
           content: (

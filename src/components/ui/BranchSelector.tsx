@@ -183,7 +183,7 @@ export default function BranchSelector({
             </button>
           ))}
           <a 
-            href={`/${currentBranchId}/configuracion`}
+            href={`/${currentBranchId}/configuracion?tab=sucursales`}
             style={{
               display: "block",
               padding: "12px 16px",

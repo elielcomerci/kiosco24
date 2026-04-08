@@ -824,10 +824,21 @@ export default async function AdminProductsPage() {
                 />
               </label>
 
-              <label style={{ display: "flex", gap: "10px", alignItems: "center", color: "#cbd5e1", fontSize: "14px" }}>
-                <input type="checkbox" name="seedDefaultCatalog" />
-                Sembrar catalogo base por defecto para cuentas nuevas de este rubro
-              </label>
+              <div
+                style={{
+                  color: "#94a3b8",
+                  fontSize: "13px",
+                  lineHeight: 1.5,
+                  padding: "12px 14px",
+                  borderRadius: "14px",
+                  background: "rgba(15,23,42,.58)",
+                  border: "1px solid rgba(148,163,184,.12)",
+                }}
+              >
+                El rubro se crea limpio. Las categorias colaborativas sugeridas se van a poder
+                configurar despues desde este panel, sin sembrar productos reales en kioscos
+                nuevos.
+              </div>
 
               <div style={{ display: "flex", justifyContent: "flex-end" }}>
                 <button type="submit" className="btn btn-primary">

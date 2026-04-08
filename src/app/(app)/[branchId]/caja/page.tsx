@@ -472,26 +472,26 @@ export default function CajaPage() {
   useEffect(() => {
     if (products.length > 0 && !hasPlayedStartupRef.current) {
       hasPlayedStartupRef.current = true;
-      void playAudio("/hello_k24.wav", 0.6);
+      void playAudio("/hello_clikit.wav", 0.6);
     }
   }, [products]);
 
   useEffect(() => {
     // Preload system sounds for zero-delay playback
     preloadAudio([
-      "/blip.wav",
-      "/promo.wav",
+      "/blip_clikit.wav",
+      "/promo_clikit.wav",
       "/tap.wav",
       "/turno.wav",
       "/scanner.wav",
-      "/hello_k24.wav",
+      "/hello_clikit.wav",
     ]);
   }, []);
 
   useEffect(() => {
     const currentPromosCount = promoResult?.applications?.length ?? 0;
     if (currentPromosCount > prevPromosCountRef.current) {
-      void playAudio("/promo.wav", 0.7);
+      void playAudio("/promo_clikit.wav", 0.7);
     }
     prevPromosCountRef.current = currentPromosCount;
   }, [promoResult]);

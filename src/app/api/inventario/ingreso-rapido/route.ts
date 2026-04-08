@@ -150,15 +150,8 @@ export async function POST(req: Request) {
       });
       const pricingMode = kiosco?.pricingMode === "SHARED" ? "SHARED" : "BRANCH";
 
+      // 1) Calcular deltas sin aplicar cambios aún
       for (const item of normalizedItems) {
-        const pricingPatch =
-          item.salePrice !== null || item.unitCost !== null
-            ? {
-                ...(item.salePrice !== null ? { price: item.salePrice } : {}),
-                ...(item.unitCost !== null ? { cost: item.unitCost } : {}),
-              }
-            : null;
-
         if (item.variantId) {
           const inventory = await tx.variantInventory.findUnique({
             where: {
@@ -169,121 +162,34 @@ export async function POST(req: Request) {
             },
             select: { stock: true },
           });
-
           const currentStock = inventory?.stock ?? 0;
           const nextStock = normalizedMode === "corregir" ? item.totalQuantity : currentStock + item.totalQuantity;
-
-          await tx.variantInventory.upsert({
-            where: {
-              variantId_branchId: {
-                variantId: item.variantId,
-                branchId,
-              },
-            },
-            create: {
-              variantId: item.variantId,
-              branchId,
-              stock: nextStock,
-              price: item.salePrice ?? null,
-              cost: item.unitCost ?? null,
-            },
-            update: {
-              stock: nextStock,
-              ...(item.salePrice !== null ? { price: item.salePrice } : {}),
-              ...(item.unitCost !== null ? { cost: item.unitCost } : {}),
-            },
-          });
-
-          if (pricingMode === "SHARED" && pricingPatch) {
-            pricingChanges.set(item.productId, {
-              ...(item.salePrice !== null ? { price: item.salePrice } : {}),
-              ...(item.unitCost !== null ? { cost: item.unitCost } : {}),
-            });
-          }
-
-          if (normalizedMode === "corregir") {
-            await replaceTrackedLots(tx, {
-              branchId,
-              productId: item.productId,
-              variantId: item.variantId,
-            }, item.lots);
-          } else if (item.lots.length > 0) {
-            await addTrackedLots(tx, {
-              branchId,
-              productId: item.productId,
-              variantId: item.variantId,
-            }, item.lots);
-          }
-
           adjustments.push({
             productId: item.productId,
             variantId: item.variantId,
             delta: nextStock - currentStock,
           });
-          continue;
-        }
-
-        const inventory = await tx.inventoryRecord.findUnique({
-          where: {
-            productId_branchId: {
-              productId: item.productId,
-              branchId,
+        } else {
+          const inventory = await tx.inventoryRecord.findUnique({
+            where: {
+              productId_branchId: {
+                productId: item.productId,
+                branchId,
+              },
             },
-          },
-          select: { stock: true },
-        });
-
-        const currentStock = inventory?.stock ?? 0;
-        const nextStock = normalizedMode === "corregir" ? item.totalQuantity : currentStock + item.totalQuantity;
-
-        await tx.inventoryRecord.upsert({
-          where: {
-            productId_branchId: {
-              productId: item.productId,
-              branchId,
-            },
-          },
-          create: {
+            select: { stock: true },
+          });
+          const currentStock = inventory?.stock ?? 0;
+          const nextStock = normalizedMode === "corregir" ? item.totalQuantity : currentStock + item.totalQuantity;
+          adjustments.push({
             productId: item.productId,
-            branchId,
-            stock: nextStock,
-            minStock: 0,
-            showInGrid: true,
-            price: item.salePrice ?? 0,
-            cost: item.unitCost ?? null,
-          },
-          update: {
-            stock: nextStock,
-            ...(pricingPatch ?? {}),
-          },
-        });
-
-        if (pricingPatch) {
-          pricingChanges.set(item.productId, {
-            ...(item.salePrice !== null ? { price: item.salePrice } : {}),
-            ...(item.unitCost !== null ? { cost: item.unitCost } : {}),
+            variantId: null,
+            delta: nextStock - currentStock,
           });
         }
-
-        if (normalizedMode === "corregir") {
-          await replaceTrackedLots(tx, {
-            branchId,
-            productId: item.productId,
-          }, item.lots);
-        } else if (item.lots.length > 0) {
-          await addTrackedLots(tx, {
-            branchId,
-            productId: item.productId,
-          }, item.lots);
-        }
-
-        adjustments.push({
-          productId: item.productId,
-          variantId: null,
-          delta: nextStock - currentStock,
-        });
       }
 
+      // 2) Crear RestockEvent primero para obtener los IDs de RestockItem
       const restockEvent = await tx.restockEvent.create({
         data: {
           type:
@@ -344,6 +250,148 @@ export async function POST(req: Request) {
         },
       });
 
+      // Mapa: (productId + variantId) → restockItemId para trazabilidad atómica
+      const restockItemMap = new Map<string, string>();
+      for (const ri of restockEvent.items) {
+        const key = `${ri.productId}:${ri.variantId ?? "null"}`;
+        restockItemMap.set(key, ri.id);
+      }
+
+      // 3) Aplicar cambios de inventario + lotes vinculados al RestockItem
+      for (let i = 0; i < normalizedItems.length; i++) {
+        const item = normalizedItems[i];
+        const restockItemId = restockItemMap.get(`${item.productId}:${item.variantId ?? "null"}`) ?? null;
+
+        // Preparar lotes con trazabilidad (solo en modo receive)
+        const lotsWithTraceability: NormalizedLotInput[] = normalizedOperation === "receive" && item.lots.length > 0
+          ? item.lots.map((lot, lotIdx) => ({
+              ...lot,
+              restockItemId,
+              ingressOrder: lotIdx,
+            }))
+          : item.lots;
+
+        const pricingPatch =
+          item.salePrice !== null || item.unitCost !== null
+            ? {
+                ...(item.salePrice !== null ? { price: item.salePrice } : {}),
+                ...(item.unitCost !== null ? { cost: item.unitCost } : {}),
+              }
+            : null;
+
+        if (item.variantId) {
+          const inventory = await tx.variantInventory.findUnique({
+            where: {
+              variantId_branchId: {
+                variantId: item.variantId,
+                branchId,
+              },
+            },
+            select: { stock: true },
+          });
+
+          const currentStock = inventory?.stock ?? 0;
+          const nextStock = normalizedMode === "corregir" ? item.totalQuantity : currentStock + item.totalQuantity;
+
+          await tx.variantInventory.upsert({
+            where: {
+              variantId_branchId: {
+                variantId: item.variantId,
+                branchId,
+              },
+            },
+            create: {
+              variantId: item.variantId,
+              branchId,
+              stock: nextStock,
+              price: item.salePrice ?? null,
+              cost: item.unitCost ?? null,
+            },
+            update: {
+              stock: nextStock,
+              ...(item.salePrice !== null ? { price: item.salePrice } : {}),
+              ...(item.unitCost !== null ? { cost: item.unitCost } : {}),
+            },
+          });
+
+          if (pricingMode === "SHARED" && pricingPatch) {
+            pricingChanges.set(item.productId, {
+              ...(item.salePrice !== null ? { price: item.salePrice } : {}),
+              ...(item.unitCost !== null ? { cost: item.unitCost } : {}),
+            });
+          }
+
+          if (normalizedMode === "corregir") {
+            await replaceTrackedLots(tx, {
+              branchId,
+              productId: item.productId,
+              variantId: item.variantId,
+            }, lotsWithTraceability);
+          } else if (lotsWithTraceability.length > 0) {
+            await addTrackedLots(tx, {
+              branchId,
+              productId: item.productId,
+              variantId: item.variantId,
+            }, lotsWithTraceability);
+          }
+        } else {
+          const inventory = await tx.inventoryRecord.findUnique({
+            where: {
+              productId_branchId: {
+                productId: item.productId,
+                branchId,
+              },
+            },
+            select: { stock: true },
+          });
+
+          const currentStock = inventory?.stock ?? 0;
+          const nextStock = normalizedMode === "corregir" ? item.totalQuantity : currentStock + item.totalQuantity;
+
+          await tx.inventoryRecord.upsert({
+            where: {
+              productId_branchId: {
+                productId: item.productId,
+                branchId,
+              },
+            },
+            create: {
+              productId: item.productId,
+              branchId,
+              stock: nextStock,
+              minStock: 0,
+              showInGrid: true,
+              price: item.salePrice ?? 0,
+              cost: item.unitCost ?? null,
+            },
+            update: {
+              stock: nextStock,
+              ...(pricingPatch ?? {}),
+            },
+          });
+
+          if (pricingPatch) {
+            pricingChanges.set(item.productId, {
+              ...(item.salePrice !== null ? { price: item.salePrice } : {}),
+              ...(item.unitCost !== null ? { cost: item.unitCost } : {}),
+            });
+          }
+
+          if (normalizedMode === "corregir") {
+            await replaceTrackedLots(tx, {
+              branchId,
+              productId: item.productId,
+            }, lotsWithTraceability);
+          } else if (lotsWithTraceability.length > 0) {
+            await addTrackedLots(tx, {
+              branchId,
+              productId: item.productId,
+            }, lotsWithTraceability);
+          }
+        }
+      }
+
+      // 4) Sincronizar capas de costo
       if (normalizedOperation === "receive") {
         for (const item of restockEvent.items) {
           await syncRestockItemCostLayer(tx, {

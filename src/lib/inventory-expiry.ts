@@ -13,6 +13,8 @@ export type TrackableStockRef = {
 export type NormalizedLotInput = {
   quantity: number;
   expiresOn: Date;
+  restockItemId?: string | null;
+  ingressOrder?: number | null;
 };
 
 export type ExpirySummary = {
@@ -149,7 +151,10 @@ export async function getOpenStockLots(tx: TxClient, ref: TrackableStockRef) {
       variantId: normalized.variantId,
       quantity: { gt: 0 },
     },
-    orderBy: { expiresOn: "asc" },
+    orderBy: [
+      { expiresOn: "asc" },
+      { createdAt: "asc" },
+    ],
   });
 }
 
@@ -190,6 +195,8 @@ export async function replaceTrackedLots(tx: TxClient, ref: TrackableStockRef, l
       variantId: normalized.variantId,
       quantity: lot.quantity,
       expiresOn: lot.expiresOn,
+      restockItemId: lot.restockItemId ?? null,
+      ingressOrder: lot.ingressOrder ?? null,
     })),
   });
 }
@@ -197,35 +204,23 @@ export async function replaceTrackedLots(tx: TxClient, ref: TrackableStockRef, l
 export async function addTrackedLots(tx: TxClient, ref: TrackableStockRef, lots: NormalizedLotInput[]) {
   const normalized = normalizeRef(ref);
 
-  for (const lot of lots) {
-    const existing = await tx.stockLot.findFirst({
-      where: {
-        branchId: normalized.branchId,
-        productId: normalized.productId,
-        variantId: normalized.variantId,
-        expiresOn: lot.expiresOn,
-      },
-      select: { id: true },
-    });
-
-    if (existing) {
-      await tx.stockLot.update({
-        where: { id: existing.id },
-        data: { quantity: { increment: lot.quantity } },
-      });
-      continue;
-    }
-
-    await tx.stockLot.create({
-      data: {
-        branchId: normalized.branchId,
-        productId: normalized.productId,
-        variantId: normalized.variantId,
-        quantity: lot.quantity,
-        expiresOn: lot.expiresOn,
-      },
-    });
+  if (lots.length === 0) {
+    return;
   }
+
+  // Siempre crear lotes nuevos (trazabilidad atómica por ingreso)
+  // NO fusionar por expiresOn — cada ingreso es un lote independiente
+  await tx.stockLot.createMany({
+    data: lots.map((lot) => ({
+      branchId: normalized.branchId,
+      productId: normalized.productId,
+      variantId: normalized.variantId,
+      quantity: lot.quantity,
+      expiresOn: lot.expiresOn,
+      restockItemId: lot.restockItemId ?? null,
+      ingressOrder: lot.ingressOrder ?? null,
+    })),
+  });
 }
 
 export async function consumeTrackedLotsFefo(
@@ -269,6 +264,7 @@ export async function consumeTrackedLotsFefo(
         stockLotId: lot.id,
         expiresOn: lot.expiresOn,
         quantity: consumedQuantity,
+        restockItemId: lot.restockItemId ?? null,
       },
     });
 
@@ -304,6 +300,7 @@ export async function restoreLotConsumptions(
 
     let targetLot: MinimalLot | null = null;
 
+    // 1) Intentar restaurar al lote original por ID
     if (consumption.stockLotId) {
       targetLot = await tx.stockLot.findUnique({
         where: { id: consumption.stockLotId },
@@ -318,6 +315,28 @@ export async function restoreLotConsumptions(
       });
     }
 
+    // 2) Si el lote original fue eliminado (agotado), buscar por restockItemId + fecha
+    if (!targetLot && consumption.restockItemId) {
+      targetLot = await tx.stockLot.findFirst({
+        where: {
+          branchId: normalized.branchId,
+          productId: normalized.productId,
+          variantId: normalized.variantId,
+          expiresOn: consumption.expiresOn,
+          restockItemId: consumption.restockItemId,
+        },
+        select: {
+          id: true,
+          branchId: true,
+          productId: true,
+          variantId: true,
+          quantity: true,
+          expiresOn: true,
+        },
+      });
+    }
+
+    // 3) Fallback genérico por fecha (compatibilidad con consumos pre-trazabilidad)
     if (!targetLot) {
       targetLot = await tx.stockLot.findFirst({
         where: {
@@ -345,6 +364,7 @@ export async function restoreLotConsumptions(
       continue;
     }
 
+    // 4) No existe ningún lote: crear uno nuevo preservando la trazabilidad
     await tx.stockLot.create({
       data: {
         branchId: normalized.branchId,
@@ -352,6 +372,7 @@ export async function restoreLotConsumptions(
         variantId: normalized.variantId,
         quantity: consumption.quantity,
         expiresOn: consumption.expiresOn,
+        restockItemId: consumption.restockItemId ?? null,
       },
     });
   }

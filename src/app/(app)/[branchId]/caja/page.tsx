@@ -1472,7 +1472,7 @@ export default function CajaPage() {
                   ...(received ? { receivedAmount: received } : {}),
                 });
                 setShowCashNumpad(false);
-                void playAudio("/blip.wav", 0.8);
+                void playAudio("/blip_clikit.wav", 0.8);
                 return;
               }
               alert(serverMessage || "No se pudo registrar la venta en el servidor. Intentá de nuevo en unos segundos.");
@@ -1523,7 +1523,7 @@ export default function CajaPage() {
         setCouponRecord(null);
       setReceivedAmount("");
       setShowCashNumpad(false);
-      void playAudio("/blip.wav", 0.8);
+      void playAudio("/blip_clikit.wav", 0.8);
       fetchStats();
     } catch (err: unknown) {
       console.error("[Ventas] Error de red o inesperado al registrar venta:", err);

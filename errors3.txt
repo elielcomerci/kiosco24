@@ -1,4 +1,0 @@
-src/app/api/empleados/verificar-pin/route.ts(1,22): error TS2307: Cannot find module '@/lib/auth' or its corresponding type declarations.
-src/app/api/empleados/verificar-pin/route.ts(2,34): error TS2307: Cannot find module '@/lib/branch' or its corresponding type declarations.
-src/app/api/empleados/verificar-pin/route.ts(3,65): error TS2307: Cannot find module '@/lib/employee-pin' or its corresponding type declarations.
-src/app/api/empleados/verificar-pin/route.ts(4,24): error TS2307: Cannot find module '@/lib/prisma' or its corresponding type declarations.

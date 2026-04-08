@@ -2105,7 +2105,7 @@ export default function CajaPage() {
 
         {isDesktop && (
           <div style={{ padding: "6px 16px 0", color: "var(--text-3)", fontSize: "12px" }}>
-            Acepta lectora USB: escaneÃ¡ y el producto entra directo sin tocar el buscador.
+            Acepta lectora USB o Bluetooth para escanear códigos de barras. También podés usar la cámara del dispositivo haciendo click en el botón &quot;Escanear&quot;.
           </div>
         )}
 

@@ -3756,7 +3756,7 @@ function StockLoadingModal({
           {false && (
           <div className="restock-modal__quick-actions">
             <div style={{ fontSize: "11px", color: "var(--text-3)" }}>
-              EscaneÃ¡ o filtra y, si falta el producto, podÃ©s darlo de alta acÃ¡ mismo.
+              Escaneá o filtra y, si falta el producto, podés darlo de alta acá mismo.
             </div>
             <div style={{ display: "flex", gap: "8px", alignItems: "center", flexShrink: 0 }}>
               <button

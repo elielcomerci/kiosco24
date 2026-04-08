@@ -126,7 +126,7 @@ export default function LoginExperience({
       );
 
       if (result?.error) {
-        setError("Email o contrasena incorrectos.");
+        setError("Email o contraseña incorrectos.");
         setLoading(false);
         return;
       }
@@ -396,8 +396,8 @@ export default function LoginExperience({
             </div>
             <div style={{ color: "#94a3b8", fontSize: "13px", lineHeight: 1.6 }}>
               {mode === "employee"
-                ? "Codigo de sucursal, persona y PIN si hace falta. Rapido y ordenado."
-                : "Email, contrasena y adentro. Claro, directo y sin frialdad."}
+                ? "ódigo de sucursal, persona y PIN si hace falta. Rapido y ordenado."
+                : "Email, contraseña y adentro. Claro, directo y sin frialdad."}
             </div>
           </div>
         </section>
@@ -431,7 +431,7 @@ export default function LoginExperience({
                 disabled={loading}
                 style={{ width: "100%" }}
               >
-                Dueno
+                Mi negocio
               </button>
               <button
                 type="button"
@@ -440,7 +440,7 @@ export default function LoginExperience({
                 disabled={loading}
                 style={{ width: "100%" }}
               >
-                Equipo
+                Miembro del equipo
               </button>
             </div>
 
@@ -502,12 +502,12 @@ export default function LoginExperience({
                       lineHeight: 1.6,
                     }}
                   >
-                    Usa el codigo que te compartio el responsable o entra desde el enlace directo de tu sucursal.
+                    Usa el codigo que te compartió el responsable o entra desde el enlace directo de tu sucursal.
                   </div>
 
                   <div style={{ display: "grid", gap: "6px" }}>
                     <label style={{ fontSize: "12px", color: "var(--text-2)", fontWeight: 700 }}>
-                      Codigo de sucursal
+                      Código de sucursal
                     </label>
                     <input
                       type="text"
@@ -567,7 +567,7 @@ export default function LoginExperience({
                     </div>
                     <div style={{ fontSize: "18px", fontWeight: 800, color: "#f8fafc" }}>{branchName}</div>
                     <div style={{ fontSize: "13px", color: "#94a3b8" }}>
-                      Elige quien entra para seguir con la operacion correcta.
+                      Elige quien entra para seguir con la operación correcta.
                     </div>
                   </div>
 
@@ -748,7 +748,7 @@ export default function LoginExperience({
 
                 <div style={{ display: "grid", gap: "6px" }}>
                   <label style={{ fontSize: "12px", color: "var(--text-2)", fontWeight: 700 }}>
-                    Contrasena
+                    Contraseña
                   </label>
                   <div style={{ position: "relative" }}>
                     <input
@@ -758,13 +758,13 @@ export default function LoginExperience({
                       onChange={(event) => setPassword(event.target.value)}
                       required
                       autoComplete="current-password"
-                      placeholder="Tu contrasena"
+                      placeholder="Tu contraseña"
                       style={{ paddingRight: "48px" }}
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword((current) => !current)}
-                      aria-label={showPassword ? "Ocultar contrasena" : "Mostrar contrasena"}
+                      aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
                       style={{
                         position: "absolute",
                         right: "12px",
@@ -797,7 +797,7 @@ export default function LoginExperience({
                   textAlign: "center",
                 }}
               >
-                Olvide mi contrasena
+                Olvide mi contraseña
               </a>
 
               <button
@@ -806,7 +806,7 @@ export default function LoginExperience({
                 disabled={loading}
                 style={{ color: "var(--primary)", fontWeight: 700 }}
               >
-                Entrar como equipo
+                Entrar como miembro del equipo
               </button>
             </div>
           )}

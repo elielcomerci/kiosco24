@@ -65,6 +65,18 @@ function buildBusinessActivityWhere(businessActivity?: string | null) {
   return normalized ? { businessActivity: normalized } : {};
 }
 
+function getFallbackBusinessActivity(businessActivity?: string | null) {
+  const normalized = cleanText(businessActivity)
+    ? normalizeBusinessActivity(businessActivity, "")
+    : "";
+
+  if (!normalized || normalized === DEFAULT_BUSINESS_ACTIVITY_CODE) {
+    return null;
+  }
+
+  return DEFAULT_BUSINESS_ACTIVITY_CODE;
+}
+
 function normalizeVariants(
   variants?: Array<{
     name: string;
@@ -172,7 +184,7 @@ export async function findApprovedPlatformProductByBarcode(
     return directMatch;
   }
 
-  return prisma.platformProduct.findFirst({
+  const variantMatch = await prisma.platformProduct.findFirst({
     where: {
       status: PlatformProductStatus.APPROVED,
       ...buildBusinessActivityWhere(businessActivity),
@@ -186,6 +198,18 @@ export async function findApprovedPlatformProductByBarcode(
       },
     },
   });
+
+  if (variantMatch) {
+    return variantMatch;
+  }
+
+  const fallbackBusinessActivity = getFallbackBusinessActivity(businessActivity);
+  if (!fallbackBusinessActivity) {
+    return null;
+  }
+
+  // Keep the collaborative base available while the requested rubro catalog fills up.
+  return findApprovedPlatformProductByBarcode(barcode, fallbackBusinessActivity);
 }
 
 export async function searchApprovedPlatformProductsByName(
@@ -226,7 +250,7 @@ export async function searchApprovedPlatformProductsByName(
     take: Math.max(limit * 3, 12),
   });
 
-  return results
+  const rankedResults = results
     .map((product) => {
       const name = product.name.toLocaleLowerCase("es-AR");
       const brand = (product.brand ?? "").toLocaleLowerCase("es-AR");
@@ -256,6 +280,21 @@ export async function searchApprovedPlatformProductsByName(
     })
     .slice(0, limit)
     .map((entry) => entry.product);
+
+  if (rankedResults.length > 0) {
+    return rankedResults;
+  }
+
+  const fallbackBusinessActivity = getFallbackBusinessActivity(businessActivity);
+  if (!fallbackBusinessActivity) {
+    return [];
+  }
+
+  return searchApprovedPlatformProductsByName(
+    query,
+    limit,
+    fallbackBusinessActivity,
+  );
 }
 
 export async function browseApprovedPlatformProducts(
@@ -269,7 +308,7 @@ export async function browseApprovedPlatformProducts(
   const safeLimit = Math.min(Math.max(limit, 6), 24);
 
   if (!normalizedQuery) {
-    return prisma.platformProduct.findMany({
+    const recentProducts = await prisma.platformProduct.findMany({
       where: {
         status: PlatformProductStatus.APPROVED,
         ...buildBusinessActivityWhere(businessActivity),
@@ -282,6 +321,17 @@ export async function browseApprovedPlatformProducts(
       orderBy: [{ updatedAt: "desc" }, { name: "asc" }],
       take: safeLimit,
     });
+
+    if (recentProducts.length > 0) {
+      return recentProducts;
+    }
+
+    const fallbackBusinessActivity = getFallbackBusinessActivity(businessActivity);
+    if (!fallbackBusinessActivity) {
+      return [];
+    }
+
+    return browseApprovedPlatformProducts("", safeLimit, fallbackBusinessActivity);
   }
 
   const normalizedCode = normalizeBarcodeCode(normalizedQuery);
@@ -331,7 +381,7 @@ export async function browseApprovedPlatformProducts(
     take: Math.max(safeLimit * 3, 18),
   });
 
-  return results
+  const rankedResults = results
     .map((product) => {
       const name = product.name.toLocaleLowerCase("es-AR");
       const brand = (product.brand ?? "").toLocaleLowerCase("es-AR");
@@ -373,6 +423,17 @@ export async function browseApprovedPlatformProducts(
     })
     .slice(0, safeLimit)
     .map((entry) => entry.product);
+
+  if (rankedResults.length > 0) {
+    return rankedResults;
+  }
+
+  const fallbackBusinessActivity = getFallbackBusinessActivity(businessActivity);
+  if (!fallbackBusinessActivity) {
+    return [];
+  }
+
+  return browseApprovedPlatformProducts(query, safeLimit, fallbackBusinessActivity);
 }
 
 export function platformProductToSuggestion(product: PlatformProductDraft): BarcodeSuggestion {

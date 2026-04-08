@@ -1,6 +1,8 @@
 import { auth } from "@/lib/auth";
+import { formatBranchAccessKey } from "@/lib/branch-access-key";
 import { guardSetupAccess } from "@/lib/access-control";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import crypto from "crypto";
 
@@ -20,9 +22,6 @@ export async function POST(
 
   const { branchId } = await params;
 
-  // Generate a random high-entropy key
-  const accessKey = `KIOSCO-${crypto.randomBytes(4).toString("hex").toUpperCase()}-${crypto.randomBytes(4).toString("hex").toUpperCase()}`;
-
   try {
     const branch = await prisma.branch.findFirst({
       where: {
@@ -31,19 +30,48 @@ export async function POST(
           ownerId: session.user.id,
         },
       },
-      select: { id: true },
+      select: {
+        id: true,
+        kiosco: {
+          select: {
+            mainBusinessActivity: true,
+          },
+        },
+      },
     });
 
     if (!branch) {
       return NextResponse.json({ error: "Sucursal no encontrada o sin permisos" }, { status: 404 });
     }
 
-    const updatedBranch = await prisma.branch.update({
-      where: { id: branchId },
-      data: { accessKey },
-    });
+    const generateAccessKey = () =>
+      formatBranchAccessKey(
+        branch.kiosco.mainBusinessActivity,
+        crypto.randomBytes(4).toString("hex"),
+        crypto.randomBytes(4).toString("hex"),
+      );
 
-    return NextResponse.json({ accessKey: updatedBranch.accessKey });
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      try {
+        const updatedBranch = await prisma.branch.update({
+          where: { id: branchId },
+          data: { accessKey: generateAccessKey() },
+        });
+
+        return NextResponse.json({ accessKey: updatedBranch.accessKey });
+      } catch (error) {
+        if (
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === "P2002"
+        ) {
+          continue;
+        }
+
+        throw error;
+      }
+    }
+
+    return NextResponse.json({ error: "No se pudo generar un codigo unico." }, { status: 500 });
   } catch {
     return NextResponse.json({ error: "Failed to generate key" }, { status: 500 });
   }

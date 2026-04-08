@@ -6,6 +6,7 @@ import {
 } from "@prisma/client";
 import { NextResponse } from "next/server";
 
+import { normalizeBranchAccessKey } from "@/lib/branch-access-key";
 import { prisma } from "@/lib/prisma";
 import { isPlatformAdmin } from "@/lib/platform-admin";
 
@@ -440,9 +441,26 @@ export async function getKioscoAccessContextForSession(user: SessionUserLike | n
 }
 
 export async function getKioscoAccessContextByAccessKey(accessKey: string): Promise<KioscoAccessContext> {
+  const normalizedAccessKey = normalizeBranchAccessKey(accessKey);
+  if (!normalizedAccessKey) {
+    return {
+      allowed: false,
+      reason: "NO_BRANCH",
+      isPlatformAdmin: false,
+      kioscoId: null,
+      kioscoName: null,
+      firstBranchId: null,
+      subscriptionStatus: null,
+      managementUrl: null,
+      trialEndsAt: null,
+      activeGrant: null,
+      manualOverride: null,
+    };
+  }
+
   const now = new Date();
   const branch = await prisma.branch.findUnique({
-    where: { accessKey },
+    where: { accessKey: normalizedAccessKey },
     select: {
       id: true,
       kiosco: {

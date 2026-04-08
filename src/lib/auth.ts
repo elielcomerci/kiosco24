@@ -2,6 +2,7 @@ import NextAuth, { type DefaultSession } from "next-auth";
 import "next-auth/jwt";
 import Credentials from "next-auth/providers/credentials";
 import { PrismaAdapter } from "@auth/prisma-adapter";
+import { normalizeBranchAccessKey } from "@/lib/branch-access-key";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import { getKioscoAccessContextByAccessKey } from "@/lib/access-control";
@@ -93,8 +94,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           return null;
         }
 
+        const normalizedAccessKey = normalizeBranchAccessKey(credentials.accessKey as string);
+        if (!normalizedAccessKey) {
+          return null;
+        }
+
         const branch = await prisma.branch.findUnique({
-          where: { accessKey: credentials.accessKey as string },
+          where: { accessKey: normalizedAccessKey },
           select: { id: true },
         });
 
@@ -102,7 +108,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           return null;
         }
 
-        const access = await getKioscoAccessContextByAccessKey(credentials.accessKey as string);
+        const access = await getKioscoAccessContextByAccessKey(normalizedAccessKey);
         if (!access.allowed) {
           return null;
         }

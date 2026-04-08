@@ -5,9 +5,13 @@ import { signIn } from "next-auth/react";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 
 import BrandLogo from "@/components/branding/BrandLogo";
+import {
+  BRANCH_ACCESS_KEY_PLACEHOLDER,
+  isBranchAccessKey,
+  normalizeBranchAccessKey,
+} from "@/lib/branch-access-key";
 
 const AUTH_TIMEOUT_MS = 15000;
-const ACCESS_KEY_RE = /^KIOSCO-[A-Z0-9]{8}-[A-Z0-9]{8}$/;
 
 export type LoginMode = "owner" | "employee";
 type EmployeeStep = "key" | "employee" | "pin";
@@ -53,7 +57,7 @@ function getAuthErrorMessage(error: unknown) {
 }
 
 function normalizeAccessKey(value: string) {
-  return value.trim().toUpperCase();
+  return normalizeBranchAccessKey(value);
 }
 
 export default function LoginExperience({
@@ -183,7 +187,7 @@ export default function LoginExperience({
 
   useEffect(() => {
     const normalizedInitialKey = normalizeAccessKey(initialAccessKey);
-    if (!normalizedInitialKey || !ACCESS_KEY_RE.test(normalizedInitialKey)) {
+    if (!normalizedInitialKey || !isBranchAccessKey(normalizedInitialKey)) {
       return;
     }
 
@@ -519,7 +523,7 @@ export default function LoginExperience({
                       autoCapitalize="characters"
                       autoCorrect="off"
                       spellCheck={false}
-                      placeholder="Ej: KIOSCO-AB12CD34-EF56GH78"
+                      placeholder={`Ej: ${BRANCH_ACCESS_KEY_PLACEHOLDER}`}
                       style={{
                         textAlign: "center",
                         textTransform: "uppercase",

@@ -2,11 +2,12 @@ import type { NextAuthRequest } from "next-auth";
 import { NextResponse } from "next/server";
 
 import { auth } from "@/lib/auth";
+import { isBranchAccessKeyPath } from "@/lib/branch-access-key";
 
 export default auth((req: NextAuthRequest) => {
   const { nextUrl } = req;
   const isLoggedIn = !!req.auth?.user?.id;
-  const isEmployeeAccessLink = /^\/KIOSCO-[A-Z0-9]{8}-[A-Z0-9]{8}$/i.test(nextUrl.pathname);
+  const isEmployeeAccessLink = isBranchAccessKeyPath(nextUrl.pathname);
   const isInternalEmployeeAccess = nextUrl.pathname.startsWith("/employee-access/");
 
   if (isEmployeeAccessLink) {

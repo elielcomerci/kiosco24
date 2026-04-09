@@ -638,6 +638,7 @@ function ProductModal({
   const [barcode, setBarcode] = useState(product?.barcode ?? draftSeed?.barcode ?? "");
   const [internalCode, setInternalCode] = useState(product?.internalCode ?? draftSeed?.internalCode ?? "");
   const [image, setImage] = useState(product?.image ?? draftSeed?.image ?? "");
+  const [showBarcodeHeaderInput, setShowBarcodeHeaderInput] = useState(false);
   const [brand, setBrand] = useState(product?.brand ?? draftSeed?.brand ?? "");
   const [description, setDescription] = useState(product?.description ?? draftSeed?.description ?? "");
   const [presentation, setPresentation] = useState(product?.presentation ?? draftSeed?.presentation ?? "");
@@ -651,11 +652,18 @@ function ProductModal({
   const [stockAdjustment, setStockAdjustment] = useState("");
   const [minStock, setMinStock] = useState(formatStockQuantity(product?.minStock ?? null, initialSoldByWeight));
   const [showInGrid, setShowInGrid] = useState(product?.showInGrid ?? true);
-  const [soldByWeight, setSoldByWeight] = useState(initialSoldByWeight);
+  // saleMode: "unit" | "weight" | "meter" | "litro" — meter y litro quedarán listos en Fase 2 (schema migration)
+  const initialSaleMode = initialSoldByWeight ? "weight" : "unit";
+  const [saleMode, setSaleMode] = useState<"unit" | "weight" | "meter" | "litro">(initialSaleMode);
+  const soldByWeight = saleMode === "weight"; // derivado — mantiene compatibilidad con todo el código existente
   const [loading, setLoading] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [showExpiry, setShowExpiry] = useState(false);
+  const [expiryPill, setExpiryPill] = useState<string | null>(null); // "1m" | "3m" | "6m" | "1y" | "custom"
+  const [expiryDate, setExpiryDate] = useState("");
+  const [detailsOpen, setDetailsOpen] = useState(isNew);
   const [scannerTarget, setScannerTarget] = useState<ProductModalScannerTarget | null>(null);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [applyingSuggestion, setApplyingSuggestion] = useState(false);
@@ -986,11 +994,11 @@ function ProductModal({
       categoryId: categoryId || null,
       price: isInlineCreateOnly ? null : toNum(price),
       cost: isInlineCreateOnly ? null : toNum(cost),
-      stock: hasVariants ? undefined : isInlineCreateOnly ? 0 : isNew ? (parsedStockAdjustment !== null && parsedStockAdjustment > 0 ? parsedStockAdjustment : parseStockQuantityInput(stock, soldByWeight)) : undefined,
-      stockAdjustment: hasVariants ? undefined : isNew ? undefined : (parsedStockAdjustment !== null && parsedStockAdjustment > 0 ? parsedStockAdjustment : undefined),
+      stock: hasVariants ? undefined : isInlineCreateOnly ? 0 : isNew ? (expiryDate && parsedStockAdjustment !== null && parsedStockAdjustment > 0 ? 0 : (parsedStockAdjustment !== null && parsedStockAdjustment > 0 ? parsedStockAdjustment : parseStockQuantityInput(stock, soldByWeight))) : undefined,
+      stockAdjustment: hasVariants ? undefined : isNew ? undefined : (expiryDate && parsedStockAdjustment !== null && parsedStockAdjustment > 0 ? undefined : (parsedStockAdjustment !== null && parsedStockAdjustment > 0 ? parsedStockAdjustment : undefined)),
       minStock: normalizedMinStock,
       showInGrid,
-      soldByWeight,
+      soldByWeight, // mantenido para compatibilidad; en Fase 2 se agrega saleMode al schema
       ...(isOwner ? { platformSyncMode } : {}),
       variants: hasVariants ? variants.map((v, i) => {
         const key = v.id || `index-${i}`;
@@ -1005,8 +1013,8 @@ function ProductModal({
           internalCode: v.internalCode?.trim() || null,
           price: isInlineCreateOnly ? null : toNum(v.price?.toString() || ""),
           cost: isInlineCreateOnly ? null : toNum(v.cost?.toString() || ""),
-          stock: isInlineCreateOnly ? null : isNewVariant ? (adjustment !== null && adjustment > 0 ? adjustment : parseStockQuantityInput(v.stock?.toString() || "", soldByWeight)) : undefined,
-          stockAdjustment: isNewVariant ? undefined : (adjustment !== null && adjustment > 0 ? adjustment : undefined),
+          stock: isInlineCreateOnly ? null : isNewVariant ? (expiryDate && adjustment !== null && adjustment > 0 ? 0 : (adjustment !== null && adjustment > 0 ? adjustment : parseStockQuantityInput(v.stock?.toString() || "", soldByWeight))) : undefined,
+          stockAdjustment: isNewVariant ? undefined : (expiryDate && adjustment !== null && adjustment > 0 ? undefined : (adjustment !== null && adjustment > 0 ? adjustment : undefined)),
           minStock: parseStockQuantityInput(v.minStock?.toString() || "", soldByWeight)
         };
       }).filter(v => v.name) : []
@@ -1027,6 +1035,27 @@ function ProductModal({
       if (!res.ok) {
         setSaveError(data?.error || "No se pudo guardar el producto.");
         return;
+      }
+
+      // Si hay vencimiento y stock, crear lote trazable vía ingreso-rapido
+      const savedProductId = typeof data?.id === "string" ? data.id : product?.id;
+      if (expiryDate && parsedStockAdjustment !== null && parsedStockAdjustment > 0 && savedProductId) {
+        await fetch("/api/inventario/ingreso-rapido", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-branch-id": branchId },
+          body: JSON.stringify({
+            mode: "sumar",
+            operation: "receive",
+            items: [{
+              productId: savedProductId,
+              variantId: undefined,
+              quantityWithoutExpiry: 0,
+              lots: [{ quantity: parsedStockAdjustment, expiresOn: expiryDate }],
+              totalQuantity: parsedStockAdjustment,
+            }],
+            trackCosts: false,
+          }),
+        });
       }
 
       onSave({
@@ -1119,35 +1148,82 @@ function ProductModal({
             gap: "8px"
           }}
         >
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-            <h2 style={{ fontSize: "20px", fontWeight: 700 }}>
-              {isNew ? "Nuevo producto" : "Editar producto"}
-            </h2>
-          </div>
+          <div style={{ display: "flex", gap: "10px", paddingBottom: "12px", borderBottom: "0.5px solid var(--border)", marginBottom: "12px" }}>
+            <div style={{ position: "relative", width: "40px", height: "40px", borderRadius: "8px", background: "var(--surface-2)", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", flexShrink: 0, border: "1px dashed var(--border)", fontSize: "20px", cursor: "pointer" }} onClick={() => setShowEmojiPicker((v) => !v)}>
+              {image ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={image} alt="Product" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              ) : emoji ? (
+                <span>{emoji}</span>
+              ) : uploadingImage ? (
+                <span className="animate-pulse" style={{ fontSize: "10px" }}>...</span>
+              ) : (
+                <span style={{ fontSize: "18px", opacity: 0.5 }}>📷</span>
+              )}
+            </div>
 
-        <div style={{ marginBottom: "12px" }}>
-          <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase" }}>
-            Codigo de barras
-          </label>
-          <div style={{ display: "flex", gap: "8px" }}>
-            <input
-              ref={barcodeRef}
-              className="input"
-              placeholder={hasVariants ? "Las variantes llevan su propio codigo" : "Escanea o escribe el codigo"}
-              value={barcode}
-              onChange={(e) => setBarcode(e.target.value)}
-              style={{ flex: 1 }}
-              autoFocus={isNew}
-              disabled={hasVariants}
-            />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <input
+                style={{ background: "transparent", border: "none", fontWeight: 700, fontSize: "16px", color: "var(--text)", width: "100%", outline: "none", padding: "0 0 2px 0" }}
+                value={name}
+                onChange={(e) => {
+                  setName(e.target.value);
+                  if (nameSuggestions.length > 0) setNameSuggestions([]);
+                }}
+                placeholder="Nombre del producto *"
+                autoFocus={isNew}
+              />
+              <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap", marginTop: "2px" }}>
+                <input
+                  style={{ background: "transparent", border: "none", outline: "none", color: "var(--text-2)", width: "80px", fontSize: "12px", padding: 0 }}
+                  placeholder="Marca (opcional)"
+                  value={brand}
+                  onChange={(e) => setBrand(e.target.value)}
+                />
+                <span style={{ fontSize: "12px", color: "var(--text-3)", flexShrink: 0 }}>·</span>
+                <select
+                  value={categoryId}
+                  onChange={(e) => setCategoryId(e.target.value)}
+                  style={{ background: "transparent", border: "none", outline: "none", color: "var(--text-2)", fontSize: "12px", padding: 0, cursor: "pointer" }}
+                >
+                  <option value="">Sin categoría</option>
+                  {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+
+              {!hasVariants && (
+                <div style={{ marginTop: "4px" }}>
+                  {barcode || showBarcodeHeaderInput ? (
+                     <div style={{ display: "flex", gap: "8px", alignItems: "flex-end" }}>
+                        <input
+                          ref={barcodeRef}
+                          style={{ background: "transparent", border: "none", outline: "none", color: "var(--text)", width: "100%", fontSize: "12px", padding: "2px 0", borderBottom: "1px solid var(--border)" }}
+                          placeholder="Código de barras (EAN)"
+                          value={barcode}
+                          onChange={(e) => setBarcode(e.target.value)}
+                          autoFocus={showBarcodeHeaderInput}
+                        />
+                        <button type="button" className="btn btn-ghost" style={{ padding: "0 8px", fontSize: "12px" }} onClick={(e) => { e.preventDefault(); setScannerTarget("barcode"); }} title="Escanear">📷</button>
+                     </div>
+                  ) : (
+                    <span
+                      style={{ fontSize: "11px", color: "var(--text-3)", background: "var(--surface-2)", border: "0.5px solid var(--border)", borderRadius: "4px", padding: "1px 6px", cursor: "pointer", display: "inline-block" }}
+                      onClick={() => setShowBarcodeHeaderInput(true)}
+                    >
+                      + Agregar EAN
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+
             <button
-              className="btn btn-ghost"
-              style={{ padding: "0 16px", flexShrink: 0, fontSize: "20px" }}
-              onClick={() => setScannerTarget("barcode")}
-              title="Escanear con camara"
-              disabled={hasVariants}
+              className="btn btn-sm btn-ghost"
+              onClick={onClose}
+              style={{ flexShrink: 0, width: "32px", height: "32px", padding: 0, fontSize: "20px", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-3)", alignSelf: "flex-start" }}
+              title="Cerrar"
             >
-              📷
+              ✕
             </button>
           </div>
           {hasVariants && (
@@ -1210,71 +1286,65 @@ function ProductModal({
                   )}
                 </div>
               </div>
-              <div style={{ display: "flex", gap: "8px" }}>
-                <button
-                  className="btn btn-ghost"
-                  style={{ flex: 1 }}
-                  onClick={() => {
-                    setDismissedSuggestionCode(normalizeBarcodeCode(barcode));
-                  }}
-                >
-                  Ocultar
-                </button>
-                <button
-                  className="btn btn-green"
-                  style={{ flex: 1 }}
-                  onClick={() => visibleSuggestion && void applySuggestion(visibleSuggestion)}
-                  disabled={applyingSuggestion}
-                >
-                  {applyingSuggestion ? "Aplicando..." : "Usar"}
-                </button>
+              <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <button
+                    className="btn btn-ghost"
+                    style={{ flex: 1 }}
+                    onClick={() => {
+                      setDismissedSuggestionCode(normalizeBarcodeCode(barcode));
+                    }}
+                  >
+                    Ocultar
+                  </button>
+                  <button
+                    className="btn btn-green"
+                    style={{ flex: 1 }}
+                    onClick={() => visibleSuggestion && void applySuggestion(visibleSuggestion)}
+                    disabled={applyingSuggestion}
+                  >
+                    {applyingSuggestion ? "Aplicando..." : "Usar"}
+                  </button>
+                </div>
+                <div style={{ display: "flex", gap: "6px", marginTop: "4px", alignItems: "center", justifyContent: "flex-end" }}>
+                  <span style={{ fontSize: "10px", color: platformSyncMode === "MANUAL" ? "var(--text)" : "var(--text-3)", fontWeight: platformSyncMode === "MANUAL" ? 600 : 400 }}>Manual</span>
+                  <button
+                    type="button"
+                    onClick={() => setPlatformSyncMode(platformSyncMode === "MANUAL" ? "AUTO" : "MANUAL")}
+                    style={{
+                      position: "relative",
+                      width: "32px",
+                      height: "18px",
+                      borderRadius: "9px",
+                      background: platformSyncMode === "AUTO" ? "var(--color-green, #10b981)" : "var(--surface-2)",
+                      border: platformSyncMode === "AUTO" ? "none" : "1px solid var(--border)",
+                      cursor: "pointer",
+                      padding: 0,
+                      transition: "background 0.2s"
+                    }}
+                  >
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: platformSyncMode === "AUTO" ? "2px" : "1px",
+                        left: platformSyncMode === "AUTO" ? "16px" : "1px",
+                        width: "14px",
+                        height: "14px",
+                        borderRadius: "7px",
+                        background: "#fff",
+                        boxShadow: "0 1px 2px rgba(0,0,0,0.15)",
+                        transition: "all 0.2s"
+                      }}
+                    />
+                  </button>
+                  <span style={{ fontSize: "10px", color: platformSyncMode === "AUTO" ? "var(--color-green, #10b981)" : "var(--text-3)", fontWeight: platformSyncMode === "AUTO" ? 600 : 400 }}>Auto</span>
+                </div>
               </div>
             </div>
           )}
-        </div>
 
-        <div style={{ marginBottom: "12px" }}>
-          <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase" }}>
-            Codigo interno
-          </label>
-          <input
-            className="input"
-            placeholder="SKU o referencia propia"
-            value={internalCode}
-            onChange={(e) => setInternalCode(e.target.value)}
-          />
-        </div>
 
-        {/* Emoji Picker */}
-        <div style={{ display: "flex", gap: "10px", alignItems: "center", marginBottom: "12px" }}>
-          <button
-            style={{
-              width: "56px",
-              height: "56px",
-              fontSize: "28px",
-              background: "var(--surface-2)",
-              border: "1px solid var(--border)",
-              borderRadius: "var(--radius)",
-              cursor: "pointer",
-              flexShrink: 0,
-            }}
-            onClick={() => setShowEmojiPicker((v) => !v)}
-          >
-            {emoji || "＋"}
-          </button>
-            <input
-              className="input"
-              placeholder="Nombre del producto *"
-              value={name}
-              onChange={(e) => {
-                setName(e.target.value);
-                if (nameSuggestions.length > 0) {
-                  setNameSuggestions([]);
-                }
-              }}
-              style={{ flex: 1 }}
-            />
-          </div>
+
 
         {shouldLookupByName && (
           <div
@@ -1575,226 +1645,206 @@ function ProductModal({
           </div>
         )}
 
-        {/* Categoría & Foto */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "10px", marginBottom: "12px", alignItems: "flex-end" }}>
-          <div>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", marginBottom: "4px" }}>
-              <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase", display: "block" }}>
-                Categoría
-              </label>
-              <button
-                type="button"
-                className="btn btn-sm btn-ghost"
-                style={{ padding: "4px 10px", fontSize: "12px", flexShrink: 0 }}
-                onClick={() => setShowCategoryModal(true)}
-              >
-                + Nueva
-              </button>
-            </div>
-            <select
-              className="input"
-              value={categoryId}
-              onChange={(e) => setCategoryId(e.target.value)}
-              style={{ width: "100%", background: "var(--surface)", cursor: "pointer" }}
+        {/* Categoría */}
+        <div style={{ marginBottom: "12px" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", marginBottom: "4px" }}>
+            <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase", display: "block" }}>
+              Categoría
+            </label>
+            <button
+              type="button"
+              className="btn btn-sm btn-ghost"
+              style={{ padding: "4px 10px", fontSize: "12px", flexShrink: 0 }}
+              onClick={() => setShowCategoryModal(true)}
             >
-              <option value="">Sin categoría</option>
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
+              + Nueva
+            </button>
           </div>
-
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-            <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase", display: "block", marginBottom: "4px" }}>
-              Foto
-            </label>
-            <div style={{ position: "relative", width: "44px", height: "44px", borderRadius: "10px", border: "1px dashed var(--border)", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", background: "var(--surface)" }}>
-              {image ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={image} alt="Product" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-              ) : uploadingImage ? (
-                <span className="animate-pulse" style={{ fontSize: "12px" }}>...</span>
-              ) : (
-                <span style={{ fontSize: "18px", opacity: 0.5 }}>📷</span>
-              )}
-
-              <input
-                type="file"
-                accept="image/*"
-                style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer" }}
-                disabled={uploadingImage}
-                onChange={async (e) => {
-                  const file = e.target.files?.[0];
-                  if (!file) return;
-                  setUploadingImage(true);
-                  try {
-                    const optimizedFile = await optimizeProductImage(file);
-                    const formData = new FormData();
-                    formData.append("file", optimizedFile);
-                    formData.append("folder", "products");
-                    const res = await fetch("/api/upload", { method: "POST", body: formData });
-                    const data = await res.json();
-                    if (data.secure_url) setImage(data.secure_url);
-                  } catch (err) {
-                    console.error(err);
-                  }
-                  setUploadingImage(false);
-                  e.target.value = "";
-                }}
-              />
-            </div>
-          </div>
-        </div>
-
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "12px" }}>
-          <div>
-            <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase" }}>
-              Marca
-            </label>
-            <input
-              className="input"
-              placeholder="Opcional"
-              value={brand}
-              onChange={(e) => setBrand(e.target.value)}
-            />
-          </div>
-          <div>
-            <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase" }}>
-              Presentacion
-            </label>
-            <input
-              className="input"
-              placeholder="Ej: 500 ml"
-              value={presentation}
-              onChange={(e) => setPresentation(e.target.value)}
-            />
-          </div>
-        </div>
-
-        <div style={{ marginBottom: "12px" }}>
-          <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase" }}>
-            Proveedor habitual
-          </label>
-          <input
+          <select
             className="input"
-            placeholder="Opcional"
-            value={supplierName}
-            onChange={(e) => setSupplierName(e.target.value)}
-          />
+            value={categoryId}
+            onChange={(e) => setCategoryId(e.target.value)}
+            style={{ width: "100%", background: "var(--surface)", cursor: "pointer" }}
+          >
+            <option value="">Sin categoría</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
         </div>
 
-        <div style={{ marginBottom: "12px" }}>
-          <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase" }}>
-            Descripcion
-          </label>
-          <textarea
-            className="input"
-            placeholder="Opcional"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            rows={3}
-            style={{ width: "100%", resize: "vertical" }}
-          />
-        </div>
 
-        <div style={{ marginBottom: "12px" }}>
-          <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase" }}>
-            Notas internas
-          </label>
-          <textarea
-            className="input"
-            placeholder="Dato util para tu equipo: proveedor, ubicacion, compra minima..."
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            rows={2}
-            style={{ width: "100%", resize: "vertical" }}
-          />
-        </div>
-
-        {canManagePlatformSync && (
-          <div
+        {/* ── Accordion: Datos del producto ─────────────────────────────── */}
+        <div
+          style={{
+            padding: "14px 0",
+            borderTop: "0.5px solid var(--border)",
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => setDetailsOpen((v) => !v)}
             style={{
-              marginBottom: "12px",
-              padding: "12px",
-              borderRadius: "14px",
-              border: "1px solid rgba(56,189,248,0.18)",
-              background: "rgba(56,189,248,0.08)",
+              width: "100%",
               display: "flex",
-              flexDirection: "column",
-              gap: "10px",
+              alignItems: "center",
+              justifyContent: "space-between",
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              padding: 0,
+              color: "var(--text-2)",
+              fontSize: "12px",
+              fontFamily: "inherit",
             }}
           >
-            <div>
-              <div style={{ fontSize: "12px", fontWeight: 700, textTransform: "uppercase", color: "#38bdf8" }}>
-                Base colaborativa
-              </div>
-              <div style={{ fontSize: "12px", color: "var(--text-2)", marginTop: "4px", lineHeight: 1.5 }}>
-                Sincroniza foto y datos descriptivos desde la base general. Precio, stock y demas datos operativos quedan locales.
-              </div>
-            </div>
-            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-              {(["MANUAL", "AUTO"] as PlatformSyncMode[]).map((mode) => (
-                <button
-                  key={mode}
-                  type="button"
-                  className={platformSyncMode === mode ? "btn btn-green" : "btn btn-ghost"}
-                  style={{ flex: 1, minWidth: "120px" }}
-                  onClick={() => setPlatformSyncMode(mode)}
-                >
-                  {mode === "AUTO" ? "Auto" : "Manual"}
-                </button>
-              ))}
-            </div>
-            <div style={{ fontSize: "12px", color: "var(--text-2)", lineHeight: 1.5 }}>
-              {platformSyncMode === "AUTO"
-                ? "Los proximos cambios aprobados en la base general se aplican solos en este producto."
-                : "Si la base mejora, lo vas a ver y podes aplicarlo cuando quieras."}
-            </div>
-            {product?.platformUpdateAvailable && (
-              <div
-                style={{
-                  display: "grid",
-                  gap: "10px",
-                }}
-              >
-                <div style={{ fontSize: "12px", fontWeight: 700, color: "#38bdf8" }}>
-                  Hay cambios disponibles en la base general.
+            <span>Datos del producto</span>
+            <svg
+              viewBox="0 0 14 14"
+              style={{
+                width: 14, height: 14,
+                stroke: "currentColor", fill: "none", strokeWidth: 1.5,
+                transform: detailsOpen ? "rotate(180deg)" : "rotate(0deg)",
+                transition: "transform 0.15s",
+                flexShrink: 0,
+              }}
+            >
+              <polyline points="2,4 7,10 12,4" />
+            </svg>
+          </button>
+
+          {detailsOpen && (
+            <div style={{ paddingTop: "12px", display: "flex", flexDirection: "column", gap: "8px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                <div>
+                  <label style={{ fontSize: "12px", color: "var(--text-3)", display: "block", marginBottom: "3px" }}>
+                    Presentación
+                  </label>
+                  <input
+                    className="input"
+                    placeholder="Ej: 500 ml"
+                    value={presentation}
+                    onChange={(e) => setPresentation(e.target.value)}
+                    style={{ height: "32px", padding: "0 8px", fontSize: "13px" }}
+                  />
                 </div>
-                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                  <button
-                    type="button"
-                    className="btn btn-sm btn-ghost"
-                    style={{ border: "1px solid rgba(56,189,248,0.32)" }}
-                    onClick={() => void handleSyncNow("image")}
-                    disabled={syncingPlatform || loading}
-                  >
-                    {syncingPlatform ? "Actualizando..." : "Solo fotos"}
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-sm btn-ghost"
-                    style={{ border: "1px solid rgba(56,189,248,0.32)" }}
-                    onClick={() => void handleSyncNow("text")}
-                    disabled={syncingPlatform || loading}
-                  >
-                    {syncingPlatform ? "Actualizando..." : "Titulos y textos"}
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-sm btn-ghost"
-                    style={{ border: "1px solid rgba(56,189,248,0.32)" }}
-                    onClick={() => void handleSyncNow("all")}
-                    disabled={syncingPlatform || loading}
-                  >
-                    {syncingPlatform ? "Actualizando..." : "Todo"}
-                  </button>
+                <div>
+                  <label style={{ fontSize: "12px", color: "var(--text-3)", display: "block", marginBottom: "3px" }}>
+                    Proveedor
+                  </label>
+                  <input
+                    className="input"
+                    placeholder="Distribuidora Norte"
+                    value={supplierName}
+                    onChange={(e) => setSupplierName(e.target.value)}
+                    style={{ height: "32px", padding: "0 8px", fontSize: "13px" }}
+                  />
                 </div>
               </div>
-            )}
-          </div>
-        )}
+
+              <div>
+                <label style={{ fontSize: "12px", color: "var(--text-3)", display: "block", marginBottom: "3px" }}>
+                  Código Interno
+                </label>
+                <input
+                  className="input"
+                  placeholder="SKU"
+                  value={internalCode}
+                  onChange={(e) => setInternalCode(e.target.value)}
+                  style={{ height: "32px", padding: "0 8px", fontSize: "13px" }}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: "12px", color: "var(--text-3)", display: "block", marginBottom: "3px" }}>
+                  Descripción
+                </label>
+                <input
+                  className="input"
+                  placeholder="Opcional"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  style={{ height: "32px", padding: "0 8px", fontSize: "13px" }}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: "12px", color: "var(--text-3)", display: "block", marginBottom: "3px" }}>
+                  Notas internas
+                </label>
+                <textarea
+                  className="input"
+                  placeholder="Solo visible en tu sucursal..."
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  rows={2}
+                  style={{ width: "100%", resize: "none", height: "56px", padding: "6px 8px", fontSize: "13px", lineHeight: 1.4 }}
+                />
+              </div>
+
+              {canManagePlatformSync && (
+                <div style={{ display: "flex", flexDirection: "column", gap: "8px", paddingTop: "8px", borderTop: "0.5px solid var(--border)", marginTop: "4px" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
+                    <label style={{ fontSize: "11px", color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase" }}>
+                      Base general
+                    </label>
+                    <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                      <span style={{ fontSize: "10px", color: platformSyncMode === "MANUAL" ? "var(--text)" : "var(--text-3)", fontWeight: platformSyncMode === "MANUAL" ? 600 : 400 }}>Manual</span>
+                      <button
+                        type="button"
+                        onClick={() => setPlatformSyncMode(platformSyncMode === "MANUAL" ? "AUTO" : "MANUAL")}
+                        style={{
+                          position: "relative",
+                          width: "32px",
+                          height: "18px",
+                          borderRadius: "9px",
+                          background: platformSyncMode === "AUTO" ? "var(--color-green, #10b981)" : "var(--surface-2)",
+                          border: platformSyncMode === "AUTO" ? "none" : "1px solid var(--border)",
+                          cursor: "pointer",
+                          padding: 0,
+                          transition: "background 0.2s"
+                        }}
+                      >
+                        <div
+                          style={{
+                            position: "absolute",
+                            top: platformSyncMode === "AUTO" ? "2px" : "1px",
+                            left: platformSyncMode === "AUTO" ? "16px" : "1px",
+                            width: "14px",
+                            height: "14px",
+                            borderRadius: "7px",
+                            background: "#fff",
+                            boxShadow: "0 1px 2px rgba(0,0,0,0.15)",
+                            transition: "all 0.2s"
+                          }}
+                        />
+                      </button>
+                      <span style={{ fontSize: "10px", color: platformSyncMode === "AUTO" ? "var(--color-green, #10b981)" : "var(--text-3)", fontWeight: platformSyncMode === "AUTO" ? 600 : 400 }}>Auto</span>
+                    </div>
+                  </div>
+                  {product?.platformUpdateAvailable && (
+                    <div style={{ padding: "8px", background: "rgba(56,189,248,0.08)", border: "0.5px solid rgba(56,189,248,0.2)", borderRadius: "6px" }}>
+                      <div style={{ fontSize: "11px", fontWeight: 700, color: "#38bdf8", marginBottom: "6px" }}>Cambios disponibles</div>
+                      <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
+                        <button type="button" className="btn btn-sm btn-ghost" style={{ flex: 1, padding: "2px", fontSize: "10px", minWidth: 0, height: "24px", border: "0.5px solid rgba(56,189,248,0.3)", color: "var(--text-2)" }} onClick={() => void handleSyncNow("image")} disabled={syncingPlatform || loading}>
+                          {syncingPlatform ? "..." : "Fotos"}
+                        </button>
+                        <button type="button" className="btn btn-sm btn-ghost" style={{ flex: 1, padding: "2px", fontSize: "10px", minWidth: 0, height: "24px", border: "0.5px solid rgba(56,189,248,0.3)", color: "var(--text-2)" }} onClick={() => void handleSyncNow("text")} disabled={syncingPlatform || loading}>
+                          {syncingPlatform ? "..." : "Textos"}
+                        </button>
+                        <button type="button" className="btn btn-sm btn-green" style={{ flex: 1, padding: "2px", fontSize: "10px", minWidth: 0, height: "24px", color: "#fff" }} onClick={() => void handleSyncNow("all")} disabled={syncingPlatform || loading}>
+                          {syncingPlatform ? "..." : "Todos"}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
 
           <div
             style={{
@@ -1828,32 +1878,32 @@ function ProductModal({
           </div>
 
           {!isInlineCreateOnly && !hasVariants && (
-            <div style={{ display: "grid", gridTemplateColumns: isInlineCreateOnly ? "1fr" : "1fr 1fr", gap: "10px", marginBottom: "12px" }}>
-              <div>
-                <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase" }}>Precio</label>
-              <input
-                className="input"
-                type="number"
-                inputMode="decimal"
-                placeholder="0"
-                value={price}
-                onChange={(e) => setPrice(e.target.value)}
-                style={{ textAlign: "right" }}
-              />
+            <div style={{ display: "flex", gap: "10px", marginBottom: "12px" }}>
+              <div style={{ display: "flex", flex: 1, alignItems: "center", background: "var(--surface)", border: "0.5px solid var(--border)", borderRadius: "var(--radius)", padding: "0 10px" }}>
+                <span style={{ fontSize: "11px", color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase", width: "45px", flexShrink: 0 }}>Precio</span>
+                <input
+                  className="input no-outline"
+                  type="number"
+                  inputMode="decimal"
+                  placeholder="0"
+                  value={price}
+                  onChange={(e) => setPrice(e.target.value)}
+                  style={{ flex: 1, border: "none", background: "transparent", textAlign: "right", height: "36px", padding: 0 }}
+                />
+              </div>
+              <div style={{ display: "flex", flex: 1, alignItems: "center", background: "var(--surface)", border: "0.5px solid var(--border)", borderRadius: "var(--radius)", padding: "0 10px" }}>
+                <span style={{ fontSize: "11px", color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase", width: "45px", flexShrink: 0 }}>Costo</span>
+                <input
+                  className="input no-outline"
+                  type="number"
+                  inputMode="decimal"
+                  placeholder="0"
+                  value={cost}
+                  onChange={(e) => setCost(e.target.value)}
+                  style={{ flex: 1, border: "none", background: "transparent", textAlign: "right", height: "36px", padding: 0 }}
+                />
+              </div>
             </div>
-            <div>
-              <label style={{ fontSize: "12px", color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase" }}>Costo</label>
-              <input
-                className="input"
-                type="number"
-                inputMode="decimal"
-                placeholder="0"
-                value={cost}
-                onChange={(e) => setCost(e.target.value)}
-                style={{ textAlign: "right" }}
-              />
-            </div>
-          </div>
           )}
 
         {/* Modificador de Variantes y Stock/Barcode alternativo */}
@@ -2005,7 +2055,6 @@ function ProductModal({
                                 const key = v.id || `index-${i}`;
                                 setVariantStockAdjustments((prev) => ({ ...prev, [key]: e.target.value.startsWith("-") ? "" : e.target.value }));
                               }}
-                              disabled={Boolean(v.id && v.hasTrackedLots)}
                               style={{ textAlign: "right", fontSize: "14px", fontWeight: 600 }}
                             />
                           </div>
@@ -2061,8 +2110,8 @@ function ProductModal({
                     </div>
                  </div>
                  {v.id && v.hasTrackedLots && (
-                   <div style={{ marginTop: "8px", fontSize: "11px", color: "var(--amber)" }}>
-                    Esta variante tiene vencimientos cargados. Ajustá su stock desde Corregir inventario.
+                   <div style={{ marginTop: "8px", fontSize: "11px", color: "var(--text-3)" }}>
+                    El ingreso se registra como lote nuevo independiente.
                    </div>
                  )}
               </div>
@@ -2138,7 +2187,6 @@ function ProductModal({
                     value={stockAdjustment}
                     onChange={(e) => setStockAdjustment(e.target.value.startsWith("-") ? "" : e.target.value)}
                     style={{ textAlign: "right", fontSize: "16px", fontWeight: 600 }}
-                    disabled={!isNew && productHasTrackedLots}
                   />
                   <div style={{ fontSize: "10px", color: "var(--text-3)", marginTop: "4px" }}>
                     {soldByWeight ? "Ingresá en kg (ej: 1.5)" : "Se suma arriba del stock actual"}
@@ -2181,6 +2229,125 @@ function ProductModal({
                   El producto está en negativo. Ingresá lo que llegó y el sistema calculará el stock final.
                 </div>
               )}
+
+              {/* ── Pills de fecha de vencimiento ──────────────────────── */}
+              {!hasVariants && !soldByWeight && (
+                <div style={{ marginTop: "10px" }}>
+                  {!showExpiry ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowExpiry(true)}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "5px",
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        color: "var(--text-3)",
+                        fontSize: "12px",
+                        padding: "2px 0",
+                        fontFamily: "inherit",
+                      }}
+                    >
+                      <svg viewBox="0 0 12 12" style={{ width: 12, height: 12, stroke: "currentColor", fill: "none", strokeWidth: 1.5, flexShrink: 0 }}>
+                        <rect x="1" y="2" width="10" height="9" rx="1.5" />
+                        <line x1="4" y1="1" x2="4" y2="3" />
+                        <line x1="8" y1="1" x2="8" y2="3" />
+                        <line x1="1" y1="5" x2="11" y2="5" />
+                      </svg>
+                      Agregar fecha de vencimiento
+                    </button>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                      <div style={{ display: "flex", gap: "5px", flexWrap: "wrap" }}>
+                        {([
+                          { key: "1m", label: "1 mes", months: 1 },
+                          { key: "3m", label: "3 meses", months: 3 },
+                          { key: "6m", label: "6 meses", months: 6 },
+                          { key: "1y", label: "1 año", months: 12 },
+                        ] as const).map(({ key, label, months }) => {
+                          const isActive = expiryPill === key;
+                          return (
+                            <button
+                              key={key}
+                              type="button"
+                              onClick={() => {
+                                setExpiryPill(key);
+                                const d = new Date();
+                                d.setMonth(d.getMonth() + months);
+                                setExpiryDate(d.toISOString().slice(0, 10));
+                              }}
+                              style={{
+                                padding: "3px 10px",
+                                border: isActive ? "0.5px solid #185FA5" : "0.5px solid var(--border)",
+                                borderRadius: "20px",
+                                fontSize: "12px",
+                                cursor: "pointer",
+                                background: isActive ? "#E6F1FB" : "var(--surface)",
+                                color: isActive ? "#0C447C" : "var(--text-2)",
+                                fontFamily: "inherit",
+                              }}
+                            >
+                              {label}
+                            </button>
+                          );
+                        })}
+                        <button
+                          type="button"
+                          onClick={() => setExpiryPill("custom")}
+                          style={{
+                            padding: "3px 10px",
+                            border: expiryPill === "custom" ? "0.5px solid #185FA5" : "0.5px solid var(--border)",
+                            borderRadius: "20px",
+                            fontSize: "12px",
+                            cursor: "pointer",
+                            background: expiryPill === "custom" ? "#E6F1FB" : "var(--surface)",
+                            color: expiryPill === "custom" ? "#0C447C" : "var(--text-2)",
+                            fontFamily: "inherit",
+                          }}
+                        >
+                          Otra fecha
+                        </button>
+                      </div>
+
+                      {(expiryPill === "custom" || expiryDate) && (
+                        <input
+                          type="date"
+                          value={expiryDate}
+                          onChange={(e) => { setExpiryDate(e.target.value); setExpiryPill("custom"); }}
+                          style={{
+                            height: "32px",
+                            border: "0.5px solid var(--border)",
+                            borderRadius: "8px",
+                            padding: "0 8px",
+                            fontSize: "13px",
+                            fontFamily: "inherit",
+                            color: "var(--text)",
+                            background: "var(--surface)",
+                            width: "170px",
+                          }}
+                        />
+                      )}
+
+                      {expiryDate && (
+                        <div style={{ display: "inline-flex", alignItems: "center", gap: "5px", background: "#EAF3DE", borderRadius: "20px", padding: "2px 9px", fontSize: "11px", color: "#3B6D11" }}>
+                          <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#639922", flexShrink: 0, display: "inline-block" }} />
+                          Nuevo lote · vence {new Date(expiryDate + "T00:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "short", year: "numeric" })}
+                        </div>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => { setShowExpiry(false); setExpiryDate(""); setExpiryPill(null); }}
+                        style={{ fontSize: "11px", color: "var(--text-3)", background: "none", border: "none", cursor: "pointer", padding: 0, fontFamily: "inherit", textAlign: "left" }}
+                      >
+                        Quitar fecha
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
             )}
             
@@ -2203,8 +2370,8 @@ function ProductModal({
             </div>
             )}
             {!isNew && productHasTrackedLots && (
-              <div style={{ marginTop: "-4px", marginBottom: "12px", fontSize: "12px", color: "var(--amber)" }}>
-                Este producto tiene vencimientos cargados. Ajustá el stock desde Corregir inventario para no romper el desglose por lotes.
+              <div style={{ marginTop: "-4px", marginBottom: "12px", fontSize: "12px", color: "var(--text-3)" }}>
+                El ingreso se registra como un lote nuevo independiente. El desglose por vencimientos se mantiene intacto.
               </div>
             )}
 
@@ -2319,33 +2486,30 @@ function ProductModal({
           </div>
         )}
 
-        {/* showInGrid toggle */}
+        {/* ── Toggle Mostrar en caja + Selector Modo de venta ──────────── */}
         {!isNew && (
           <div
             style={{
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
-              padding: "12px 16px",
+              padding: "10px 14px",
               background: "var(--surface-2)",
               borderRadius: "var(--radius)",
               border: "1px solid var(--border)",
-              marginBottom: "12px",
+              marginBottom: "8px",
             }}
           >
-            <div>
-              <div style={{ fontWeight: 600 }}>Mostrar en caja</div>
-              <div style={{ fontSize: "12px", color: "var(--text-3)" }}>Si está oculto no aparece al vender</div>
-            </div>
+            <div style={{ fontSize: "13px", fontWeight: 600 }}>Mostrar en caja</div>
             <button
               style={{
-                width: "44px",
-                height: "24px",
+                width: "32px",
+                height: "18px",
                 borderRadius: "99px",
-                background: showInGrid ? "var(--green)" : "var(--border)",
+                background: showInGrid ? "#185FA5" : "var(--border)",
                 border: "none",
                 cursor: "pointer",
-                transition: "background 0.2s",
+                transition: "background 0.15s",
                 position: "relative",
                 flexShrink: 0,
               }}
@@ -2355,63 +2519,49 @@ function ProductModal({
                 style={{
                   position: "absolute",
                   top: "2px",
-                  left: showInGrid ? "22px" : "2px",
-                  width: "20px",
-                  height: "20px",
+                  left: showInGrid ? "16px" : "2px",
+                  width: "14px",
+                  height: "14px",
                   borderRadius: "50%",
                   background: "white",
-                  transition: "left 0.2s",
+                  transition: "left 0.15s",
                 }}
               />
             </button>
           </div>
         )}
 
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            padding: "12px 16px",
-            background: "var(--surface-2)",
-            borderRadius: "var(--radius)",
-            border: "1px solid var(--border)",
-            marginBottom: "12px",
-          }}
-        >
-          <div>
-            <div style={{ fontWeight: 600 }}>Vender por peso</div>
-            <div style={{ fontSize: "12px", color: "var(--text-3)" }}>
-              El precio y el costo se toman por kilo, y la venta se carga en gramos.
-            </div>
-          </div>
-          <button
-            style={{
-              width: "44px",
-              height: "24px",
-              borderRadius: "99px",
-              background: soldByWeight ? "var(--green)" : "var(--border)",
-              border: "none",
-              cursor: "pointer",
-              transition: "background 0.2s",
-              position: "relative",
-              flexShrink: 0,
-            }}
-            onClick={() => setSoldByWeight((v) => !v)}
+        {/* Selector Modo de venta */}
+        <div style={{ marginBottom: "8px" }}>
+          <label style={{ fontSize: "11px", color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase", display: "block", marginBottom: "4px" }}>
+            Modo de venta
+          </label>
+          <select
+            className="input"
+            value={saleMode}
+            onChange={(e) => setSaleMode(e.target.value as "unit" | "weight" | "meter" | "litro")}
+            style={{ width: "100%", background: "var(--surface)", cursor: "pointer" }}
           >
-            <span
-              style={{
-                position: "absolute",
-                top: "2px",
-                left: soldByWeight ? "22px" : "2px",
-                width: "20px",
-                height: "20px",
-                borderRadius: "50%",
-                background: "white",
-                transition: "left 0.2s",
-              }}
-            />
-          </button>
+            <option value="unit">Por unidad</option>
+            <option value="weight">Por peso (gramos)</option>
+            <option value="meter">Por metro lineal</option>
+            <option value="litro">Por litro</option>
+          </select>
+          {saleMode === "weight" && (
+            <div style={{ marginTop: "5px", fontSize: "11px", color: "var(--text-3)", background: "var(--surface-2)", borderRadius: "6px", padding: "5px 9px" }}>
+              El precio y el costo se toman por kg. La venta se registra en gramos.
+            </div>
+          )}
+          {saleMode === "meter" && (
+            <div style={{ marginTop: "5px", fontSize: "11px", color: "var(--text-3)", background: "var(--surface-2)", borderRadius: "6px", padding: "5px 9px" }}>
+              El precio y el costo se toman por metro lineal. <span style={{ color: "var(--amber)" }}>Disponible en caja próximamente.</span>
+            </div>
+          )}
+          {saleMode === "litro" && (
+            <div style={{ marginTop: "5px", fontSize: "11px", color: "var(--text-3)", background: "var(--surface-2)", borderRadius: "6px", padding: "5px 9px" }}>
+              El precio y el costo se toman por litro. <span style={{ color: "var(--amber)" }}>Disponible en caja próximamente.</span>
+            </div>
+          )}
         </div>
 
         {/* Actions */}
@@ -3514,7 +3664,7 @@ function StockLoadingModal({
         }}
       >
         <div className="restock-modal__product-head">
-          <ProductThumb image={product.image} emoji={product.emoji} name={product.name} size={56} radius={18} previewable />
+          <ProductThumb image={product.image} emoji={product.emoji} name={product.name} size={56} radius={18} />
           <div className="restock-modal__product-copy">
             <div className="restock-modal__product-title-row">
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -3624,7 +3774,7 @@ function StockLoadingModal({
         }}
       >
         <div className="restock-modal__product-head">
-          <ProductThumb image={suggestion.image} emoji={null} name={suggestion.name} size={56} radius={18} previewable />
+          <ProductThumb image={suggestion.image} emoji={null} name={suggestion.name} size={56} radius={18} />
           <div className="restock-modal__product-copy">
             <div className="restock-modal__product-title-row">
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -4011,7 +4161,7 @@ function StockLoadingModal({
                 }}
               >
                 <div className="restock-modal__product-head" style={{ alignItems: "center" }}>
-                  <ProductThumb image={p.image} emoji={p.emoji} name={p.name} size={42} radius={12} previewable />
+                  <ProductThumb image={p.image} emoji={p.emoji} name={p.name} size={42} radius={12} />
                   <div className="restock-modal__product-copy">
                     <div className="restock-modal__product-title-row">
                       <div style={{ flex: 1, minWidth: 0 }}>
@@ -5724,7 +5874,7 @@ export default function ProductosPage() {
                 }}>
                   {isSelected ? "✓" : ""}
                 </div>
-                <ProductThumb image={p.image} emoji={p.emoji} name={p.name} size={56} radius={16} previewable />
+                <ProductThumb image={p.image} emoji={p.emoji} name={p.name} size={56} radius={16} />
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 700, fontSize: "calc(15px * var(--device-font-scale, 1))", color: "var(--text)" }}>{p.name}</div>
                   {p.soldByWeight && (
@@ -5814,7 +5964,7 @@ export default function ProductosPage() {
                 }}
                 onClick={() => setModal(p)}
               >
-                <ProductThumb image={p.image} emoji={p.emoji} name={p.name} size={60} radius={16} previewable />
+                <ProductThumb image={p.image} emoji={p.emoji} name={p.name} size={60} radius={16} />
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 700, fontSize: "calc(15px * var(--device-font-scale, 1))", color: "var(--text)" }}>
                     {p.name}

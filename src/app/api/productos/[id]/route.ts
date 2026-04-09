@@ -5,7 +5,7 @@ import { canAccessSetupWithoutSubscription, getKioscoAccessContextForSession } f
 import { auth } from "@/lib/auth";
 import { getBranchContext } from "@/lib/branch";
 import { applyInventoryCorrectionToCostLayers } from "@/lib/inventory-cost-consumption";
-import { hasBlockingStockLots, summarizeTrackedLots } from "@/lib/inventory-expiry";
+import { addTrackedLots, hasBlockingStockLots, summarizeTrackedLots } from "@/lib/inventory-expiry";
 import { DEFAULT_PRICING_MODE, syncSharedPricingFromBranch } from "@/lib/pricing-mode";
 import { hasPlatformSyncUpdate } from "@/lib/platform-product-sync";
 import { Prisma, prisma } from "@/lib/prisma";
@@ -454,21 +454,6 @@ export async function PATCH(
         : currentInventory?.stock ?? 0;
   const computedStock = stock !== undefined ? requestedSimpleStock : (stockAdjustment !== undefined ? requestedSimpleStock : undefined);
   const simpleStockChanged = computedStock !== undefined && computedStock !== (currentInventory?.stock ?? 0);
-  const variantStockChanged = normalizedVariants.some((variant) => {
-    if (!variant.id) {
-      return false;
-    }
-    
-    if (variant.stockAdjustment !== undefined) {
-      return true;
-    }
-
-    if (typeof variant.stock !== "number") {
-      return false;
-    }
-
-    return variant.stock !== (currentVariantStockById.get(variant.id) ?? 0);
-  });
 
   const currentVariantIds = product.variants.map((variant) => variant.id);
   const submittedVariantIds = normalizedVariants
@@ -476,38 +461,23 @@ export async function PATCH(
     .map((variant) => variant.id);
   const deletedVariantIds = currentVariantIds.filter((variantId) => !submittedVariantIds.includes(variantId));
 
-  if (simpleStockChanged && await hasBlockingStockLots(prisma, { branchId, productId: id })) {
-    return NextResponse.json(
-      { error: "Este producto tiene vencimientos cargados. Ajusta el stock desde Corregir inventario." },
-      { status: 409 },
-    );
-  }
-
+  // Calcular deltas de stock para crear lotes genéricos si hay lotes existentes
+  const simpleStockDelta = simpleStockChanged
+    ? computedStock! - (currentInventory?.stock ?? 0)
+    : 0;
+  const variantStockDeltas = new Map<string, number>();
   for (const variant of normalizedVariants) {
-    if (!variant.id) {
-      continue;
-    }
-    
-    if (variant.stockAdjustment === undefined && typeof variant.stock !== "number") {
-      continue;
-    }
-
+    if (!variant.id) continue;
     const currentVariantStock = currentVariantStockById.get(variant.id) ?? 0;
-    const targetVariantStock = variant.stockAdjustment !== undefined && typeof variant.stockAdjustment === "number" 
-      ? currentVariantStock + variant.stockAdjustment 
+    const targetVariantStock = variant.stockAdjustment !== undefined && typeof variant.stockAdjustment === "number"
+      ? currentVariantStock + variant.stockAdjustment
       : (variant.stock ?? currentVariantStock);
-      
-    if (targetVariantStock === currentVariantStock) {
-      continue;
-    }
-
-    if (await hasBlockingStockLots(prisma, { branchId, productId: id, variantId: variant.id })) {
-      return NextResponse.json(
-        { error: `La variante ${variant.name} tiene vencimientos cargados. Ajusta el stock desde Corregir inventario.` },
-        { status: 409 },
-      );
+    if (targetVariantStock !== currentVariantStock) {
+      variantStockDeltas.set(variant.id, targetVariantStock - currentVariantStock);
     }
   }
+
+  // Ya no bloqueamos: los aumentos de stock crean lotes genéricos
 
   if (variants !== undefined) {
     const isSwitchingFromSimpleToVariants = currentVariantIds.length === 0 && normalizedVariants.length > 0;
@@ -722,6 +692,24 @@ export async function PATCH(
             });
           });
         }
+
+        // Si el stock sube y hay lotes existentes, crear lote genérico "sin vencimiento"
+        const variantDelta = variantStockDeltas.get(actualVariant.id) ?? 0;
+        if (variantDelta > 0) {
+          const hasExistingVariantLots = await hasBlockingStockLots(prisma, {
+            branchId,
+            productId: id,
+            variantId: actualVariant.id,
+          });
+          if (hasExistingVariantLots) {
+            const noExpiryDate = new Date("2099-12-31T00:00:00.000Z");
+            await addTrackedLots(prisma, {
+              branchId,
+              productId: id,
+              variantId: actualVariant.id,
+            }, [{ quantity: variantDelta, expiresOn: noExpiryDate }]);
+          }
+        }
       }
     }
   }
@@ -755,6 +743,17 @@ export async function PATCH(
         delta: computedStock - (currentInventory?.stock ?? 0),
       });
     });
+  }
+
+  // Si el stock sube y hay lotes existentes, crear lote genérico "sin vencimiento"
+  if (simpleStockDelta > 0) {
+    const hasExistingLots = await hasBlockingStockLots(prisma, { branchId, productId: id });
+    if (hasExistingLots) {
+      const noExpiryDate = new Date("2099-12-31T00:00:00.000Z");
+      await addTrackedLots(prisma, { branchId, productId: id }, [
+        { quantity: simpleStockDelta, expiresOn: noExpiryDate },
+      ]);
+    }
   }
 
   if (pricingMode === "SHARED" && (price !== undefined || cost !== undefined || variants !== undefined)) {

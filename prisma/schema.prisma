@@ -834,7 +834,7 @@ model RestockAttachment {
 model StockLot {
   id            String    @id @default(cuid())
   quantity      Int
-  expiresOn     DateTime  @db.Date
+  expiresOn     DateTime? @db.Date
   productId     String
   product       Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
   variantId     String?
@@ -847,8 +847,8 @@ model StockLot {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  @@index([branchId, productId, expiresOn])
-  @@index([branchId, variantId, expiresOn])
+  @@index([branchId, productId, expiresOn, createdAt])
+  @@index([branchId, variantId, expiresOn, createdAt])
   @@index([restockItemId, ingressOrder]) // Auditoría rápida por origen
 }
 
@@ -858,7 +858,7 @@ model SaleLotConsumption {
   saleItem      SaleItem  @relation(fields: [saleItemId], references: [id], onDelete: Cascade)
   stockLotId    String?
   stockLot      StockLot? @relation(fields: [stockLotId], references: [id], onDelete: SetNull)
-  expiresOn     DateTime  @db.Date
+  expiresOn     DateTime? @db.Date
   quantity      Int
   restockItemId String?   // Preserva trazabilidad al origen incluso si el lote fue eliminado
   createdAt     DateTime  @default(now())

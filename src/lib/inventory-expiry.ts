@@ -12,7 +12,7 @@ export type TrackableStockRef = {
 
 export type NormalizedLotInput = {
   quantity: number;
-  expiresOn: Date;
+  expiresOn: Date | null;
   restockItemId?: string | null;
   ingressOrder?: number | null;
 };
@@ -74,22 +74,26 @@ export function normalizeLotInputs(input: unknown): NormalizedLotInput[] {
         : Number.isFinite(Number(rawLot?.quantity))
           ? Number(rawLot?.quantity)
           : 0;
-    const expiresOn = parseExpiryDate(rawLot?.expiresOn);
+    const expiresOn = typeof rawLot?.expiresOn === 'string' ? parseExpiryDate(rawLot.expiresOn) : null;
 
-    if (!expiresOn || !Number.isInteger(quantity) || quantity <= 0) {
+    if (!Number.isInteger(quantity) || quantity <= 0) {
       continue;
     }
 
-    const key = dateToKey(expiresOn);
+    const key = expiresOn ? dateToKey(expiresOn) : "none";
     grouped.set(key, (grouped.get(key) ?? 0) + quantity);
   }
 
   return Array.from(grouped.entries())
     .map(([key, quantity]) => ({
       quantity,
-      expiresOn: parseExpiryDate(key)!,
+      expiresOn: key === "none" ? null : parseExpiryDate(key),
     }))
-    .sort((left, right) => dateToKey(left.expiresOn).localeCompare(dateToKey(right.expiresOn)));
+    .sort((left, right) => {
+      if (!left.expiresOn) return 1;
+      if (!right.expiresOn) return -1;
+      return dateToKey(left.expiresOn).localeCompare(dateToKey(right.expiresOn));
+    });
 }
 
 export function summarizeTrackedLots(
@@ -111,8 +115,14 @@ export function summarizeTrackedLots(
       continue;
     }
 
-    const lotKey = dateToKey(lot.expiresOn);
     trackedQuantity += lot.quantity;
+
+    if (!lot.expiresOn) {
+      activeTrackedQuantity += lot.quantity;
+      continue;
+    }
+
+    const lotKey = dateToKey(lot.expiresOn);
 
     if (lotKey < todayKey) {
       expiredQuantity += lot.quantity;
@@ -152,7 +162,7 @@ export async function getOpenStockLots(tx: TxClient, ref: TrackableStockRef) {
       quantity: { gt: 0 },
     },
     orderBy: [
-      { expiresOn: "asc" },
+      { expiresOn: { sort: "asc", nulls: "last" } },
       { createdAt: "asc" },
     ],
   });
@@ -238,9 +248,11 @@ export async function consumeTrackedLotsFefo(
       break;
     }
 
-    const lotKey = dateToKey(lot.expiresOn);
-    if (lotKey < todayKey) {
-      continue;
+    if (lot.expiresOn) {
+      const lotKey = dateToKey(lot.expiresOn);
+      if (lotKey < todayKey) {
+        continue;
+      }
     }
 
     const consumedQuantity = Math.min(remaining, lot.quantity);

@@ -25,6 +25,7 @@ declare module "next-auth" {
       employeeId?: string;
       employeeRole?: EmployeeRole;
       branchId?: string;
+      mainBusinessActivity?: string;
     } & DefaultSession["user"];
   }
 
@@ -33,6 +34,7 @@ declare module "next-auth" {
     employeeId?: string;
     employeeRole?: EmployeeRole;
     branchId?: string;
+    mainBusinessActivity?: string;
   }
 }
 
@@ -43,6 +45,7 @@ declare module "next-auth/jwt" {
     employeeId?: string;
     employeeRole?: EmployeeRole;
     branchId?: string;
+    mainBusinessActivity?: string;
   }
 }
 
@@ -124,8 +127,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             role: true,
             branches: {
               where: { id: branch.id },
-              select: { id: true }
-            }
+              select: { id: true },
+            },
           },
         });
 
@@ -172,22 +175,38 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
   ],
   callbacks: {
-    jwt({ token, user }) {
+    async jwt({ token, user }) {
+      // Primer login: user viene populado
       if (user) {
         token.id = user.id;
         token.role = user.role ?? UserRole.OWNER;
+
         if ((user.role ?? UserRole.OWNER) === UserRole.EMPLOYEE) {
           token.employeeId = user.employeeId;
           token.employeeRole = user.employeeRole;
           token.branchId = user.branchId;
+          delete token.mainBusinessActivity;
         } else {
           delete token.employeeId;
           delete token.employeeRole;
-          delete token.branchId;
+
+          // Para OWNER y PLATFORM_ADMIN: resolver branchId y rubro desde el kiosco
+          const kiosco = await prisma.kiosco.findUnique({
+            where: { ownerId: user.id },
+            select: {
+              mainBusinessActivity: true,
+              branches: { take: 1, select: { id: true } },
+            },
+          });
+
+          token.branchId = kiosco?.branches[0]?.id ?? undefined;
+          token.mainBusinessActivity = kiosco?.mainBusinessActivity ?? undefined;
         }
+
         return token;
       }
 
+      // Requests subsiguientes: validar token de empleado
       if (token.role === UserRole.EMPLOYEE) {
         const isValidEmployeeToken =
           typeof token.id === "string" &&
@@ -219,6 +238,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.employeeId = token.employeeId as string | undefined;
         session.user.employeeRole = token.employeeRole as EmployeeRole | undefined;
         session.user.branchId = token.branchId as string | undefined;
+        session.user.mainBusinessActivity = token.mainBusinessActivity as string | undefined;
       }
 
       return session;

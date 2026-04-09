@@ -5,7 +5,7 @@ export type StockTransferStrategy = (typeof TRANSFER_STRATEGIES)[number];
 export type TransferPlanLotInput = {
   id?: string | null;
   quantity: number;
-  expiresOn: string | Date;
+  expiresOn: string | Date | null;
 };
 
 export type PlannedLotTransfer = {
@@ -71,6 +71,8 @@ export function planStockTransfer(input: {
   const normalizedLots = input.lots
     .filter((lot) => isPositiveInteger(lot.quantity))
     .map((lot) => {
+      if (!lot.expiresOn) return null;
+      
       const expiresOn = normalizeDateKey(lot.expiresOn);
       return expiresOn
         ? {

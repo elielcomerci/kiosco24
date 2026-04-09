@@ -84,6 +84,8 @@ export async function loadAndApplyPromos(
     // Por cada productId/variantId, guardamos el lote más próximo a vencer
     const seen = new Set<string>();
     for (const lot of lots) {
+      if (!lot.expiresOn) continue;
+      
       const key = `${lot.productId}:${lot.variantId ?? ""}`;
       if (seen.has(key)) continue;
       seen.add(key);

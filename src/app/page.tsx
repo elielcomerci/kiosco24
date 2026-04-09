@@ -20,7 +20,7 @@ const painPoints = [
   },
   {
     title: "Cuando el cliente pide un comprobante, todo se vuelve mas lento",
-    desc: "Ticket no fiscal, Factura C, WhatsApp, impresion o PDF. Si eso frena la caja, el sistema deja de ayudar.",
+    desc: "Ticket no fiscal, Facturas, WhatsApp, impresion o PDF. Si eso frena la caja, el sistema deja de ayudar.",
   },
 ] as const;
 
@@ -42,7 +42,7 @@ const operatingFlow = [
 const featureGroups = [
   {
     title: "Caja pensada para kiosco real",
-    desc: "Venta tactil, barcode, variantes, fiados, venta con stock en 0 si el duenio lo habilita, confirmacion antes de vender en negativo y cierre rapido.",
+    desc: "Venta tactil, barcode, variantes, fiados, venta con stock en 0 si el dueño lo habilita, confirmacion antes de vender en negativo y cierre rapido.",
   },
   {
     title: "Stock que te avisa antes del problema",
@@ -50,11 +50,11 @@ const featureGroups = [
   },
   {
     title: "Catalogo curado y sincronizado",
-    desc: "Base colaborativa con fotos buenas, nombres corregidos, sync manual o auto, push de imagenes y textos a productos existentes y sugerencias por nombre o barcode.",
+    desc: "Base colaborativa con fotos de alta calidad, nombres corregidos, sync manual o auto, push de imagenes y textos a productos existentes y sugerencias por nombre o barcode.",
   },
   {
     title: "Comprobantes sin frenar la venta",
-    desc: "Ticket no fiscal, Factura C con formato ticket, PDF propio, WhatsApp, impresion normal o termica y configuracion por sucursal.",
+    desc: "Ticket no fiscal, Facturas con formato ticket, PDF propio, WhatsApp, impresion normal o termica y configuracion por sucursal.",
   },
   {
     title: "Multi-sucursal sin caos",
@@ -68,9 +68,9 @@ const featureGroups = [
 
 const differentiators = [
   "Base colaborativa con curado central y sincronizacion controlada hacia cada kiosco.",
-  "Factura C, ticket no fiscal y modo termica dentro del mismo flujo, sin frenar caja.",
-  "Stock negativo opcional por sucursal, pensado para kioscos chicos que venden antes de cargar mercaderia.",
-  "Importacion, exportacion y replica de catalogo para crecer de una sucursal a varias sin volver a empezar.",
+  "Facturas, ticket no fiscal y soporte con impresora termica, sin frenar caja.",
+  "Stock negativo opcional por sucursal, pensado para que puedas vender incluso antes de cargar tu mercaderia.",
+  "Importacion, exportacion y replica de catalogo para que puedas crecer de una sucursal a varias con un click.",
 ] as const;
 
 export default async function LandingPage() {
@@ -203,7 +203,7 @@ export default async function LandingPage() {
                 El sistema que hace que tu negocio deje de depender de acordarse de todo.
               </h1>
               <p style={{ margin: 0, maxWidth: "760px", color: "#cbd5e1", fontSize: "20px", lineHeight: 1.7 }}>
-                Vendes rapido, controlas stock real, ordenas fiados, emites ticket o Factura C y mantienes varias sucursales sin duplicar trabajo. Todo en una herramienta hecha para atender, no para pelearse con el sistema.
+                Vendes rapido, controlas stock real, ordenas fiados, emitis ticket o Factura y mantenes varias sucursales sin duplicar trabajo. Todo en una herramienta hecha para atender, no para pelearse con el sistema.
               </p>
             </div>
 
@@ -387,7 +387,7 @@ export default async function LandingPage() {
               Features completas
             </div>
             <h2 style={{ margin: 0, fontSize: "clamp(28px, 5vw, 46px)", lineHeight: 1.08, letterSpacing: "-0.04em" }}>
-              Primero te saca el dolor. Despues te da control fino para hacer crecer el kiosco.
+              Primero te saca el dolor. Despues te da control fino para hacer crecer tu negocio.
             </h2>
           </div>
 
@@ -431,7 +431,7 @@ export default async function LandingPage() {
               Si tu kiosco necesita orden sin volverse lento, por ahi es.
             </h2>
             <p style={{ margin: 0, color: "#dbeafe", maxWidth: "760px", lineHeight: 1.7 }}>
-              Empieza con una sola sucursal, ordena stock, tickets, fiados y catalogo. Cuando crezcas, el sistema ya esta preparado para acompanarte.
+              Empeza con una sucursal, ordena stock, tickets, fiados y catalogo. Cuando crezcas, el sistema ya esta preparado para acompañarte.
             </p>
           </div>
 

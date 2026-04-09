@@ -3,6 +3,15 @@ import { NextResponse } from "next/server";
 
 import { auth } from "@/lib/auth";
 import { isBranchAccessKeyPath } from "@/lib/branch-access-key";
+import { isPlatformAdmin } from "@/lib/platform-admin";
+
+function resolveAppHref(req: NextAuthRequest): string {
+  const user = req.auth?.user;
+  if (!user) return "/login";
+  if (isPlatformAdmin(user)) return "/admin";
+  if (user.branchId) return `/${user.branchId}/caja`;
+  return "/onboarding";
+}
 
 export default auth((req: NextAuthRequest) => {
   const { nextUrl } = req;
@@ -38,7 +47,7 @@ export default auth((req: NextAuthRequest) => {
   const isOnLogin = nextUrl.pathname.startsWith("/login");
   if (isOnLogin) {
     if (isLoggedIn) {
-      return Response.redirect(new URL("/", nextUrl));
+      return Response.redirect(new URL(resolveAppHref(req), nextUrl));
     }
     return;
   }

@@ -474,7 +474,7 @@ async function loadImportContext(kioscoId: string, branchId: string) {
     throw new Error("Sucursal destino no encontrada.");
   }
 
-  const stockLotsByOwner = stockLots.reduce<Map<string, { quantity: number; expiresOn: Date }[]>>((map, lot) => {
+  const stockLotsByOwner = stockLots.reduce<Map<string, { quantity: number; expiresOn: Date | null }[]>>((map, lot) => {
     const key = ownerLotKey(lot.productId, lot.variantId);
     const current = map.get(key) ?? [];
     current.push({
@@ -497,7 +497,7 @@ async function loadImportContext(kioscoId: string, branchId: string) {
 
 function prepareImportPlan(input: {
   products: ImportableProduct[];
-  stockLotsByOwner: Map<string, { quantity: number; expiresOn: Date }[]>;
+  stockLotsByOwner: Map<string, { quantity: number; expiresOn: Date | null }[]>;
   productRows: SpreadsheetProductRow[];
   lotRows: SpreadsheetLotRow[];
   scope: CatalogImportScope;
@@ -1263,7 +1263,7 @@ export async function exportCatalogSpreadsheet(input: {
     internalCode: productById.get(lot.productId)?.internalCode ?? null,
     name: productById.get(lot.productId)?.name ?? null,
     variantName: lot.variant?.name ?? null,
-    expiresOn: dateToKey(lot.expiresOn),
+    expiresOn: lot.expiresOn ? dateToKey(lot.expiresOn) : null,
     quantity: lot.quantity,
   }));
 

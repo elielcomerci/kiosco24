@@ -270,7 +270,7 @@ type StockLotSummaryItem = {
   productId: string;
   variantId: string | null;
   quantity: number;
-  expiresOn: Date;
+  expiresOn: Date | null;
 };
 
 function lotKey(productId: string, variantId?: string | null) {

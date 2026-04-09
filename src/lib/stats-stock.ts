@@ -61,7 +61,7 @@ type StockLotRow = {
   productId: string;
   branchId: string;
   quantity: number;
-  expiresOn: Date;
+  expiresOn: Date | null;
   product: { name: string };
   variant: { name: string } | null;
   branch: { name: string };
@@ -299,6 +299,8 @@ export const getStockStats = async (
     }
 
     for (const lot of stockLots as StockLotRow[]) {
+      if (!lot.expiresOn) continue; // Skip lots without expiry date
+      
       const daysUntilExpiration = Math.floor(
         (lot.expiresOn.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
       );

@@ -726,6 +726,37 @@ function ProductModal({
     return isNaN(n) ? null : n;
   };
 
+  const handleImageUpload = async (file: File) => {
+    setUploadingImage(true);
+    try {
+      const optimizedFile = await optimizeProductImage(file);
+      const formData = new FormData();
+      formData.append("file", optimizedFile);
+      formData.append("folder", "products");
+
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        throw new Error(data?.error || "No se pudo subir la imagen.");
+      }
+
+      if (typeof data?.secure_url !== "string" || !data.secure_url) {
+        throw new Error("La subida no devolvio una URL valida.");
+      }
+
+      setImage(data.secure_url);
+    } catch (error) {
+      console.error(error);
+      alert(error instanceof Error ? error.message : "No se pudo subir la imagen.");
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
   const updateVariant = (index: number, changes: Partial<Variant>) => {
     setVariants((prev) =>
       prev.map((variant, variantIndex) =>
@@ -1149,7 +1180,23 @@ function ProductModal({
           }}
         >
           <div style={{ display: "flex", gap: "10px", paddingBottom: "12px", borderBottom: "0.5px solid var(--border)", marginBottom: "12px" }}>
-            <div style={{ position: "relative", width: "40px", height: "40px", borderRadius: "8px", background: "var(--surface-2)", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", flexShrink: 0, border: "1px dashed var(--border)", fontSize: "20px", cursor: "pointer" }} onClick={() => setShowEmojiPicker((v) => !v)}>
+            <label
+              style={{
+                position: "relative",
+                width: "40px",
+                height: "40px",
+                borderRadius: "8px",
+                background: "var(--surface-2)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                overflow: "hidden",
+                flexShrink: 0,
+                border: "1px dashed var(--border)",
+                cursor: uploadingImage ? "progress" : "pointer",
+              }}
+              title="Subir foto del producto"
+            >
               {image ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={image} alt="Product" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
@@ -1158,21 +1205,47 @@ function ProductModal({
               ) : uploadingImage ? (
                 <span className="animate-pulse" style={{ fontSize: "10px" }}>...</span>
               ) : (
-                <span style={{ fontSize: "18px", opacity: 0.5 }}>📷</span>
+                <span style={{ fontSize: "10px", fontWeight: 700, textAlign: "center", padding: "2px", color: "var(--text-3)" }}>
+                  Foto
+                </span>
               )}
-            </div>
+              <input
+                type="file"
+                accept="image/*"
+                style={{ position: "absolute", inset: 0, opacity: 0, cursor: uploadingImage ? "progress" : "pointer" }}
+                disabled={uploadingImage}
+                onChange={async (event) => {
+                  const file = event.target.files?.[0];
+                  if (file) {
+                    await handleImageUpload(file);
+                  }
+                  event.target.value = "";
+                }}
+              />
+            </label>
 
             <div style={{ flex: 1, minWidth: 0 }}>
-              <input
-                style={{ background: "transparent", border: "none", fontWeight: 700, fontSize: "16px", color: "var(--text)", width: "100%", outline: "none", padding: "0 0 2px 0" }}
-                value={name}
-                onChange={(e) => {
-                  setName(e.target.value);
-                  if (nameSuggestions.length > 0) setNameSuggestions([]);
-                }}
-                placeholder="Nombre del producto *"
-                autoFocus={isNew}
-              />
+              <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                <input
+                  style={{ background: "transparent", border: "none", fontWeight: 700, fontSize: "16px", color: "var(--text)", width: "100%", outline: "none", padding: "0 0 2px 0", flex: 1 }}
+                  value={name}
+                  onChange={(e) => {
+                    setName(e.target.value);
+                    if (nameSuggestions.length > 0) setNameSuggestions([]);
+                  }}
+                  placeholder="Nombre del producto *"
+                  autoFocus={isNew}
+                />
+                <button
+                  type="button"
+                  className="btn btn-sm btn-ghost"
+                  onClick={() => setShowEmojiPicker((v) => !v)}
+                  style={{ flexShrink: 0, width: "28px", height: "28px", padding: 0, fontSize: "16px", display: "flex", alignItems: "center", justifyContent: "center" }}
+                  title="Elegir emoji"
+                >
+                  {emoji || "😊"}
+                </button>
+              </div>
               <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap", marginTop: "2px" }}>
                 <input
                   style={{ background: "transparent", border: "none", outline: "none", color: "var(--text-2)", width: "80px", fontSize: "12px", padding: 0 }}
@@ -3241,10 +3314,10 @@ function StockLoadingModal({
       });
       const data = await res.json().catch(() => null);
       const mappedLots = Array.isArray(data?.lots)
-        ? data.lots.map((lot: { id: string; quantity: number; expiresOn: string }) => ({
+        ? data.lots.map((lot: { id: string; quantity: number; expiresOn: string | null }) => ({
             id: lot.id,
             quantity: String(lot.quantity),
-            expiresOn: String(lot.expiresOn).slice(0, 10),
+            expiresOn: lot.expiresOn ? String(lot.expiresOn).slice(0, 10) : "",
             existing: true,
           }))
         : [];
@@ -4673,7 +4746,7 @@ function TransferirStockModal({
         const nextLots = Array.isArray(data?.lots)
           ? data.lots
               .filter(
-                (lot: { id?: string; quantity?: number; expiresOn?: string }) =>
+                (lot: { id?: string; quantity?: number; expiresOn?: string | null }) =>
                   Boolean(lot?.id) &&
                   Number.isInteger(lot?.quantity) &&
                   (lot?.quantity ?? 0) > 0 &&

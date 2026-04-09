@@ -5,7 +5,7 @@ import { canAccessSetupWithoutSubscription, getKioscoAccessContextForSession } f
 import { auth } from "@/lib/auth";
 import { getBranchContext } from "@/lib/branch";
 import { applyInventoryCorrectionToCostLayers } from "@/lib/inventory-cost-consumption";
-import { addTrackedLots, hasBlockingStockLots, summarizeTrackedLots } from "@/lib/inventory-expiry";
+import { addTrackedLots, hasBlockingStockLots, summarizeTrackedLots, todayDateKey } from "@/lib/inventory-expiry";
 import { DEFAULT_PRICING_MODE, syncSharedPricingFromBranch } from "@/lib/pricing-mode";
 import { hasPlatformSyncUpdate } from "@/lib/platform-product-sync";
 import { Prisma, prisma } from "@/lib/prisma";
@@ -234,14 +234,20 @@ export async function GET(
   const expiryAlertDays = expirySettings?.kiosco?.expiryAlertDays ?? 30;
   const allowNegativeStock = expirySettings?.allowNegativeStock ?? false;
   const mappedInventory = inventory as ProductInventoryPayload;
+  
+  // Precomputar todayKey una sola vez
+  const todayKey = todayDateKey(new Date());
+  
   const baseSummary = summarizeTrackedLots(
     mappedInventory.stock,
     lots.filter((lot) => lot.variantId === null),
     expiryAlertDays,
+    undefined,
+    todayKey,
   );
   const variants = mappedInventory.product.variants.map((variant) => {
     const variantLots = lots.filter((lot) => lot.variantId === variant.id);
-    const variantSummary = summarizeTrackedLots(variant.inventory[0]?.stock ?? 0, variantLots, expiryAlertDays);
+    const variantSummary = summarizeTrackedLots(variant.inventory[0]?.stock ?? 0, variantLots, expiryAlertDays, undefined, todayKey);
     const availableStock = variantSummary.availableStock ?? (variant.inventory[0]?.stock ?? 0);
     const variantPrice =
       typeof variant.inventory[0]?.price === "number" && Number.isFinite(variant.inventory[0].price)

@@ -101,9 +101,10 @@ export function summarizeTrackedLots(
   lots: Array<Pick<StockLot, "quantity" | "expiresOn">>,
   alertDays: number,
   now = new Date(),
+  precomputedTodayKey?: string,
 ): ExpirySummary {
   const normalizedTotal = typeof totalStock === "number" ? totalStock : null;
-  const todayKey = todayDateKey(now);
+  const todayKey = precomputedTodayKey ?? todayDateKey(now);
   let trackedQuantity = 0;
   let activeTrackedQuantity = 0;
   let expiredQuantity = 0;

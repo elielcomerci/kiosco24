@@ -4,7 +4,7 @@ import { PlatformSyncMode } from "@prisma/client";
 import { canAccessSetupWithoutSubscription, getKioscoAccessContextForSession } from "@/lib/access-control";
 import { auth } from "@/lib/auth";
 import { getBranchContext } from "@/lib/branch";
-import { summarizeTrackedLots } from "@/lib/inventory-expiry";
+import { summarizeTrackedLots, todayDateKey } from "@/lib/inventory-expiry";
 import { DEFAULT_PRICING_MODE, syncSharedPricingFromBranch } from "@/lib/pricing-mode";
 import { hasPlatformSyncUpdate } from "@/lib/platform-product-sync";
 import { Prisma, prisma } from "@/lib/prisma";
@@ -33,14 +33,33 @@ type VariantPayload = {
 };
 
 type ProductListInventory = Prisma.InventoryRecordGetPayload<{
-  include: {
+  select: {
+    id: true;
+    productId: true;
+    stock: true;
+    price: true;
+    cost: true;
+    minStock: true;
+    showInGrid: true;
     product: {
-      include: {
-        category: {
-          select: {
-            showInGrid: true;
-          };
-        };
+      select: {
+        id: true;
+        name: true;
+        emoji: true;
+        barcode: true;
+        internalCode: true;
+        image: true;
+        brand: true;
+        description: true;
+        presentation: true;
+        supplierName: true;
+        notes: true;
+        soldByWeight: true;
+        categoryId: true;
+        platformProductId: true;
+        platformSyncMode: true;
+        platformSourceUpdatedAt: true;
+        category: { select: { id: true; name: true; showInGrid: true } };
         platformProduct: {
           select: {
             id: true;
@@ -55,8 +74,21 @@ type ProductListInventory = Prisma.InventoryRecordGetPayload<{
           };
         };
         variants: {
-          include: {
-            inventory: true;
+          select: {
+            id: true;
+            name: true;
+            barcode: true;
+            internalCode: true;
+            inventory: {
+              where: { branchId: string };
+              select: {
+                id: true;
+                stock: true;
+                price: true;
+                cost: true;
+                minStock: true;
+              };
+            };
           };
         };
       };
@@ -64,43 +96,54 @@ type ProductListInventory = Prisma.InventoryRecordGetPayload<{
   };
 }>;
 
-type ProductGridInventory = {
-  stock: number;
-  price: number;
-  cost: number | null;
-  minStock: number;
-  showInGrid: boolean;
-  product: {
-    id: string;
-    name: string;
-    emoji: string | null;
-    barcode: string | null;
-    internalCode: string | null;
-    image: string | null;
-    brand: string | null;
-    description: string | null;
-    presentation: string | null;
-    supplierName: string | null;
-    notes: string | null;
-    soldByWeight: boolean;
-    categoryId: string | null;
-    category: {
-      showInGrid: boolean;
-    } | null;
-    variants: Array<{
-      id: string;
-      name: string;
-      barcode: string | null;
-      internalCode: string | null;
-      inventory: Array<{
-        stock: number;
-        price: number | null;
-        cost: number | null;
-        minStock: number;
-      }>;
-    }>;
+type ProductGridInventory = Prisma.InventoryRecordGetPayload<{
+  select: {
+    stock: true;
+    price: true;
+    cost: true;
+    minStock: true;
+    showInGrid: true;
+    product: {
+      select: {
+        id: true;
+        name: true;
+        emoji: true;
+        barcode: true;
+        internalCode: true;
+        image: true;
+        brand: true;
+        description: true;
+        presentation: true;
+        supplierName: true;
+        notes: true;
+        soldByWeight: true;
+        categoryId: true;
+        category: {
+          select: {
+            showInGrid: true;
+          };
+        };
+        variants: {
+          select: {
+            id: true;
+            name: true;
+            barcode: true;
+            internalCode: true;
+            inventory: {
+              where: { branchId: string };
+              select: {
+                stock: true;
+                price: true;
+                cost: true;
+                minStock: true;
+              };
+            };
+          };
+        };
+      };
+    };
   };
-};
+}>;
 
 function isPositiveFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value) && value > 0;
@@ -108,7 +151,7 @@ function isPositiveFiniteNumber(value: unknown): value is number {
 
 function buildGridProduct(record: ProductGridInventory, allowNegativeStock: boolean, negativeReservationsByKey: Map<string, number> = new Map()) {
   const baseNegative = negativeReservationsByKey.get(lotKey(record.product.id)) ?? 0;
-  const baseAvailableStock = record.stock - baseNegative;
+  const baseAvailableStock = record.stock === null ? null : record.stock - baseNegative;
   const baseFlags = getStockFlags(baseAvailableStock, record.minStock);
   const basePrice = isPositiveFiniteNumber(record.price) ? record.price : 0;
   const baseCost = isPositiveFiniteNumber(record.cost) ? record.cost : null;
@@ -193,7 +236,7 @@ function buildGridProduct(record: ProductGridInventory, allowNegativeStock: bool
     categoryId: record.product.categoryId,
     price,
     cost,
-    stock: record.stock - baseNegative,
+    stock: record.stock === null ? null : record.stock - baseNegative,
     availableStock: baseAvailableStock,
     minStock: record.minStock,
     showInGrid: record.showInGrid,
@@ -347,7 +390,7 @@ export async function GET(req: Request) {
   const allowNegativeStock = branchSettings?.allowNegativeStock ?? false;
 
   if (view === "grid") {
-    const inventory = (await prisma.inventoryRecord.findMany({
+    const inventory = await prisma.inventoryRecord.findMany({
       where: { branchId },
       select: {
         stock: true,
@@ -396,12 +439,14 @@ export async function GET(req: Request) {
         },
       },
       orderBy: { product: { name: "asc" } },
-    })) as ProductGridInventory[];
-
-    const negativeReservations = await prisma.negativeStockReservation.findMany({
-      where: { branchId, quantityPending: { gt: 0 }, resolvedAt: null },
-      select: { productId: true, variantId: true, quantityPending: true },
     });
+
+    const [negativeReservations] = await Promise.all([
+      prisma.negativeStockReservation.findMany({
+        where: { branchId, quantityPending: { gt: 0 }, resolvedAt: null },
+        select: { productId: true, variantId: true, quantityPending: true },
+      }),
+    ]);
 
     const negativeReservationsByKey = negativeReservations.reduce((map, reservation) => {
       const key = lotKey(reservation.productId, reservation.variantId);
@@ -422,52 +467,87 @@ export async function GET(req: Request) {
       ? { branchId, productId: detailProductId, quantity: { gt: 0 } }
       : { branchId, quantity: { gt: 0 } };
 
-  const inventory = await prisma.inventoryRecord.findMany({
-    where: inventoryWhere,
-    include: {
-      product: {
-        include: {
-          category: { select: { showInGrid: true } },
-          platformProduct: {
-            select: {
-              id: true,
-              barcode: true,
-              name: true,
-              brand: true,
-              description: true,
-              presentation: true,
-              image: true,
-              status: true,
-              updatedAt: true,
+  // Ejecutar queries independientes en paralelo para reducir latencia
+  const [inventory, lots, negativeReservations] = await Promise.all([
+    prisma.inventoryRecord.findMany({
+      where: inventoryWhere,
+      select: {
+        id: true,
+        productId: true,
+        stock: true,
+        price: true,
+        cost: true,
+        minStock: true,
+        showInGrid: true,
+        product: {
+          select: {
+            id: true,
+            name: true,
+            emoji: true,
+            barcode: true,
+            internalCode: true,
+            image: true,
+            brand: true,
+            description: true,
+            presentation: true,
+            supplierName: true,
+            notes: true,
+            soldByWeight: true,
+            categoryId: true,
+            platformProductId: true,
+            platformSyncMode: true,
+            platformSourceUpdatedAt: true,
+            category: { select: { id: true, name: true, showInGrid: true } },
+            platformProduct: {
+              select: {
+                id: true,
+                barcode: true,
+                name: true,
+                brand: true,
+                description: true,
+                presentation: true,
+                image: true,
+                status: true,
+                updatedAt: true,
+              },
             },
-          },
-          variants: {
-            include: {
-              inventory: {
-                where: { branchId },
+            variants: {
+              select: {
+                id: true,
+                name: true,
+                barcode: true,
+                internalCode: true,
+                inventory: {
+                  where: { branchId },
+                  select: {
+                    id: true,
+                    stock: true,
+                    price: true,
+                    cost: true,
+                    minStock: true,
+                  },
+                },
               },
             },
           },
         },
       },
-    },
-    orderBy: { product: { name: "asc" } },
-  });
-
-  const lots = await prisma.stockLot.findMany({
-    where: lotsWhere,
-    select: {
-      productId: true,
-      variantId: true,
-      quantity: true,
-      expiresOn: true,
-    },
-  });
-
-  const negativeReservations = await prisma.negativeStockReservation.findMany({
-    where: { branchId, quantityPending: { gt: 0 }, resolvedAt: null },
-    select: { productId: true, variantId: true, quantityPending: true },
-  });
+      orderBy: { product: { name: "asc" } },
+    }),
+    prisma.stockLot.findMany({
+      where: lotsWhere,
+      select: {
+        productId: true,
+        variantId: true,
+        quantity: true,
+        expiresOn: true,
+      },
+    }),
+    prisma.negativeStockReservation.findMany({
+      where: { branchId, quantityPending: { gt: 0 }, resolvedAt: null },
+      select: { productId: true, variantId: true, quantityPending: true },
+    }),
+  ]);
 
   const negativeReservationsByKey = negativeReservations.reduce((map, reservation) => {
     const key = lotKey(reservation.productId, reservation.variantId);
@@ -483,9 +563,12 @@ export async function GET(req: Request) {
     return map;
   }, new Map());
 
-  const products = inventory.map((record: ProductListInventory) => {
+  // Precomputar todayKey una sola vez para todas las llamadas a summarizeTrackedLots
+  const todayKey = todayDateKey(new Date());
+
+  const products = inventory.map((record) => {
     const baseLots = lotsByKey.get(lotKey(record.product.id)) ?? [];
-    const baseSummary = summarizeTrackedLots(record.stock, baseLots, expiryAlertDays);
+    const baseSummary = summarizeTrackedLots(record.stock, baseLots, expiryAlertDays, undefined, todayKey);
     const mappedVariants = record.product.variants.map((variant) => {
       const variantInventory = variant.inventory[0];
       const variantNegative = negativeReservationsByKey.get(lotKey(record.product.id, variant.id)) ?? 0;
@@ -499,7 +582,7 @@ export async function GET(req: Request) {
           ? variantInventory.cost
           : record.cost;
       const variantLots = lotsByKey.get(lotKey(record.product.id, variant.id)) ?? [];
-      const variantSummary = summarizeTrackedLots(variantInventory?.stock ?? 0, variantLots, expiryAlertDays);
+      const variantSummary = summarizeTrackedLots(variantInventory?.stock ?? 0, variantLots, expiryAlertDays, undefined, todayKey);
       const variantAvailableStock = (variantSummary.availableStock ?? variantInventory?.stock ?? 0) - variantNegative;
       const variantFlags = getStockFlags(variantAvailableStock, variantInventory?.minStock ?? 0);
       const variantReadyForSale =

@@ -849,6 +849,7 @@ model StockLot {
 
   @@index([branchId, productId, expiresOn, createdAt])
   @@index([branchId, variantId, expiresOn, createdAt])
+  @@index([branchId, quantity, expiresOn]) // Optimización para consultas de lotes activos por sucursal
   @@index([restockItemId, ingressOrder]) // Auditoría rápida por origen
 }
 

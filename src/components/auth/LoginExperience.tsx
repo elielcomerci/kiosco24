@@ -12,6 +12,7 @@ import {
 } from "@/lib/branch-access-key";
 
 const AUTH_TIMEOUT_MS = 15000;
+const LAST_ACCESS_KEY_STORAGE_KEY = "clikit_last_access_key";
 
 export type LoginMode = "owner" | "employee";
 type EmployeeStep = "key" | "employee" | "pin";
@@ -107,6 +108,12 @@ export default function LoginExperience({
     resetEmployeeFlow(Boolean(initialAccessKey));
     if (initialAccessKey) {
       setBranchKey(normalizeAccessKey(initialAccessKey));
+    } else {
+      // Intentar cargar la ultima usada si no viene una por prop
+      const stored = localStorage.getItem(LAST_ACCESS_KEY_STORAGE_KEY);
+      if (stored) {
+        setBranchKey(normalizeAccessKey(stored));
+      }
     }
   };
 
@@ -175,6 +182,9 @@ export default function LoginExperience({
         setSelectedEmployee(null);
         setPin("");
         setEmployeeStep("employee");
+
+        // Memorizar para la proxima vez en este dispositivo
+        localStorage.setItem(LAST_ACCESS_KEY_STORAGE_KEY, normalizedKey);
       } catch (validationError) {
         console.error("[Login] Employee branch validation failed:", validationError);
         setError(getAuthErrorMessage(validationError));
@@ -188,6 +198,13 @@ export default function LoginExperience({
   useEffect(() => {
     const normalizedInitialKey = normalizeAccessKey(initialAccessKey);
     if (!normalizedInitialKey || !isBranchAccessKey(normalizedInitialKey)) {
+      // Si no hay prop, probamos cargar de localstorage solo si estamos en modo empleado
+      if (mode === "employee" && !branchKey) {
+        const stored = localStorage.getItem(LAST_ACCESS_KEY_STORAGE_KEY);
+        if (stored) {
+          setBranchKey(normalizeAccessKey(stored));
+        }
+      }
       return;
     }
 
@@ -201,7 +218,7 @@ export default function LoginExperience({
     resetEmployeeFlow(true);
     setBranchKey(normalizedInitialKey);
     void handleValidateKey(normalizedInitialKey);
-  }, [handleValidateKey, initialAccessKey]);
+  }, [handleValidateKey, initialAccessKey, mode, branchKey]);
 
   const completeEmployeeLogin = async (employee: EmployeeOption, pinValue: string) => {
     try {

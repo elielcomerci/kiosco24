@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useCallback } from "react";
 import { playAudio } from "@/lib/audio";
 
 interface NumPadProps {
@@ -8,7 +9,7 @@ interface NumPadProps {
 }
 
 export default function NumPad({ value, onChange }: NumPadProps) {
-  const handle = (key: string) => {
+  const handle = useCallback((key: string) => {
     void playAudio("/tap.wav", 0.4);
     if (key === "⌫") {
       onChange(value.slice(0, -1));
@@ -19,7 +20,33 @@ export default function NumPad({ value, onChange }: NumPadProps) {
       const next = value + key;
       if (next.length <= 8) onChange(next);
     }
-  };
+  }, [value, onChange]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeEl = document.activeElement;
+      if (activeEl?.tagName === "INPUT" || activeEl?.tagName === "TEXTAREA" || activeEl?.tagName === "SELECT") {
+        return;
+      }
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+      const isDigit = /^[0-9]$/.test(e.key);
+      const isNumpadDigit = e.code && e.code.startsWith("Numpad") && e.code.length === 7 && /^[0-9]$/.test(e.code[6]);
+      
+      if (isDigit || isNumpadDigit) {
+        e.preventDefault();
+        e.stopPropagation();
+        handle(isDigit ? e.key : e.code[6]);
+      } else if (e.key === "Backspace") {
+        e.preventDefault();
+        e.stopPropagation();
+        handle("⌫");
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [handle]);
 
   const keys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "000", "0", "⌫"];
 

@@ -1614,14 +1614,14 @@ body[data-text-scale="large"],
 
 .app-header {
   flex-shrink: 0;
-  min-height: 62px;
-  padding: 10px 16px;
+  min-height: 72px;
+  padding: 12px 16px;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 14px;
 }
 
 .app-header-branch {
@@ -1634,9 +1634,254 @@ body[data-text-scale="large"],
 .app-header-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   margin-left: auto;
   flex-shrink: 0;
+}
+
+.app-header-menu-shell {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.app-header-menu-trigger,
+.app-header-user-trigger {
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
+}
+
+.app-header-menu-trigger:hover,
+.app-header-user-trigger:hover,
+.app-header-menu-trigger.active,
+.app-header-user-trigger.active {
+  border-color: rgba(var(--primary-rgb), 0.38);
+  background: rgba(var(--primary-rgb), 0.1);
+}
+
+.app-header-menu-trigger-icon,
+.app-header-user-caret {
+  color: var(--text-3);
+  flex-shrink: 0;
+}
+
+.app-header-menu-trigger-label {
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.app-header-user-trigger {
+  max-width: min(360px, calc(100vw - 120px));
+}
+
+.app-header-user-avatar,
+.app-header-account-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, rgba(var(--primary-rgb), 0.22), rgba(var(--primary-rgb), 0.42));
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  flex-shrink: 0;
+}
+
+.app-header-user-avatar img,
+.app-header-account-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.app-header-user-copy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+  text-align: left;
+}
+
+.app-header-user-name {
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.15;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.app-header-user-meta {
+  color: var(--text-3);
+  font-size: 11px;
+  line-height: 1.15;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.app-header-menu-panel {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  width: min(380px, calc(100vw - 24px));
+  padding: 14px;
+  border-radius: 22px;
+  border: 1px solid rgba(var(--primary-rgb), 0.16);
+  background: color-mix(in srgb, var(--surface) 88%, black);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.28);
+  z-index: 120;
+  display: grid;
+  gap: 14px;
+}
+
+.app-header-shortcuts-panel {
+  width: min(400px, calc(100vw - 24px));
+}
+
+.app-header-menu-section {
+  display: grid;
+  gap: 10px;
+}
+
+.app-header-menu-kicker {
+  color: var(--text-3);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.app-header-menu-title {
+  color: var(--text);
+  font-size: 17px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+
+.app-header-account-summary {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 14px;
+  align-items: start;
+  padding: 12px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(var(--primary-rgb), 0.1), rgba(var(--primary-rgb), 0.04));
+  border: 1px solid rgba(var(--primary-rgb), 0.14);
+}
+
+.app-header-account-avatar {
+  width: 48px;
+  height: 48px;
+  font-size: 14px;
+}
+
+.app-header-account-copy {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.app-header-account-name {
+  font-size: 16px;
+  font-weight: 900;
+  line-height: 1.1;
+}
+
+.app-header-account-role {
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.app-header-account-context,
+.app-header-account-email {
+  color: var(--text-3);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.app-header-preferences-row {
+  display: grid;
+  gap: 10px;
+}
+
+.app-header-preference-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 12px;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+.app-header-preference-copy {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.app-header-preference-label {
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.app-header-preference-description {
+  color: var(--text-3);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.app-header-secondary-link,
+.app-header-signout-button {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 11px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+  transition: border-color 0.18s ease, background 0.18s ease, color 0.18s ease;
+}
+
+.app-header-secondary-link:hover {
+  border-color: rgba(var(--primary-rgb), 0.38);
+  background: rgba(var(--primary-rgb), 0.08);
+  color: var(--primary);
+}
+
+.app-header-signout-button {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-3);
+}
+
+.app-header-signout-button:hover {
+  background: rgba(239, 68, 68, 0.08);
+  border-color: rgba(239, 68, 68, 0.2);
+  color: #fca5a5;
 }
 
 .app-header-icon-link {
@@ -1659,23 +1904,6 @@ body[data-text-scale="large"],
   cursor: pointer;
   font-family: var(--font-sans);
   font-weight: 800;
-}
-
-.app-header-logout {
-  min-height: 36px;
-  flex-shrink: 0;
-  border: 1px solid var(--border);
-  padding: 6px 10px;
-}
-
-.app-header-logout-icon {
-  display: none;
-  font-size: 14px;
-  line-height: 1;
-}
-
-.app-header-logout-label {
-  font-size: 13px;
 }
 
 body[data-text-scale] .card,
@@ -1745,8 +1973,14 @@ body[data-text-scale] .app-header-icon-button,
   font-size: calc(18px * var(--device-font-scale));
 }
 
-body[data-text-scale] .app-header-logout-label,
-.app-layout .app-header-logout-label {
+body[data-text-scale] .app-header-menu-trigger-label,
+body[data-text-scale] .app-header-user-name,
+body[data-text-scale] .app-header-shortcut-label,
+body[data-text-scale] .app-header-preference-label,
+.app-layout .app-header-menu-trigger-label,
+.app-layout .app-header-user-name,
+.app-layout .app-header-shortcut-label,
+.app-layout .app-header-preference-label {
   font-size: calc(13px * var(--device-font-scale));
 }
 
@@ -1779,6 +2013,13 @@ body[data-text-scale] .product-btn-price,
     gap: 6px;
   }
 
+  .app-header-menu-trigger,
+  .app-header-user-trigger {
+    min-height: 38px;
+    padding: 7px 10px;
+    border-radius: 14px;
+  }
+
   .app-header-icon-link {
     width: 34px;
     height: 34px;
@@ -1786,12 +2027,18 @@ body[data-text-scale] .product-btn-price,
     font-size: 16px;
   }
 
-  .app-header-logout {
-    padding: 6px 8px;
+  .app-header-menu-panel {
+    width: min(360px, calc(100vw - 16px));
+    right: -4px;
   }
 
-  .app-header-logout-label {
-    font-size: 12px;
+  .app-header-user-trigger {
+    max-width: min(250px, calc(100vw - 120px));
+  }
+
+  .app-header-user-meta,
+  .app-header-menu-trigger-label {
+    display: none;
   }
 }
 
@@ -1800,16 +2047,11 @@ body[data-text-scale] .product-btn-price,
     gap: 5px;
   }
 
-  .app-header-logout {
-    min-width: 34px;
-    padding: 6px 8px;
+  .app-header-user-copy {
+    max-width: 110px;
   }
 
-  .app-header-logout-icon {
-    display: inline-block;
-  }
-
-  .app-header-logout-label {
+  .app-header-user-meta {
     display: none;
   }
 }

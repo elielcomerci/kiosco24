@@ -108,7 +108,7 @@ export default function RegisterExperience({
         return;
       }
 
-      window.location.assign(result?.url || callbackUrl);
+      window.location.assign(callbackUrl);
     } catch (submitError) {
       console.error("[Register] Registration failed:", submitError);
       setError(getRegisterErrorMessage(submitError));

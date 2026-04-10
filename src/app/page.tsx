@@ -1,9 +1,8 @@
 import Link from "next/link";
 
 import BrandLogo from "@/components/branding/BrandLogo";
+import { resolveSessionAppLabel, resolveSessionAppStartPath } from "@/lib/app-entry";
 import { auth, signOut } from "@/lib/auth";
-import { isPlatformAdmin } from "@/lib/platform-admin";
-import { prisma } from "@/lib/prisma";
 import {
   SUBSCRIPTION_CANCEL_LABEL,
   SUBSCRIPTION_PROMO_LABEL,
@@ -75,29 +74,8 @@ const differentiators = [
 
 export default async function LandingPage() {
   const session = await auth();
-
-  let branchId = session?.user?.branchId ?? null;
-  if (!branchId && session?.user?.role === "EMPLOYEE" && session.user.employeeId) {
-    const employee = await prisma.employee.findUnique({
-      where: { id: session.user.employeeId },
-      select: { branches: { take: 1, select: { id: true } } },
-    });
-    branchId = employee?.branches[0]?.id ?? null;
-  }
-
-  if (session?.user?.id && !branchId) {
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      include: {
-        kiosco: {
-          include: { branches: { take: 1 } },
-        },
-      },
-    });
-    branchId = user?.kiosco?.branches[0]?.id ?? null;
-  }
-
-  const appHref = isPlatformAdmin(session?.user) ? "/admin" : branchId ? `/${branchId}/caja` : "/onboarding";
+  const appHref = resolveSessionAppStartPath(session?.user);
+  const appLabel = resolveSessionAppLabel(session?.user);
 
   return (
     <div
@@ -136,7 +114,7 @@ export default async function LandingPage() {
           {session ? (
             <>
               <Link href={appHref} className="btn btn-primary" style={{ borderRadius: "999px", padding: "10px 18px" }}>
-                {isPlatformAdmin(session.user) ? "Ir al admin" : "Abrir mi kiosco"}
+                {appLabel}
               </Link>
               <form
                 action={async () => {
@@ -210,7 +188,7 @@ export default async function LandingPage() {
             <div style={{ display: "flex", gap: "14px", flexWrap: "wrap" }}>
               {session ? (
                 <Link href={appHref} className="btn btn-primary btn-lg" style={{ padding: "16px 28px" }}>
-                  {isPlatformAdmin(session.user) ? "Entrar al admin" : "Abrir mi kiosco"}
+                  {appLabel}
                 </Link>
               ) : (
                 <Link href="/register" className="btn btn-primary btn-lg" style={{ padding: "16px 28px" }}>

@@ -1,14 +1,12 @@
-import { auth, signOut } from "@/lib/auth";
+import { auth } from "@/lib/auth";
 import { canAccessSetupWithoutSubscription, getKioscoAccessContextForSession } from "@/lib/access-control";
 import { isPlatformAdmin } from "@/lib/platform-admin";
 import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
 import { notFound, redirect } from "next/navigation";
+import AppTopBar from "@/components/ui/AppTopBar";
 import BottomNav from "@/components/ui/BottomNav";
-import BranchSelector from "@/components/ui/BranchSelector";
 import { BranchWorkspaceProvider } from "@/components/ui/BranchWorkspace";
-import DeviceTextScaleControl from "@/components/ui/DeviceTextScaleControl";
-import SoundToggle from "@/components/ui/SoundToggle";
 import { DEVICE_TEXT_SCALE_COOKIE, normalizeDeviceTextScale } from "@/lib/device-text-scale";
 import { hexToRgb } from "@/lib/utils";
 
@@ -66,6 +64,11 @@ export default async function BranchLayout({
       primaryColor: true,
       bgColor: true,
       kioscoId: true,
+      kiosco: {
+        select: {
+          name: true,
+        },
+      },
     },
   });
 
@@ -98,70 +101,20 @@ export default async function BranchLayout({
         "--bg": bgColor,
       } as React.CSSProperties}
     >
-      <header className="app-header no-print">
-        <div className="app-header-branch">
-          <BranchSelector branches={branches} currentBranchId={effectiveBranchId} />
-        </div>
-        <div className="app-header-actions">
-          <SoundToggle />
-          <DeviceTextScaleControl initialScale={initialTextScale} />
-          <a
-            href={`/${effectiveBranchId}/tickets`}
-            className="app-header-icon-link"
-            title="Tickets"
-            aria-label="Tickets"
-          >
-            {"\uD83E\uDDFE"}
-          </a>
-          {(session.user.role === "OWNER" || session.user.employeeRole === "MANAGER") ? (
-            <a
-              href={`/${effectiveBranchId}/facturas`}
-              className="app-header-icon-link"
-              title="Facturas"
-              aria-label="Facturas"
-            >
-              {"\uD83D\uDCC4"}
-            </a>
-          ) : null}
-          {(session.user.role === "OWNER" || session.user.employeeRole === "MANAGER") ? (
-            <a
-              href={`/${effectiveBranchId}/promociones`}
-              className="app-header-icon-link"
-              title="Promociones"
-              aria-label="Promociones"
-            >
-              {"\uD83C\uDFF7\uFE0F"}
-            </a>
-          ) : null}
-          {(session.user.role === "OWNER" || session.user.employeeRole === "MANAGER") ? (
-            <a
-              href={`/${effectiveBranchId}/configuracion`}
-              className="app-header-icon-link"
-              title="Configuracion"
-              aria-label="Configuracion"
-            >
-              {"\u2699\uFE0F"}
-            </a>
-          ) : null}
-          <form
-            action={async () => {
-              "use server";
-              await signOut({ redirectTo: "/login" });
-            }}
-          >
-            <button
-              type="submit"
-              className="btn btn-sm btn-ghost app-header-logout"
-              title="Salir"
-            >
-              <span className="app-header-logout-icon" aria-hidden="true">
-                {"\u21AA"}
-              </span>
-              <span className="app-header-logout-label">Salir</span>
-            </button>
-          </form>
-        </div>
-      </header>
+      <AppTopBar
+        branches={branches}
+        currentBranchId={effectiveBranchId}
+        kioscoName={currentBranch.kiosco.name}
+        user={{
+          name: session.user.name,
+          email: session.user.email,
+          image: session.user.image,
+          role: session.user.role,
+          employeeRole: session.user.employeeRole,
+          employeeId: session.user.employeeId,
+        }}
+        initialTextScale={initialTextScale}
+      />
 
       <BranchWorkspaceProvider
         branch={{

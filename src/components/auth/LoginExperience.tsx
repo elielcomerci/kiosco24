@@ -121,7 +121,7 @@ export default function LoginExperience({
           email,
           password,
           redirect: false,
-          callbackUrl: "/",
+          callbackUrl: "/login",
         }),
       );
 
@@ -131,7 +131,7 @@ export default function LoginExperience({
         return;
       }
 
-      window.location.assign(result?.url || "/");
+      window.location.assign("/login");
     } catch (submitError) {
       console.error("[Login] Credentials sign-in failed:", submitError);
       setError(getAuthErrorMessage(submitError));
@@ -211,7 +211,7 @@ export default function LoginExperience({
           employeeId: employee.id,
           pin: pinValue,
           redirect: false,
-          callbackUrl: "/",
+          callbackUrl: "/login",
         }),
       );
 
@@ -221,7 +221,7 @@ export default function LoginExperience({
         return;
       }
 
-      window.location.assign(selectedBranchId ? `/${selectedBranchId}/caja` : result?.url || "/");
+      window.location.assign(selectedBranchId ? `/${selectedBranchId}/caja` : "/login");
     } catch (submitError) {
       console.error("[Login] Employee sign-in failed:", submitError);
       setError(getAuthErrorMessage(submitError));

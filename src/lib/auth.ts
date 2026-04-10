@@ -2,12 +2,17 @@ import NextAuth, { type DefaultSession } from "next-auth";
 import "next-auth/jwt";
 import Credentials from "next-auth/providers/credentials";
 import { PrismaAdapter } from "@auth/prisma-adapter";
+import { resolveAccessAwareAppStartPath } from "@/lib/app-entry";
 import { normalizeBranchAccessKey } from "@/lib/branch-access-key";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
-import { getKioscoAccessContextByAccessKey } from "@/lib/access-control";
+import {
+  getKioscoAccessContextByAccessKey,
+  getKioscoAccessContextForSession,
+} from "@/lib/access-control";
 import { InvalidEmployeePinError, verifyEmployeePinValue } from "@/lib/employee-pin";
 import { UserRole, EmployeeRole } from "@prisma/client";
+import { isPlatformAdmin } from "@/lib/platform-admin";
 
 const authSecret =
   process.env.AUTH_SECRET?.trim() ||
@@ -26,6 +31,7 @@ declare module "next-auth" {
       employeeRole?: EmployeeRole;
       branchId?: string;
       mainBusinessActivity?: string;
+      appStartPath?: string;
     } & DefaultSession["user"];
   }
 
@@ -35,6 +41,7 @@ declare module "next-auth" {
     employeeRole?: EmployeeRole;
     branchId?: string;
     mainBusinessActivity?: string;
+    appStartPath?: string;
   }
 }
 
@@ -46,7 +53,89 @@ declare module "next-auth/jwt" {
     employeeRole?: EmployeeRole;
     branchId?: string;
     mainBusinessActivity?: string;
+    appStartPath?: string;
+    appContextVersion?: number;
   }
+}
+
+const APP_CONTEXT_VERSION = 1;
+
+type OwnerTokenUser = {
+  id: string;
+  role?: UserRole;
+  email?: string | null;
+};
+
+async function resolveOwnerAppContext(user: OwnerTokenUser) {
+  if (isPlatformAdmin(user)) {
+    return {
+      branchId: undefined,
+      mainBusinessActivity: undefined,
+      appStartPath: "/admin",
+    };
+  }
+
+  const [access, kiosco] = await Promise.all([
+    getKioscoAccessContextForSession({
+      id: user.id,
+      role: user.role ?? UserRole.OWNER,
+      email: user.email ?? null,
+    }),
+    prisma.kiosco.findUnique({
+      where: { ownerId: user.id },
+      select: { mainBusinessActivity: true },
+    }),
+  ]);
+
+  return {
+    branchId: access.firstBranchId ?? undefined,
+    mainBusinessActivity: kiosco?.mainBusinessActivity ?? undefined,
+    appStartPath: resolveAccessAwareAppStartPath(user, access),
+  };
+}
+
+function applyEmployeeAppContext(
+  token: {
+    employeeId?: string;
+    employeeRole?: EmployeeRole;
+    branchId?: string;
+    mainBusinessActivity?: string;
+    appStartPath?: string;
+    appContextVersion?: number;
+  },
+  user: {
+    employeeId?: string;
+    employeeRole?: EmployeeRole;
+    branchId?: string;
+  },
+) {
+  token.employeeId = user.employeeId;
+  token.employeeRole = user.employeeRole;
+  token.branchId = user.branchId;
+  delete token.mainBusinessActivity;
+  token.appStartPath = user.branchId ? `/${user.branchId}/caja` : "/onboarding";
+  token.appContextVersion = APP_CONTEXT_VERSION;
+}
+
+async function applyOwnerAppContext(
+  token: {
+    employeeId?: string;
+    employeeRole?: EmployeeRole;
+    branchId?: string;
+    mainBusinessActivity?: string;
+    appStartPath?: string;
+    appContextVersion?: number;
+  },
+  user: OwnerTokenUser,
+) {
+  delete token.employeeId;
+  delete token.employeeRole;
+
+  const appContext = await resolveOwnerAppContext(user);
+  token.branchId = appContext.branchId;
+  token.mainBusinessActivity = appContext.mainBusinessActivity;
+  token.appStartPath = appContext.appStartPath;
+  token.appContextVersion = APP_CONTEXT_VERSION;
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
@@ -178,29 +267,22 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async jwt({ token, user }) {
       // Primer login: user viene populado
       if (user) {
-        token.id = user.id;
+        const userId = typeof user.id === "string" ? user.id : undefined;
+        if (!userId) {
+          return token;
+        }
+
+        token.id = userId;
         token.role = user.role ?? UserRole.OWNER;
 
         if ((user.role ?? UserRole.OWNER) === UserRole.EMPLOYEE) {
-          token.employeeId = user.employeeId;
-          token.employeeRole = user.employeeRole;
-          token.branchId = user.branchId;
-          delete token.mainBusinessActivity;
+          applyEmployeeAppContext(token, user);
         } else {
-          delete token.employeeId;
-          delete token.employeeRole;
-
-          // Para OWNER y PLATFORM_ADMIN: resolver branchId y rubro desde el kiosco
-          const kiosco = await prisma.kiosco.findUnique({
-            where: { ownerId: user.id },
-            select: {
-              mainBusinessActivity: true,
-              branches: { take: 1, select: { id: true } },
-            },
+          await applyOwnerAppContext(token, {
+            id: userId,
+            role: user.role ?? UserRole.OWNER,
+            email: user.email ?? null,
           });
-
-          token.branchId = kiosco?.branches[0]?.id ?? undefined;
-          token.mainBusinessActivity = kiosco?.mainBusinessActivity ?? undefined;
         }
 
         return token;
@@ -221,12 +303,35 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           delete token.employeeId;
           delete token.employeeRole;
           delete token.branchId;
+          delete token.appStartPath;
+          delete token.appContextVersion;
+        } else if (token.appContextVersion !== APP_CONTEXT_VERSION) {
+          applyEmployeeAppContext(token, {
+            employeeId: token.employeeId,
+            employeeRole: token.employeeRole as EmployeeRole | undefined,
+            branchId: token.branchId,
+          });
         }
         return token;
       }
 
       if (!token.role) {
         token.role = UserRole.OWNER;
+      }
+
+      if (token.appContextVersion !== APP_CONTEXT_VERSION) {
+        if (typeof token.id === "string") {
+          await applyOwnerAppContext(token, {
+            id: token.id,
+            role: token.role as UserRole | undefined,
+            email: token.email ?? null,
+          });
+        } else {
+          token.appStartPath = isPlatformAdmin({ role: token.role as UserRole | undefined, email: token.email ?? null })
+            ? "/admin"
+            : "/onboarding";
+          token.appContextVersion = APP_CONTEXT_VERSION;
+        }
       }
 
       return token;
@@ -239,6 +344,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.employeeRole = token.employeeRole as EmployeeRole | undefined;
         session.user.branchId = token.branchId as string | undefined;
         session.user.mainBusinessActivity = token.mainBusinessActivity as string | undefined;
+        session.user.appStartPath = token.appStartPath as string | undefined;
       }
 
       return session;

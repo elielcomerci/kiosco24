@@ -29,6 +29,7 @@ import { savePendingSale } from "@/lib/offline/db";
 import { useOnlineStatus } from "@/lib/offline/sync";
 import { useIsDesktop } from "@/lib/hooks";
 import { playAudio, preloadAudio } from "@/lib/audio";
+import { isKeypadModalOpen } from "@/lib/keypad-lock";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -469,6 +470,8 @@ export default function CajaPage() {
   }, [ticket, promotions, couponRecord]);
 
   // ─── Audio Effects ────────────────────────────────────────────────────────
+  // El audio context ya está desbloqueado porque el usuario clickeó en la
+  // pantalla de login para llegar acá. Se reproduce al cargar los productos.
   useEffect(() => {
     if (products.length > 0 && !hasPlayedStartupRef.current) {
       hasPlayedStartupRef.current = true;
@@ -562,133 +565,42 @@ export default function CajaPage() {
     }
   }, [activeShift]);
 
-  // ─── Keyboard Shortcuts ───────────────────────────────────────────────────
-  const resetKeyboardScannerState = useCallback(() => {
-    keyboardScanBufferRef.current = "";
-    keyboardScanStartedAtRef.current = 0;
-    keyboardScanLastKeyAtRef.current = 0;
-  }, []);
+  // ─── visibleProducts & filteredProducts ───────────────────────────────────
+  const visibleProducts = useMemo(
+    () =>
+      products.filter((product) => {
+        if (product.showInGrid === false || product.categoryShowInGrid === false) {
+          return false;
+        }
 
-  const clearPendingManualSearch = useCallback(() => {
-    pendingManualSearchRef.current = "";
-    if (manualSearchTimerRef.current) {
-      window.clearTimeout(manualSearchTimerRef.current);
-      manualSearchTimerRef.current = null;
+        if (isSellableProduct(product, allowNegativeStock)) {
+          return true;
+        }
+
+        if (product.isOutOfStock || product.isNegativeStock || product.isBelowMinStock) {
+          return true;
+        }
+
+        return product.variants?.some((variant) => variant.isOutOfStock || variant.isNegativeStock || variant.isBelowMinStock) ?? false;
+      }),
+    [products, allowNegativeStock],
+  );
+
+  const filteredProducts = useMemo(() => {
+    let res = visibleProducts;
+    if (activeCategory) res = res.filter(p => p.categoryId === activeCategory);
+    if (cajaSearch) {
+      const q = cajaSearch.toLowerCase();
+      res = res.filter(p => p.name.toLowerCase().includes(q) || p.barcode === q);
     }
-  }, []);
+    return res;
+  }, [visibleProducts, activeCategory, cajaSearch]);
 
   useEffect(() => {
-    const handleGlobalKeyDown = (e: KeyboardEvent) => {
-      const overlayOpen =
-        showGasto ||
-        showOtro ||
-        showRetiro ||
-        showCredit ||
-        showOpenShift ||
-        showCloseShift ||
-        showTransferShift ||
-        showScanner ||
-        showReminderComposer ||
-        pendingReminder ||
-        variantSelector ||
-        showCashNumpad ||
-        confirmedSale ||
-        showInvoiceDraftModal ||
-        invoiceSaleId;
+    // Reset selection when search queries change
+    setSelectedIndex(0);
+  }, [cajaSearch, activeCategory]);
 
-      if (overlayOpen) {
-        clearPendingManualSearch();
-        resetKeyboardScannerState();
-        return;
-      }
-
-      if (e.ctrlKey || e.metaKey || e.altKey) {
-        return;
-      }
-
-      const activeEl = document.activeElement;
-      const isInputFocused = activeEl?.tagName === "INPUT" || activeEl?.tagName === "TEXTAREA" || activeEl?.tagName === "SELECT";
-
-      const now = performance.now();
-      const printableKey = e.key.length === 1 && /[0-9A-Za-z./\\-]/.test(e.key);
-
-      if (printableKey) {
-        const gap = now - keyboardScanLastKeyAtRef.current;
-        const startNewSequence = !keyboardScanBufferRef.current || gap > 80;
-
-        if (startNewSequence) {
-          keyboardScanBufferRef.current = e.key;
-          keyboardScanStartedAtRef.current = now;
-        } else {
-          keyboardScanBufferRef.current += e.key;
-        }
-
-        keyboardScanLastKeyAtRef.current = now;
-
-        if (!isInputFocused) {
-          pendingManualSearchRef.current += e.key;
-          if (manualSearchTimerRef.current) {
-            window.clearTimeout(manualSearchTimerRef.current);
-          }
-
-          manualSearchTimerRef.current = window.setTimeout(() => {
-            const pending = pendingManualSearchRef.current;
-            if (!pending) return;
-
-            searchInputRef.current?.focus();
-            setCajaSearch((prev) => prev + pending);
-            clearPendingManualSearch();
-            resetKeyboardScannerState();
-          }, 85);
-
-          e.preventDefault();
-        }
-
-        return;
-      }
-
-      if (e.key === "Enter" || e.key === "Tab") {
-        const buffer = keyboardScanBufferRef.current;
-        const duration = keyboardScanStartedAtRef.current ? now - keyboardScanStartedAtRef.current : Infinity;
-        const averageGap = buffer.length > 1 ? duration / (buffer.length - 1) : Infinity;
-        const looksLikeScanner = buffer.length >= 6 && duration <= 1200 && averageGap <= 55;
-
-        if (looksLikeScanner) {
-          clearPendingManualSearch();
-          resetKeyboardScannerState();
-          setCajaSearch("");
-          e.preventDefault();
-          e.stopPropagation();
-          handleBarcodeScanRef.current(buffer);
-          return;
-        }
-
-        if (!isInputFocused) {
-          clearPendingManualSearch();
-          resetKeyboardScannerState();
-        }
-        return;
-      }
-
-      if (e.key === "Escape") {
-        clearPendingManualSearch();
-        resetKeyboardScannerState();
-      }
-    };
-    
-    window.addEventListener("keydown", handleGlobalKeyDown);
-    return () => {
-      clearPendingManualSearch();
-      resetKeyboardScannerState();
-      window.removeEventListener("keydown", handleGlobalKeyDown);
-    };
-  }, [
-    clearPendingManualSearch,
-    resetKeyboardScannerState,
-    showGasto, showOtro, showRetiro, showCredit, showOpenShift, showCloseShift,
-    showTransferShift, showScanner, showReminderComposer, pendingReminder, variantSelector,
-    showCashNumpad, confirmedSale, showInvoiceDraftModal, invoiceSaleId
-  ]);
 
   // ─── Startup Logic: Onboarding & Shift ──────────────────────────────────
   const promptSubscriptionActivation = useCallback((message: string) => {
@@ -1324,6 +1236,27 @@ export default function CajaPage() {
     if (longPressTimer.current) clearTimeout(longPressTimer.current);
   };
 
+  const handleProductRemove = useCallback((product: Product) => {
+    if (!activeShift) return;
+    setTicket((prev) => {
+      let idx = -1;
+      for (let i = prev.length - 1; i >= 0; i--) {
+        if (prev[i].productId === product.id) {
+          idx = i;
+          break;
+        }
+      }
+      if (idx === -1) return prev;
+      const next = [...prev];
+      if (next[idx].quantity <= 1) {
+        next.splice(idx, 1);
+      } else {
+        next[idx] = { ...next[idx], quantity: next[idx].quantity - (product.soldByWeight ? 50 : 1) };
+      }
+      return next;
+    });
+  }, [activeShift]);
+
   // ─── REPETIR ─────────────────────────────────────────────────────────────
   const confirmWeightSelection = () => {
     if (!weightSelector) {
@@ -1582,36 +1515,6 @@ export default function CajaPage() {
   };
 
   // ─── Barcode handling ─────────────────────────────────────────────────────
-  const visibleProducts = useMemo(
-    () =>
-      products.filter((product) => {
-        if (product.showInGrid === false || product.categoryShowInGrid === false) {
-          return false;
-        }
-
-        if (isSellableProduct(product, allowNegativeStock)) {
-          return true;
-        }
-
-        if (product.isOutOfStock || product.isNegativeStock || product.isBelowMinStock) {
-          return true;
-        }
-
-        return product.variants?.some((variant) => variant.isOutOfStock || variant.isNegativeStock || variant.isBelowMinStock) ?? false;
-      }),
-    [products, allowNegativeStock],
-  );
-
-  const filteredProducts = useMemo(() => {
-    let res = visibleProducts;
-    if (activeCategory) res = res.filter(p => p.categoryId === activeCategory);
-    if (cajaSearch) {
-      const q = cajaSearch.toLowerCase();
-      res = res.filter(p => p.name.toLowerCase().includes(q) || p.barcode === q);
-    }
-    return res;
-  }, [visibleProducts, activeCategory, cajaSearch]);
-
   const handleBarcodeScan = useCallback((result: string) => {
     setShowScanner(false);
     void playAudio("/scanner.wav", 0.7);
@@ -1768,6 +1671,161 @@ export default function CajaPage() {
     setSelectedIndex(0);
   }, [cajaSearch, activeCategory]);
 
+  // ─── Keyboard Shortcuts (moved down to avoid TDZ for handleProductTap) ───
+  const resetKeyboardScannerState = useCallback(() => {
+    keyboardScanBufferRef.current = "";
+    keyboardScanStartedAtRef.current = 0;
+    keyboardScanLastKeyAtRef.current = 0;
+  }, []);
+
+  const clearPendingManualSearch = useCallback(() => {
+    pendingManualSearchRef.current = "";
+    if (manualSearchTimerRef.current) {
+      window.clearTimeout(manualSearchTimerRef.current);
+      manualSearchTimerRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      const overlayOpen =
+        showGasto || showOtro || showRetiro || showCredit || showOpenShift || showCloseShift ||
+        showTransferShift || showScanner || showReminderComposer || pendingReminder ||
+        variantSelector || showCashNumpad || confirmedSale || showInvoiceDraftModal || invoiceSaleId;
+
+      if (isKeypadModalOpen() || overlayOpen) {
+        clearPendingManualSearch();
+        resetKeyboardScannerState();
+        return;
+      }
+
+      const activeEl = document.activeElement;
+      const isInputFocused = activeEl?.tagName === "INPUT" || activeEl?.tagName === "TEXTAREA" || activeEl?.tagName === "SELECT";
+
+      if (!isInputFocused && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        // Quick Add / Remove / Enter
+        const isAdd = e.key === "Enter" || e.key === "+" || e.key === "Add" || e.code === "NumpadAdd";
+        if (isAdd && filteredProducts.length > 0) {
+          e.preventDefault();
+          e.stopPropagation();
+          handleProductTap(filteredProducts[selectedIndex]);
+          return;
+        }
+
+        const isSubtract = e.key === "-" || e.key === "Subtract" || e.code === "NumpadSubtract";
+        if (isSubtract && filteredProducts.length > 0) {
+          e.preventDefault();
+          e.stopPropagation();
+          handleProductRemove(filteredProducts[selectedIndex]);
+          return;
+        }
+
+        // Arrow Navigation list mode
+        if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+          e.preventDefault();
+          setSelectedIndex((idx) => {
+            const total = filteredProducts.length;
+            if (total === 0) return 0;
+            if (e.key === "ArrowUp") return Math.max(0, idx - 1);
+            if (e.key === "ArrowDown") return Math.min(total - 1, idx + 1);
+            return idx;
+          });
+          return;
+        }
+      }
+
+      if (e.ctrlKey || e.metaKey || e.altKey) {
+        return;
+      }
+
+      const now = performance.now();
+      const printableKey = e.key.length === 1 && /[0-9A-Za-z.\/\-+]/.test(e.key);
+
+      if (printableKey) {
+        const gap = now - keyboardScanLastKeyAtRef.current;
+        const startNewSequence = !keyboardScanBufferRef.current || gap > 80;
+
+        if (startNewSequence) {
+          keyboardScanBufferRef.current = e.key;
+          keyboardScanStartedAtRef.current = now;
+        } else {
+          keyboardScanBufferRef.current += e.key;
+        }
+
+        keyboardScanLastKeyAtRef.current = now;
+
+        if (!isInputFocused) {
+          pendingManualSearchRef.current += e.key;
+          if (manualSearchTimerRef.current) window.clearTimeout(manualSearchTimerRef.current);
+
+          manualSearchTimerRef.current = window.setTimeout(() => {
+            const pending = pendingManualSearchRef.current;
+            if (!pending) return;
+
+            // Stop + and - from polluting the search text if they were handled alone
+            const cleanPending = pending.replace(/^[+-]+$/, '');
+            
+            if (cleanPending) {
+              searchInputRef.current?.focus();
+              setCajaSearch((prev) => prev + cleanPending);
+            }
+            clearPendingManualSearch();
+            resetKeyboardScannerState();
+          }, 85);
+
+          e.preventDefault();
+        }
+
+        return;
+      }
+
+      if (e.key === "Enter" || e.key === "Tab") {
+        const buffer = keyboardScanBufferRef.current;
+        const duration = keyboardScanStartedAtRef.current ? now - keyboardScanStartedAtRef.current : Infinity;
+        const averageGap = buffer.length > 1 ? duration / (buffer.length - 1) : Infinity;
+        const looksLikeScanner = buffer.length >= 6 && duration <= 1200 && averageGap <= 55;
+
+        if (looksLikeScanner) {
+          clearPendingManualSearch();
+          resetKeyboardScannerState();
+          setCajaSearch("");
+          e.preventDefault();
+          e.stopPropagation();
+          handleBarcodeScanRef.current(buffer);
+          return;
+        }
+
+        if (!isInputFocused) {
+          clearPendingManualSearch();
+          resetKeyboardScannerState();
+        }
+        return;
+      }
+
+      if (e.key === "Escape") {
+        clearPendingManualSearch();
+        resetKeyboardScannerState();
+        if (cajaSearch) {
+          setCajaSearch("");
+        }
+        return;
+      }
+    };
+    
+    window.addEventListener("keydown", handleGlobalKeyDown);
+    return () => {
+      clearPendingManualSearch();
+      resetKeyboardScannerState();
+      window.removeEventListener("keydown", handleGlobalKeyDown);
+    };
+  }, [
+    clearPendingManualSearch, resetKeyboardScannerState, filteredProducts,
+    selectedIndex, handleProductTap, handleProductRemove, showGasto,
+    showOtro, showRetiro, showCredit, showOpenShift, showCloseShift,
+    showTransferShift, showScanner, showReminderComposer, pendingReminder,
+    variantSelector, showCashNumpad, confirmedSale, showInvoiceDraftModal, invoiceSaleId
+  ]);
+
   // ─── Confirmed sale overlay ────────────────────────────────────────────────
   if (confirmedSale) {
     return (
@@ -1923,14 +1981,25 @@ export default function CajaPage() {
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       setSelectedIndex((prev) => Math.max(prev - 1, 0));
-    } else if (e.key === "Enter") {
+    } else if (e.key === "Enter" || e.key === "+" || e.key === "Add" || e.code === "NumpadAdd") {
       e.preventDefault();
-      if (cajaSearch && filteredProducts.length > 0) {
+      e.stopPropagation();
+      if (filteredProducts.length > 0) {
         handleProductTap(filteredProducts[selectedIndex]);
-        setCajaSearch("");
-        setSelectedIndex(0);
-      } else if (!cajaSearch && ticket.length > 0) {
-        handleCashButton(); // Quick checkout shortcut!
+      }
+      if (e.key === "Enter") {
+        if (cajaSearch && filteredProducts.length > 0) {
+          setCajaSearch("");
+          setSelectedIndex(0);
+        } else if (!cajaSearch && ticket.length > 0) {
+          handleCashButton(); // Quick checkout shortcut!
+        }
+      }
+    } else if (e.key === "-" || e.key === "Subtract" || e.code === "NumpadSubtract") {
+      e.preventDefault();
+      e.stopPropagation();
+      if (filteredProducts.length > 0) {
+        handleProductRemove(filteredProducts[selectedIndex]);
       }
     }
   };
@@ -2171,7 +2240,7 @@ export default function CajaPage() {
         <div className="product-grid" style={{ padding: "0 16px 16px", paddingBottom: "100px", alignContent: "start" }}>
           {filteredProducts.map((product, i) => {
             const inTicket = ticket.find((t) => t.productId === product.id && !t.variantId);
-            const isSelected = i === selectedIndex && cajaSearch.length > 0;
+            const isSelected = i === selectedIndex;
             const stockBadge = getProductStockBadge(product);
             const isUnavailable = !isSellableProduct(product, allowNegativeStock);
              

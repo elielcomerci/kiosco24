@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { playAudio } from "@/lib/audio";
+import { useKeypadLock } from "@/lib/keypad-lock";
 import ModalPortal from "@/components/ui/ModalPortal";
 
 interface PinModalProps {
@@ -22,12 +23,20 @@ export default function PinModal({
   error = null,
 }: PinModalProps) {
   const [pin, setPin] = useState("");
+  const prevErrorRef = useRef(error);
+  useKeypadLock(); // Bloquea el handler global de búsqueda mientras este modal está abierto
+
+  // Auto-borrar PIN cuando el padre señala un error nuevo
+  useEffect(() => {
+    if (error && error !== prevErrorRef.current) {
+      setPin("");
+    }
+    prevErrorRef.current = error;
+  }, [error]);
 
   const handleKey = (digit: string) => {
     void playAudio("/tap.wav", 0.4);
-    if (pin.length < 6) {
-      setPin((p) => p + digit);
-    }
+    if (pin.length < 6) setPin((p) => p + digit);
   };
 
   const handleBackspace = () => {
@@ -40,7 +49,39 @@ export default function PinModal({
     await onConfirm(pin);
   };
 
+  // Soporte de teclado físico
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (loading || e.ctrlKey || e.metaKey || e.altKey) return;
+
+      const isDigit = /^[0-9]$/.test(e.key);
+      const isNumpadDigit = e.code && e.code.startsWith("Numpad") && e.code.length === 7 && /^[0-9]$/.test(e.code[6]);
+
+      if (isDigit || isNumpadDigit) {
+        e.preventDefault();
+        e.stopPropagation();
+        handleKey(isDigit ? e.key : e.code[6]);
+      } else if (e.key === "Backspace") {
+        e.preventDefault();
+        e.stopPropagation();
+        handleBackspace();
+      } else if (e.key === "Enter" || e.code === "NumpadEnter") {
+        e.preventDefault();
+        e.stopPropagation();
+        void handleConfirm();
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        onCancel();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pin, loading]);
+
   const dots = Array.from({ length: 6 }, (_, i) => i < pin.length);
+
 
   return (
     <ModalPortal>

@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import Script from "next/script";
 import { GeistSans } from "geist/font/sans";
 import { BRAND_ICON_SRC } from "@/lib/brand";
+import { Analytics } from "@vercel/analytics/next";
 
 import "./globals.css";
 
@@ -37,6 +38,7 @@ export default function RootLayout({
     <html lang="es" className={GeistSans.variable} suppressHydrationWarning>
       <body>
         {children}
+        <Analytics />
         <Script
           id="sw-register"
           strategy="afterInteractive"

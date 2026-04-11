@@ -117,14 +117,28 @@ export default function RegisterExperience({
   };
 
   return (
+    <>
+      <style dangerouslySetInnerHTML={{ __html: `
+        @import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@700;800&family=Instrument+Sans:wght@400;500;600&display=swap');
+        .auth-scope { font-family: 'Instrument Sans', sans-serif; }
+        .auth-scope h1, .auth-scope h2 { font-family: 'Bricolage Grotesque', sans-serif; letter-spacing: -0.04em; }
+        .auth-scope .input { font-family: 'Instrument Sans', sans-serif; background: #0e1420; border: 1px solid rgba(255,255,255,0.07); color: #eef2f7; }
+        .auth-scope .input::placeholder { color: #6b7e96; }
+        .auth-scope .input:focus { border-color: #f5a623; box-shadow: 0 0 0 3px rgba(245,166,35,0.12); }
+        .auth-scope .btn { font-family: 'Instrument Sans', sans-serif; }
+        .auth-scope .btn-primary { background: #f5a623; color: #1a0f00; font-weight: 700; }
+        .auth-scope .btn-primary:hover { background: #f9b840; }
+        .auth-scope .btn-ghost { background: transparent; border: 1px solid rgba(255,255,255,0.13); color: #8fa3ba; }
+        .auth-scope .btn-ghost:hover { border-color: rgba(255,255,255,0.22); color: #eef2f7; }
+      `}} />
     <div
+      className="auth-scope"
       style={{
         minHeight: "100dvh",
         padding: "28px",
         display: "grid",
         placeItems: "center",
-        background:
-          "radial-gradient(circle at top left, rgba(14,165,233,.16), transparent 28%), radial-gradient(circle at bottom right, rgba(245,158,11,.12), transparent 26%), linear-gradient(180deg, #07111f 0%, #030712 45%, #020617 100%)",
+        background: "#06080d",
       }}
     >
       <div
@@ -145,8 +159,8 @@ export default function RegisterExperience({
             gap: "22px",
             justifyContent: "space-between",
             background:
-              "linear-gradient(160deg, rgba(8,15,31,.94) 0%, rgba(11,27,46,.9) 55%, rgba(24,24,63,.88) 100%)",
-            border: "1px solid rgba(148,163,184,.14)",
+              "#0e1420",
+            border: "1px solid rgba(255,255,255,0.07)",
           }}
         >
           <div style={{ display: "grid", gap: "18px" }}>
@@ -156,9 +170,9 @@ export default function RegisterExperience({
                 width: "fit-content",
                 padding: "6px 10px",
                 borderRadius: "999px",
-                background: "rgba(56,189,248,.12)",
-                border: "1px solid rgba(56,189,248,.22)",
-                color: "#bae6fd",
+                background: "rgba(245,166,35,0.11)",
+                border: "1px solid rgba(245,166,35,0.28)",
+                color: "#f5a623",
                 fontSize: "11px",
                 fontWeight: 800,
                 letterSpacing: ".08em",
@@ -174,15 +188,16 @@ export default function RegisterExperience({
               <h1
                 style={{
                   margin: 0,
-                  color: "#f8fafc",
+                  color: "#eef2f7",
                   fontSize: "clamp(28px, 4vw, 42px)",
                   lineHeight: 1.04,
                   letterSpacing: "-0.04em",
+                  fontFamily: "'Bricolage Grotesque',sans-serif",
                 }}
               >
                 Tu cuenta nace con nombre, negocio y rumbo desde el primer minuto.
               </h1>
-              <p style={{ margin: 0, color: "#cbd5e1", lineHeight: 1.7, fontSize: "15px" }}>
+              <p style={{ margin: 0, color: "#8fa3ba", lineHeight: 1.7, fontSize: "15px" }}>
                 Te pedimos muy poco, pero lo justo para recibirte por tu nombre y dejar tu negocio
                 bien encaminado desde el inicio.
               </p>
@@ -192,8 +207,8 @@ export default function RegisterExperience({
           <div style={{ display: "grid", gap: "12px" }}>
             {[
               "Tu cuenta y tu negocio quedan creados juntos, listos para arrancar con orden.",
-              "Cuando suma, te dejamos una base inicial para ganar tiempo desde el primer dia.",
-              "Despues podras completar CUIT/CUIL/DNI, direccion, ciudad y telefono desde tu perfil.",
+              "Cuando suma, te dejamos una base inicial para ganar tiempo desde el primer día.",
+              "Después podés completar CUIT/CUIL/DNI, dirección, ciudad y teléfono desde tu perfil.",
             ].map((item) => (
               <div
                 key={item}
@@ -201,19 +216,19 @@ export default function RegisterExperience({
                   display: "flex",
                   gap: "10px",
                   alignItems: "flex-start",
-                  color: "#e2e8f0",
+                  color: "#eef2f7",
                   fontSize: "14px",
                   lineHeight: 1.5,
                 }}
               >
-                <span style={{ color: "#38bdf8", fontWeight: 900 }}>+</span>
+                <span style={{ color: "#f5a623", fontWeight: 900 }}>+</span>
                 <span>{item}</span>
               </div>
             ))}
           </div>
 
-          <div style={{ color: "#94a3b8", fontSize: "12px", lineHeight: 1.6 }}>
-            Al entrar te vamos a ofrecer activar tu cuenta o seguir preparando todo con calma antes
+          <div style={{ color: "#6b7e96", fontSize: "12px", lineHeight: 1.6 }}>
+            Al entrar, te vamos a ofrecer activar tu cuenta o seguir preparando todo con calma antes
             de empezar a operar.
           </div>
         </section>
@@ -224,8 +239,8 @@ export default function RegisterExperience({
             padding: "32px",
             display: "grid",
             gap: "22px",
-            border: "1px solid rgba(148,163,184,.14)",
-            background: "rgba(2, 6, 23, 0.9)",
+            border: "1px solid rgba(255,255,255,0.07)",
+            background: "#131b2a",
           }}
         >
           <div style={{ display: "grid", gap: "8px" }}>
@@ -235,9 +250,9 @@ export default function RegisterExperience({
                 width: "fit-content",
                 padding: "6px 10px",
                 borderRadius: "999px",
-                background: "rgba(56,189,248,.12)",
-                border: "1px solid rgba(56,189,248,.22)",
-                color: "#bae6fd",
+                background: "rgba(245,166,35,0.11)",
+                border: "1px solid rgba(245,166,35,0.28)",
+                color: "#f5a623",
                 fontSize: "11px",
                 fontWeight: 800,
                 letterSpacing: ".08em",
@@ -247,10 +262,10 @@ export default function RegisterExperience({
               Alta nueva
             </div>
             <div>
-              <h2 style={{ margin: 0, color: "#f8fafc", fontSize: "26px", fontWeight: 800 }}>
+              <h2 style={{ margin: 0, color: "#eef2f7", fontSize: "26px", fontWeight: 800 }}>
                 Crear tu cuenta
               </h2>
-              <p style={{ margin: "8px 0 0", color: "#94a3b8", fontSize: "14px", lineHeight: 1.6 }}>
+              <p style={{ margin: "8px 0 0", color: "#6b7e96", fontSize: "14px", lineHeight: 1.6 }}>
                 Solo lo necesario para dejar tu negocio listo y hablarte como corresponde.
               </p>
             </div>
@@ -293,7 +308,7 @@ export default function RegisterExperience({
                   value={lastName}
                   onChange={(event) => setLastName(event.target.value)}
                   autoComplete="family-name"
-                  placeholder="Ej: Perez"
+                  placeholder="Ej: Pérez"
                   required
                 />
               </div>
@@ -309,7 +324,7 @@ export default function RegisterExperience({
                 value={businessName}
                 onChange={(event) => setBusinessName(event.target.value)}
                 autoComplete="organization"
-                placeholder="Ej: Clasico 24, Almacen del Centro"
+                placeholder="Ej: Clásico 24, Almacén del Centro"
                 required
               />
             </div>
@@ -334,7 +349,7 @@ export default function RegisterExperience({
                 <div style={{ fontSize: "12px", color: "var(--text-3)", lineHeight: 1.5 }}>
                   {selectedActivity.description}{" "}
                   {selectedActivity.seedDefaultCatalog
-                    ? "Te dejamos una base inicial lista para ganar tiempo desde el primer dia."
+                    ? "Te dejamos una base inicial lista para ganar tiempo desde el primer día."
                     : "Empiezas con una estructura limpia para acomodarlo a tu manera."}
                 </div>
               ) : null}
@@ -372,7 +387,7 @@ export default function RegisterExperience({
                 <button
                   type="button"
                   onClick={() => setShowPassword((current) => !current)}
-                  aria-label={showPassword ? "Ocultar contrasena" : "Mostrar contrasena"}
+                  aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
                   style={{
                     position: "absolute",
                     right: "12px",
@@ -397,7 +412,7 @@ export default function RegisterExperience({
 
           <div style={{ display: "grid", gap: "10px", justifyItems: "center" }}>
             <p style={{ margin: 0, color: "var(--text-3)", fontSize: "13px", textAlign: "center" }}>
-              Ya tienes cuenta?
+              ¿Ya tenés cuenta?
             </p>
             <Link href="/login" className="btn btn-ghost btn-full" style={{ textDecoration: "none" }}>
               Ir al login
@@ -406,5 +421,6 @@ export default function RegisterExperience({
         </section>
       </div>
     </div>
+    </>
   );
 }

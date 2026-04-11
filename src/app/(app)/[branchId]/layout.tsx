@@ -126,7 +126,7 @@ export default async function BranchLayout({
         }}
         isEmployee={isEmployee}
       >
-        <main className="app-content">{children}</main>
+        <main className="app-content" data-keynav-scope="main-content">{children}</main>
         <BottomNav />
       </BranchWorkspaceProvider>
     </div>

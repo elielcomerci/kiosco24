@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useSession } from "next-auth/react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import { formatARS, getCashSuggestions } from "@/lib/utils";
 import useSWR from "swr";
 import { applyPromoEngine, type ActivePromotion } from "@/lib/promo-engine";
@@ -363,7 +363,6 @@ function applyTicketStockChange(products: Product[], items: TicketItem[], direct
 
 export default function CajaPage() {
   const params = useParams();
-  const router = useRouter();
   const branchId = params.branchId as string;
   const isDesktop = useIsDesktop();
   const { data: session, status } = useSession();
@@ -434,6 +433,7 @@ export default function CajaPage() {
   const [previewSubscriptionError, setPreviewSubscriptionError] = useState("");
   
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const productButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const handleBarcodeScanRef = useRef<(code: string) => void>(() => {});
   const hasPlayedStartupRef = useRef(false);
   const prevPromosCountRef = useRef(0);
@@ -442,6 +442,7 @@ export default function CajaPage() {
   const keyboardScanBufferRef = useRef("");
   const keyboardScanStartedAtRef = useRef(0);
   const keyboardScanLastKeyAtRef = useRef(0);
+  const shouldAutoScrollSelectionRef = useRef(true);
   const pendingManualSearchRef = useRef("");
   const manualSearchTimerRef = useRef<number | null>(null);
   const reminderTimeoutRef = useRef<number | null>(null);
@@ -598,8 +599,33 @@ export default function CajaPage() {
 
   useEffect(() => {
     // Reset selection when search queries change
+    shouldAutoScrollSelectionRef.current = true;
     setSelectedIndex(0);
   }, [cajaSearch, activeCategory]);
+
+  useEffect(() => {
+    setSelectedIndex((current) => {
+      if (filteredProducts.length === 0) return 0;
+      return Math.min(current, filteredProducts.length - 1);
+    });
+  }, [filteredProducts.length]);
+
+  useEffect(() => {
+    if (!shouldAutoScrollSelectionRef.current) {
+      return;
+    }
+
+    const selectedProduct = filteredProducts[selectedIndex];
+    if (!selectedProduct) {
+      return;
+    }
+
+    // Only auto-scroll the grid for keyboard-driven selection changes.
+    productButtonRefs.current[selectedProduct.id]?.scrollIntoView({
+      block: "nearest",
+      inline: "nearest",
+    });
+  }, [filteredProducts, selectedIndex]);
 
 
   // ─── Startup Logic: Onboarding & Shift ──────────────────────────────────
@@ -1127,7 +1153,7 @@ export default function CajaPage() {
   const formatStockAmount = (amount: number, soldByWeight = false) =>
     soldByWeight ? `${(amount / 1000).toFixed(3)} kg` : String(amount);
 
-  const confirmNegativeStock = (itemName: string, availableStock: number, nextQuantity: number, soldByWeight = false) => {
+  const confirmNegativeStock = useCallback((itemName: string, availableStock: number, nextQuantity: number, soldByWeight = false) => {
     const projectedStock = availableStock - nextQuantity;
     return window.confirm(
       `${itemName} no tiene stock cargado suficiente.\n\n` +
@@ -1136,7 +1162,7 @@ export default function CajaPage() {
       `Quedaria en ${formatStockAmount(projectedStock, soldByWeight)}.\n\n` +
       "Confirma solo si el producto ya esta en el local y falta cargarlo.",
     );
-  };
+  }, []);
 
   const handleProductTap = useCallback((product: Product, variant?: Variant) => {
     if (!ensureCanOperateCurrentShift()) {
@@ -1219,7 +1245,13 @@ export default function CajaPage() {
     });
 
     if (variant) setVariantSelector(null);
-  }, [allowNegativeStock, ensureCanOperateCurrentShift, shouldWarnNegativeStock, ticket]);
+  }, [allowNegativeStock, confirmNegativeStock, ensureCanOperateCurrentShift, shouldWarnNegativeStock, ticket]);
+
+  const handleProductGridTap = useCallback((product: Product, index: number) => {
+    shouldAutoScrollSelectionRef.current = false;
+    setSelectedIndex(index);
+    handleProductTap(product);
+  }, [handleProductTap]);
 
   // Long press = eliminar item del ticket
   const longPressTimer = useRef<NodeJS.Timeout | null>(null);
@@ -1666,11 +1698,6 @@ export default function CajaPage() {
   const change = receivedAmount
     ? parseFloat(receivedAmount) - total
     : null;
-
-  useEffect(() => {
-    setSelectedIndex(0);
-  }, [cajaSearch, activeCategory]);
-
   // ─── Keyboard Shortcuts (moved down to avoid TDZ for handleProductTap) ───
   const resetKeyboardScannerState = useCallback(() => {
     keyboardScanBufferRef.current = "";
@@ -1723,6 +1750,7 @@ export default function CajaPage() {
         // Arrow Navigation list mode
         if (e.key === "ArrowUp" || e.key === "ArrowDown") {
           e.preventDefault();
+          shouldAutoScrollSelectionRef.current = true;
           setSelectedIndex((idx) => {
             const total = filteredProducts.length;
             if (total === 0) return 0;
@@ -1820,7 +1848,7 @@ export default function CajaPage() {
     };
   }, [
     clearPendingManualSearch, resetKeyboardScannerState, filteredProducts,
-    selectedIndex, handleProductTap, handleProductRemove, showGasto,
+    selectedIndex, handleProductTap, handleProductRemove, showGasto, cajaSearch,
     showOtro, showRetiro, showCredit, showOpenShift, showCloseShift,
     showTransferShift, showScanner, showReminderComposer, pendingReminder,
     variantSelector, showCashNumpad, confirmedSale, showInvoiceDraftModal, invoiceSaleId
@@ -1977,9 +2005,11 @@ export default function CajaPage() {
   const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "ArrowDown") {
       e.preventDefault();
+      shouldAutoScrollSelectionRef.current = true;
       setSelectedIndex((prev) => Math.min(prev + 1, filteredProducts.length - 1));
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
+      shouldAutoScrollSelectionRef.current = true;
       setSelectedIndex((prev) => Math.max(prev - 1, 0));
     } else if (e.key === "Enter" || e.key === "+" || e.key === "Add" || e.code === "NumpadAdd") {
       e.preventDefault();
@@ -2012,7 +2042,7 @@ export default function CajaPage() {
       <div className="status-bar">
         <button
           type="button"
-          className="status-bar-item"
+          className="status-bar-item status-bar-item--start"
           onClick={() => {
             if (isCashier) return;
             setShowTotalsBreakdown(true);
@@ -2025,11 +2055,11 @@ export default function CajaPage() {
             {formatARS(cajaStats.enCaja)}
           </span>
         </button>
-        <div className="separator" style={{ width: "1px", height: "32px", background: "var(--border-2)" }} />
+        <div className="status-bar-divider" aria-hidden="true" />
         {isCashier ? (
           <DigitalSalesCarousel stats={cajaStats} />
         ) : (
-          <div className="status-bar-item" style={{ alignItems: "flex-end" }}>
+          <div className="status-bar-item status-bar-item--end">
             <span className="status-bar-label">Ganancia estimada</span>
             <span className="status-bar-value" style={{ color: cajaStats.ganancia !== null && cajaStats.ganancia >= 0 ? "var(--primary)" : "var(--red)" }}>
               {cajaStats.ganancia !== null ? formatARS(cajaStats.ganancia) : "—"}
@@ -2173,7 +2203,7 @@ export default function CajaPage() {
         </div>
 
         {isDesktop && (
-          <div style={{ padding: "6px 16px 0", color: "var(--text-3)", fontSize: "12px" }}>
+          <div style={{ padding: "6px 16px 0", color: "var(--text-3)", fontSize: "12px", flexShrink: 0 }}>
             Acepta lectora USB o Bluetooth para escanear códigos de barras. También podés usar la cámara del dispositivo haciendo click en el botón &quot;Escanear&quot;.
           </div>
         )}
@@ -2183,11 +2213,13 @@ export default function CajaPage() {
         <div style={{
           display: "flex",
           gap: "8px",
-          padding: "12px 16px 0",
+          padding: "12px 16px 8px",
           overflowX: "auto",
           whiteSpace: "nowrap",
           scrollbarWidth: "none",
           WebkitOverflowScrolling: "touch",
+          flexShrink: 0,
+          alignItems: "center",
         }}>
           <button
             onClick={() => setActiveCategory(null)}
@@ -2237,7 +2269,17 @@ export default function CajaPage() {
           No hay productos
         </div>
       ) : (
-        <div className="product-grid" style={{ padding: "0 16px 16px", paddingBottom: "100px", alignContent: "start" }}>
+        <div
+          className="product-grid"
+          style={{
+            paddingTop: "0",
+            paddingRight: "16px",
+            paddingBottom: "100px",
+            paddingLeft: "16px",
+            alignContent: "start",
+            flexShrink: 0,
+          }}
+        >
           {filteredProducts.map((product, i) => {
             const inTicket = ticket.find((t) => t.productId === product.id && !t.variantId);
             const isSelected = i === selectedIndex;
@@ -2248,8 +2290,14 @@ export default function CajaPage() {
               <button
                 key={product.id}
                 className="product-btn"
-                ref={(el) => { if (isSelected && el) el.scrollIntoView({ block: 'nearest' }); }}
-                onClick={() => handleProductTap(product)}
+                ref={(el) => {
+                  if (el) {
+                    productButtonRefs.current[product.id] = el;
+                    return;
+                  }
+                  delete productButtonRefs.current[product.id];
+                }}
+                onClick={() => handleProductGridTap(product, i)}
                 onContextMenu={(event) => event.preventDefault()}
                 onMouseDown={() => handleLongPressStart(product)}
                 onMouseUp={handleLongPressEnd}
@@ -3078,6 +3126,32 @@ export default function CajaPage() {
                     }}
                     autoFocus
                   />
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "8px", marginTop: "4px" }}>
+                    {[
+                      { label: "1/4", value: "0.250" },
+                      { label: "1/2", value: "0.500" },
+                      { label: "3/4", value: "0.750" },
+                      { label: "1 kg", value: "1.000" },
+                    ].map((preset) => (
+                      <button
+                        key={preset.label}
+                        type="button"
+                        className="btn btn-ghost"
+                        onClick={() => setWeightSelector((current) => current ? { ...current, draft: preset.value } : current)}
+                        style={{ 
+                          padding: "8px 0", 
+                          fontSize: "13px", 
+                          fontWeight: 700,
+                          border: "1px solid var(--border)",
+                          background: weightSelector.draft === preset.value ? "rgba(var(--primary-rgb), 0.1)" : "var(--surface-3)",
+                          color: weightSelector.draft === preset.value ? "var(--primary)" : "var(--text-2)",
+                          borderColor: weightSelector.draft === preset.value ? "var(--primary)" : "var(--border)"
+                        }}
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
+                  </div>
                 </label>
 
                 <div

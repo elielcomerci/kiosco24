@@ -1,4 +1,5 @@
 import { auth } from "@/lib/auth";
+import { getMercadoPagoCallbackUrl } from "@/lib/mp-oauth";
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -15,12 +16,34 @@ export async function GET(req: NextRequest) {
 
   const searchParams = req.nextUrl.searchParams;
   const code = searchParams.get("code");
-  const branchId = searchParams.get("state"); // Lo pusimos en /api/mp/auth
+  const returnedState = searchParams.get("state");
+  const stateCookie = req.cookies.get("mp_oauth_state")?.value;
+  let storedState: { state: string; branchId: string; codeVerifier: string } | null = null;
 
-  if (!code || !branchId) {
-    return NextResponse.redirect(
-      new URL(`/api/mp/auth?error=mp_cancelled`, req.url)
-    );
+  if (stateCookie) {
+    try {
+      const parsed = JSON.parse(stateCookie) as Partial<{ state: string; branchId: string; codeVerifier: string }>;
+      if (
+        typeof parsed.state === "string" &&
+        typeof parsed.branchId === "string" &&
+        typeof parsed.codeVerifier === "string"
+      ) {
+        storedState = { state: parsed.state, branchId: parsed.branchId, codeVerifier: parsed.codeVerifier };
+      }
+    } catch {
+      storedState = null;
+    }
+  }
+
+  const branchId = storedState?.branchId ?? null;
+
+  if (!code || !returnedState || !storedState || returnedState !== storedState.state || !branchId) {
+    const fallbackUrl = branchId
+      ? new URL(`/${branchId}/configuracion?error=mp_cancelled`, req.url)
+      : new URL("/", req.url);
+    const response = NextResponse.redirect(fallbackUrl);
+    response.cookies.delete("mp_oauth_state");
+    return response;
   }
 
   // Verificar que el branch pertenece al usuario en sesión
@@ -36,25 +59,37 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(new URL("/", req.url));
   }
 
+  const redirectUri = getMercadoPagoCallbackUrl(process.env.NEXTAUTH_URL || req.nextUrl.origin);
+  if (!redirectUri || !process.env.MP_CLIENT_ID || !process.env.MP_CLIENT_SECRET) {
+    const response = NextResponse.redirect(
+      new URL(`/${branchId}/configuracion?error=mp_oauth_not_configured`, req.url)
+    );
+    response.cookies.delete("mp_oauth_state");
+    return response;
+  }
+
   // Intercambiar code por tokens
   const tokenRes = await fetch("https://api.mercadopago.com/oauth/token", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      client_id: process.env.MP_CLIENT_ID!,
-      client_secret: process.env.MP_CLIENT_SECRET!,
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: process.env.MP_CLIENT_ID,
+      client_secret: process.env.MP_CLIENT_SECRET,
       code,
       grant_type: "authorization_code",
-      redirect_uri: `${process.env.NEXTAUTH_URL}/api/mp/callback`,
+      redirect_uri: redirectUri,
+      code_verifier: storedState.codeVerifier,
     }),
   });
 
   if (!tokenRes.ok) {
     const err = await tokenRes.text();
     console.error("[MP OAuth] Error intercambiando code:", err);
-    return NextResponse.redirect(
+    const response = NextResponse.redirect(
       new URL(`/${branchId}/configuracion?error=mp_failed`, req.url)
     );
+    response.cookies.delete("mp_oauth_state");
+    return response;
   }
 
   const tokens = await tokenRes.json();
@@ -74,7 +109,9 @@ export async function GET(req: NextRequest) {
   });
 
   // Redirigir a configuración — la UI mostrará el estado "Conectado, configurando POS..."
-  return NextResponse.redirect(
+  const response = NextResponse.redirect(
     new URL(`/${branchId}/configuracion?mp=connected`, req.url)
   );
+  response.cookies.delete("mp_oauth_state");
+  return response;
 }

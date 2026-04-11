@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { formatARS } from "@/lib/utils";
 
 interface DigitalSalesCarouselProps {
@@ -50,10 +50,9 @@ export default function DigitalSalesCarousel({ stats }: DigitalSalesCarouselProp
   return (
     <button
       type="button"
-      className="status-bar-item"
+      className="status-bar-item status-bar-item--end status-bar-carousel"
       onClick={handleNext}
       style={{
-        alignItems: "flex-end",
         border: "none",
         background: "transparent",
         cursor: "pointer",

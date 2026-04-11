@@ -250,7 +250,7 @@ export default function InventoryValuationPanel({ branchId }: { branchId: string
               Inventario valorizado
             </h3>
             <div style={{ fontSize: 13, color: "var(--text-2)", lineHeight: 1.5 }}>
-              El cálculo completo de capas, reservas y valuación está desactivado por defecto para no gastar CPU en cada apertura de la pestaña.
+              El cálculo completo de capas, reservas y valuación se ejecuta por pedido para mantener la velocidad del sistema.
             </div>
             <div style={{ marginTop: 8, fontSize: 12, color: "var(--text-3)" }}>
               Se calcula solo cuando lo pedís.

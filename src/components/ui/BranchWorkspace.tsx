@@ -61,6 +61,16 @@ function normalizeKey(value: string) {
   return value.toLowerCase();
 }
 
+type SpatialDirection = "up" | "down" | "left" | "right";
+
+const KEYBOARD_NAV_SELECTOR = [
+  '[data-keynav-item]:not([data-keynav-item="false"])',
+  'button:not([disabled]):not([aria-disabled="true"])',
+  'a[href]',
+  '[role="button"]:not([aria-disabled="true"])',
+  '[tabindex]:not([tabindex="-1"])',
+].join(", ");
+
 function matchesShortcut(event: KeyboardEvent, shortcut: ShortcutDefinition) {
   const eventKey = normalizeKey(event.key);
   const shortcutKey = normalizeKey(shortcut.key);
@@ -71,6 +81,186 @@ function matchesShortcut(event: KeyboardEvent, shortcut: ShortcutDefinition) {
     Boolean(event.shiftKey) === Boolean(shortcut.shift) &&
     (shortcut.primary ? event.ctrlKey || event.metaKey : !event.ctrlKey && !event.metaKey)
   );
+}
+
+function isElementDisabled(element: HTMLElement) {
+  if (element.getAttribute("aria-disabled") === "true") {
+    return true;
+  }
+
+  return "disabled" in element && Boolean((element as HTMLButtonElement).disabled);
+}
+
+function isElementVisible(element: HTMLElement) {
+  if (element.hidden || element.closest("[hidden], [aria-hidden='true']")) {
+    return false;
+  }
+
+  const style = window.getComputedStyle(element);
+  if (style.display === "none" || style.visibility === "hidden") {
+    return false;
+  }
+
+  const rect = element.getBoundingClientRect();
+  return rect.width > 0 && rect.height > 0;
+}
+
+function getKeyboardNavScope(activeElement: HTMLElement | null) {
+  const localScope = activeElement?.closest<HTMLElement>("[data-keynav-scope]");
+  if (localScope) {
+    return localScope;
+  }
+
+  const overlays = Array.from(document.querySelectorAll<HTMLElement>(".modal-overlay"));
+  const topOverlay = overlays[overlays.length - 1];
+  if (topOverlay) {
+    return topOverlay.querySelector<HTMLElement>(".modal") ?? topOverlay;
+  }
+
+  return (
+    document.querySelector<HTMLElement>("main.app-content[data-keynav-scope]") ??
+    document.querySelector<HTMLElement>("main.app-content")
+  );
+}
+
+function getKeyboardNavCandidates(scope: HTMLElement) {
+  const seen = new Set<HTMLElement>();
+
+  return Array.from(scope.querySelectorAll<HTMLElement>(KEYBOARD_NAV_SELECTOR)).filter((element) => {
+    if (seen.has(element)) return false;
+    seen.add(element);
+
+    if (isElementDisabled(element)) return false;
+    if (!isElementVisible(element)) return false;
+
+    return true;
+  });
+}
+
+function resolveCurrentKeyboardTarget(
+  activeElement: HTMLElement | null,
+  candidates: HTMLElement[],
+) {
+  if (!activeElement) {
+    return null;
+  }
+
+  if (candidates.includes(activeElement)) {
+    return activeElement;
+  }
+
+  const closest = activeElement.closest<HTMLElement>(KEYBOARD_NAV_SELECTOR);
+  return closest && candidates.includes(closest) ? closest : null;
+}
+
+function getElementCenter(rect: DOMRect) {
+  return {
+    x: rect.left + rect.width / 2,
+    y: rect.top + rect.height / 2,
+  };
+}
+
+function isRectInDirection(origin: DOMRect, candidate: DOMRect, direction: SpatialDirection) {
+  const originCenter = getElementCenter(origin);
+  const candidateCenter = getElementCenter(candidate);
+  const tolerance = 6;
+
+  switch (direction) {
+    case "up":
+      return candidateCenter.y < originCenter.y - tolerance;
+    case "down":
+      return candidateCenter.y > originCenter.y + tolerance;
+    case "left":
+      return candidateCenter.x < originCenter.x - tolerance;
+    case "right":
+      return candidateCenter.x > originCenter.x + tolerance;
+  }
+}
+
+function getDirectionalScore(origin: DOMRect, candidate: DOMRect, direction: SpatialDirection) {
+  const originCenter = getElementCenter(origin);
+  const candidateCenter = getElementCenter(candidate);
+
+  const primaryDistance =
+    direction === "up" || direction === "down"
+      ? Math.abs(candidateCenter.y - originCenter.y)
+      : Math.abs(candidateCenter.x - originCenter.x);
+  const crossDistance =
+    direction === "up" || direction === "down"
+      ? Math.abs(candidateCenter.x - originCenter.x)
+      : Math.abs(candidateCenter.y - originCenter.y);
+  const overlapsCrossAxis =
+    direction === "up" || direction === "down"
+      ? candidate.left <= origin.right && candidate.right >= origin.left
+      : candidate.top <= origin.bottom && candidate.bottom >= origin.top;
+
+  return primaryDistance * 1000 + crossDistance - (overlapsCrossAxis ? 250 : 0);
+}
+
+function getKeyboardNavStartCandidate(candidates: HTMLElement[], direction: SpatialDirection) {
+  return [...candidates].sort((left, right) => {
+    const leftRect = left.getBoundingClientRect();
+    const rightRect = right.getBoundingClientRect();
+
+    if (direction === "up" || direction === "left") {
+      if (Math.abs(rightRect.bottom - leftRect.bottom) > 6) {
+        return rightRect.bottom - leftRect.bottom;
+      }
+
+      return rightRect.right - leftRect.right;
+    }
+
+    if (Math.abs(leftRect.top - rightRect.top) > 6) {
+      return leftRect.top - rightRect.top;
+    }
+
+    return leftRect.left - rightRect.left;
+  })[0] ?? null;
+}
+
+function findNextKeyboardTarget(
+  scope: HTMLElement,
+  direction: SpatialDirection,
+  activeElement: HTMLElement | null,
+) {
+  const candidates = getKeyboardNavCandidates(scope);
+  if (candidates.length === 0) {
+    return null;
+  }
+
+  const currentTarget = resolveCurrentKeyboardTarget(activeElement, candidates);
+  if (!currentTarget) {
+    return getKeyboardNavStartCandidate(candidates, direction);
+  }
+
+  const originRect = currentTarget.getBoundingClientRect();
+  let bestTarget: HTMLElement | null = null;
+  let bestScore = Number.POSITIVE_INFINITY;
+
+  for (const candidate of candidates) {
+    if (candidate === currentTarget) continue;
+
+    const candidateRect = candidate.getBoundingClientRect();
+    if (!isRectInDirection(originRect, candidateRect, direction)) {
+      continue;
+    }
+
+    const score = getDirectionalScore(originRect, candidateRect, direction);
+    if (score < bestScore) {
+      bestScore = score;
+      bestTarget = candidate;
+    }
+  }
+
+  return bestTarget;
+}
+
+function focusKeyboardTarget(target: HTMLElement) {
+  target.focus({ preventScroll: true });
+  target.scrollIntoView({
+    block: "nearest",
+    inline: "nearest",
+  });
 }
 
 function ShortcutHelpModal({
@@ -208,6 +398,29 @@ export function BranchWorkspaceProvider({
     }, 40);
   }, []);
 
+  const focusFirstSearchField = useCallback(() => {
+    const activeElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const scope = getKeyboardNavScope(activeElement);
+    if (!scope) {
+      return;
+    }
+
+    const searchField = scope.querySelector<HTMLInputElement>(
+      'input[type="search"], input[placeholder*="Buscar" i], input[aria-label*="Buscar" i]',
+    );
+
+    if (!searchField || searchField.disabled || !isElementVisible(searchField)) {
+      return;
+    }
+
+    searchField.focus({ preventScroll: true });
+    searchField.select();
+    searchField.scrollIntoView({
+      block: "nearest",
+      inline: "nearest",
+    });
+  }, []);
+
   useEffect(() => {
     const handleAfterPrint = () => {
       document.body.classList.remove("print-rich");
@@ -236,6 +449,28 @@ export function BranchWorkspaceProvider({
         group: "General",
         shift: true,
         action: () => setShowHelp(true),
+      },
+      {
+        key: "/",
+        combo: "/",
+        label: "Buscar en pantalla",
+        description: "Lleva el foco al buscador principal visible de la pantalla.",
+        group: "General",
+        action: pathname.includes("/caja") ? undefined : focusFirstSearchField,
+      },
+      {
+        key: "ArrowDown",
+        combo: "↑ ↓ ← →",
+        label: "Mover foco",
+        description: "Recorre botones, tarjetas y acciones visibles de la pantalla.",
+        group: "General",
+      },
+      {
+        key: "Enter",
+        combo: "Enter",
+        label: "Activar foco",
+        description: "Abre la accion o tarjeta que este enfocada.",
+        group: "General",
       },
       {
         key: "1",
@@ -290,7 +525,7 @@ export function BranchWorkspaceProvider({
     }
 
     return shortcuts;
-  }, [branch.id, isEmployee, requestPrint, router]);
+  }, [branch.id, focusFirstSearchField, isEmployee, pathname, requestPrint, router]);
 
   const pageShortcuts = useMemo(
     () => Object.values(pageShortcutMap).flat(),
@@ -317,15 +552,50 @@ export function BranchWorkspaceProvider({
         return matchesShortcut(event, shortcut);
       });
 
-      if (!matched?.action) return;
+      if (matched?.action) {
+        event.preventDefault();
+        matched.action();
+        return;
+      }
+
+      if (pathname.includes("/caja")) {
+        return;
+      }
+
+      if (event.ctrlKey || event.metaKey || event.altKey || inInput) {
+        return;
+      }
+
+      const directionByKey: Partial<Record<string, SpatialDirection>> = {
+        ArrowUp: "up",
+        ArrowDown: "down",
+        ArrowLeft: "left",
+        ArrowRight: "right",
+      };
+
+      const direction = directionByKey[event.key];
+      if (!direction) {
+        return;
+      }
+
+      const activeElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      const scope = getKeyboardNavScope(activeElement);
+      if (!scope) {
+        return;
+      }
+
+      const nextTarget = findNextKeyboardTarget(scope, direction, activeElement);
+      if (!nextTarget) {
+        return;
+      }
 
       event.preventDefault();
-      matched.action();
+      focusKeyboardTarget(nextTarget);
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [globalShortcuts, pageShortcuts, showHelp]);
+  }, [globalShortcuts, pageShortcuts, pathname, showHelp]);
 
   const contextValue = useMemo<BranchWorkspaceContextValue>(
     () => ({

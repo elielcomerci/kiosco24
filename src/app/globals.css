@@ -438,6 +438,29 @@ body {
 }
 .input::placeholder { color: var(--text-3); }
 
+.app-layout :where(
+  button,
+  a[href],
+  [role="button"],
+  [tabindex]:not([tabindex="-1"])
+):focus-visible {
+  outline: 2px solid rgba(var(--primary-rgb), 0.95);
+  outline-offset: 3px;
+  box-shadow:
+    0 0 0 1px rgba(var(--primary-rgb), 0.72),
+    0 0 0 5px rgba(var(--primary-rgb), 0.16);
+}
+
+.app-layout :where(
+  .btn,
+  .card,
+  .product-btn,
+  .app-header-secondary-link,
+  .app-header-user-trigger
+):focus-visible {
+  border-color: rgba(var(--primary-rgb), 0.68);
+}
+
 /* ─── Número grande (montos) ─────────────────────────────────────────────── */
 .amount {
   font-size: 2.5rem;
@@ -467,9 +490,9 @@ body {
 
 /* ─── Status Bar ─────────────────────────────────────────────────────────── */
 .status-bar {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
-  justify-content: space-between;
   padding: 14px 16px;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
@@ -484,6 +507,26 @@ body {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  min-width: 0;
+}
+
+.status-bar-item--start {
+  justify-self: start;
+  align-items: flex-start;
+  text-align: left;
+}
+
+.status-bar-item--end {
+  justify-self: end;
+  align-items: flex-end;
+  text-align: right;
+}
+
+.status-bar-divider {
+  width: 1px;
+  height: 32px;
+  background: var(--border-2);
+  justify-self: center;
 }
 
 .status-bar-label {
@@ -1618,25 +1661,33 @@ body[data-text-scale="large"],
   padding: 12px 16px;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
-  justify-content: space-between;
   gap: 14px;
 }
 
 .app-header-branch {
   min-width: 0;
-  flex: 1 1 auto;
   display: flex;
   align-items: center;
+}
+
+.app-header-brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.8;
+  pointer-events: none;
+  min-width: 72px;
 }
 
 .app-header-actions {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-left: auto;
-  flex-shrink: 0;
+  min-width: 0;
+  justify-self: end;
 }
 
 .app-header-menu-shell {
@@ -2056,6 +2107,27 @@ body[data-text-scale] .product-btn-price,
   }
 }
 
+@media (max-width: 768px) {
+  .app-header-user-trigger {
+    padding: 6px 8px;
+    gap: 6px;
+  }
+
+  .app-header-user-copy {
+    display: none;
+  }
+
+  .app-header-user-avatar {
+    width: 32px;
+    height: 32px;
+    font-size: 12px;
+  }
+
+  .app-header-user-caret {
+    font-size: 10px;
+  }
+}
+
 /* ─── POS Split Screen Layout ────────────────────────────────────────────── */
 .pos-layout {
   display: flex;
@@ -2090,13 +2162,15 @@ body[data-text-scale] .product-btn-price,
   /* En móvil: aparece desde atrás de la barra inferior */
   position: fixed;
   bottom: calc(var(--bottom-nav-height) + 28px); /* 28px arriba de la barra para que los botones no queden pegados */
-  left: 24px; /* Margen izquierdo - alineado con la barra */
-  right: 24px; /* Margen derecho - alineado con la barra */
+  left: 50%;
+  right: auto;
+  width: min(calc(100vw - 48px), 432px);
   max-height: 65vh; /* Máximo 65% de la pantalla */
   overflow-y: auto;
   transition: transform 0.3s ease, box-shadow 0.3s ease;
   box-shadow: 0 -2px 10px rgba(0,0,0,0); /* Sin sombra por defecto */
   border-radius: var(--radius-lg) var(--radius-lg) 0 0; /* Bordes redondeados arriba */
+  transform: translateX(-50%);
 }
 
 /* Cuando hay productos y está expandido, el panel se eleva */
@@ -2144,6 +2218,12 @@ body[data-text-scale] .product-btn-price,
 
   .desktop-hide-toggle {
     display: none !important;
+  }
+}
+
+@media (max-width: 1023px) {
+  .pos-sidebar.collapsed {
+    transform: translate(-50%, calc(100% - 28px));
   }
 }
 
@@ -2202,6 +2282,16 @@ body[data-text-scale] .product-btn-price,
 }
 
 @media (min-width: 1024px) {
+  .app-content {
+    padding-bottom: calc(var(--bottom-nav-height) + 32px);
+  }
+
+  .bottom-nav {
+    width: min(calc(100vw - 32px), 760px);
+  }
+}
+
+@media (min-width: 1280px) {
   .app-content {
     padding-bottom: 86px;
   }

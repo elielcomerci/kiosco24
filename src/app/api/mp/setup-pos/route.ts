@@ -2,7 +2,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { getBranchId } from "@/lib/branch";
-import { getMercadoPagoPosExternalIds } from "@/lib/brand";
+import { getMercadoPagoPosExternalIds, getMercadoPagoStoreExternalIds } from "@/lib/brand";
 import { getMpAccessTokenForBranch } from "@/lib/mp-token";
 
 async function findExistingPosId(externalIds: readonly string[], headers: HeadersInit) {
@@ -48,6 +48,7 @@ export async function POST(req: NextRequest) {
     select: {
       id: true,
       name: true,
+      address: true,
       mpUserId: true,
       mpStoreId: true,
       mpPosId: true,
@@ -75,9 +76,25 @@ export async function POST(req: NextRequest) {
     "Content-Type": "application/json",
     Authorization: `Bearer ${accessToken}`,
   };
+  const posCategory = process.env.MP_POS_CATEGORY?.trim();
+
+  if (!posCategory || !/^\d+$/.test(posCategory)) {
+    return NextResponse.json(
+      { error: "Falta configurar MP_POS_CATEGORY con el MCC de la caja para MercadoPago Point." },
+      { status: 500 }
+    );
+  }
+
+  if (!branch.address?.trim()) {
+    return NextResponse.json(
+      { error: "Completa la dirección de la sucursal antes de configurar MercadoPago Point." },
+      { status: 400 }
+    );
+  }
 
   // ── 1. Sucursal (idempotente) ────────────────────────────────────────────
   let storeId = branch.mpStoreId;
+  const [externalStoreId] = getMercadoPagoStoreExternalIds(branchId);
 
   if (!storeId) {
     const storeRes = await fetch(
@@ -87,7 +104,11 @@ export async function POST(req: NextRequest) {
         headers: mpHeaders,
         body: JSON.stringify({
           name: branch.name || "Kiosco",
-          location: {},
+          external_id: externalStoreId,
+          location: {
+            address_line: branch.address.trim(),
+            reference: branch.name || "Sucursal",
+          },
         }),
       }
     );
@@ -122,6 +143,8 @@ export async function POST(req: NextRequest) {
         name: "Caja principal",
         store_id: storeId,
         fixed_amount: true,
+        category: Number(posCategory),
+        external_store_id: externalStoreId,
         external_id: externalPosId,
       }),
     });

@@ -138,6 +138,8 @@ type StockModalPreset = {
   initialOperation?: StockModalOperation;
   spotlightProductId?: string | null;
   entryNote?: string | null;
+  lockedProductId?: string | null;
+  autoOpenLots?: boolean;
 };
 
 type Category = CategoryRecord;
@@ -172,6 +174,26 @@ function parseStockQuantityInput(value: string, soldByWeight = false) {
   return soldByWeight ? parseWeightInputToGrams(value, true) : parseStockQuantity(value);
 }
 
+function isRenderedZeroQuantity(value: string) {
+  const normalized = value.trim().replace(",", ".");
+  if (!normalized) {
+    return false;
+  }
+
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) && parsed === 0;
+}
+
+function selectAllOnFocusIfZero(event: React.FocusEvent<HTMLInputElement>) {
+  if (!isRenderedZeroQuantity(event.currentTarget.value)) {
+    return;
+  }
+
+  window.requestAnimationFrame(() => {
+    event.currentTarget.select();
+  });
+}
+
 function validLotRows(rows: LotDraft[], includeExisting: boolean) {
   return rows.filter((row) => {
     if (!includeExisting && row.existing) {
@@ -189,6 +211,13 @@ function serializeLotRows(rows: LotDraft[] | undefined, includeExisting: boolean
       quantity: parseStockQuantity(row.quantity),
       expiresOn: row.expiresOn,
     })),
+  );
+}
+
+function sumLotRows(rows: LotDraft[] | undefined, includeExisting: boolean) {
+  return validLotRows(rows ?? [], includeExisting).reduce(
+    (sum, row) => sum + (parseStockQuantity(row.quantity) ?? 0),
+    0,
   );
 }
 
@@ -2172,12 +2201,13 @@ function ProductModal({
                       <label style={{ fontSize: "10px", color: "var(--text-3)", textTransform: "uppercase", fontWeight: 600 }}>MINIMO{soldByWeight ? " (kg)" : ""}</label>
                       <input
                         className="input"
-                        type={soldByWeight ? "text" : "number"}
+                        type="text"
                         inputMode={soldByWeight ? "decimal" : "numeric"}
                         step={soldByWeight ? "0.001" : "1"}
                         placeholder={soldByWeight ? "0.000" : "0"}
                         value={formatStockQuantity(v.minStock, soldByWeight)}
                         onChange={(e) => updateVariant(i, { minStock: parseStockQuantityInput(e.target.value, soldByWeight) })}
+                        onFocus={selectAllOnFocusIfZero}
                         style={{ textAlign: "right" }}
                       />
                     </div>
@@ -2432,12 +2462,13 @@ function ProductModal({
               </label>
               <input
                 className="input"
-                type="number"
+                type="text"
                 inputMode={soldByWeight ? "decimal" : "numeric"}
                 step={soldByWeight ? "0.001" : "1"}
                 placeholder="—"
                 value={minStock}
                 onChange={(e) => setMinStock(e.target.value)}
+                onFocus={selectAllOnFocusIfZero}
                 style={{ textAlign: "right" }}
               />
             </div>
@@ -2720,6 +2751,8 @@ function StockLoadingModal({
   initialOperation = "receive",
   spotlightProductId = null,
   entryNote = null,
+  lockedProductId = null,
+  autoOpenLots = false,
 }: {
   products: Product[];
   branchId: string;
@@ -2733,6 +2766,8 @@ function StockLoadingModal({
   initialOperation?: StockModalOperation;
   spotlightProductId?: string | null;
   entryNote?: string | null;
+  lockedProductId?: string | null;
+  autoOpenLots?: boolean;
 }) {
   const [search, setSearch] = useState(initialSearch);
   const [saving, setSaving] = useState(false);
@@ -2761,6 +2796,7 @@ function StockLoadingModal({
   const [scannerOpen, setScannerOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(initialOperation !== "receive");
   const attachmentInputRef = useRef<HTMLInputElement>(null);
+  const autoPreparedLockedProductRef = useRef<string | null>(null);
   const isReceiveFlow = initialOperation === "receive";
   const modalTitle = isReceiveFlow ? "📥 Recibir mercadería" : "🧮 Corregir inventario";
   const saveLabel = isReceiveFlow ? "Guardar ingreso" : "Guardar corrección";
@@ -3142,10 +3178,28 @@ function StockLoadingModal({
   }, [branchId, normalizedSearchCode, shouldLookupCollaborative, trimmedSearch]);
 
   const activeSpotlightId = inlineSpotlightProductId ?? spotlightProductId;
+  const isLockedCorrectionFlow = mode === "corregir" && Boolean(lockedProductId);
+  const lockedProduct = useMemo(
+    () =>
+      lockedProductId
+        ? products.find((product) => product.id === lockedProductId) ?? null
+        : null,
+    [lockedProductId, products],
+  );
+  const scopedProducts = useMemo(
+    () =>
+      lockedProductId
+        ? products.filter((product) => product.id === lockedProductId)
+        : products,
+    [lockedProductId, products],
+  );
 
   const localSearchMatches = useMemo(
-    () => products.filter((product) => matchesProductSearch(product, search)),
-    [products, search],
+    () =>
+      isLockedCorrectionFlow
+        ? scopedProducts
+        : scopedProducts.filter((product) => matchesProductSearch(product, search)),
+    [isLockedCorrectionFlow, scopedProducts, search],
   );
 
   const collaborativeMatches = useMemo(
@@ -3220,13 +3274,18 @@ function StockLoadingModal({
     lotInputs[lotOwnerKey(productId, variantId)] ?? [];
 
   const getLotSum = (productId: string, variantId?: string | null) =>
-    validLotRows(getRows(productId, variantId), mode === "corregir")
-      .reduce((sum, row) => sum + (parseStockQuantity(row.quantity) ?? 0), 0);
+    sumLotRows(getRows(productId, variantId), mode === "corregir");
+
+  const getLoadedLotSum = (productId: string, variantId?: string | null) =>
+    sumLotRows(loadedLots[lotOwnerKey(productId, variantId)], true);
 
   const computeTargetStock = (currentStock: number | null, productId: string, variantId?: string | null) => {
+    const key = lotOwnerKey(productId, variantId);
     const inputVal = getInputValue(productId, variantId);
     const parsedInput = parseStockQuantity(inputVal);
     const lotSum = getLotSum(productId, variantId);
+    const baselineLotSum = getLoadedLotSum(productId, variantId);
+    const hasLoadedBaseline = Object.prototype.hasOwnProperty.call(loadedLots, key);
 
     if (mode === "sumar") {
       const additionWithoutExpiry = parsedInput ?? 0;
@@ -3239,6 +3298,11 @@ function StockLoadingModal({
 
     if (parsedInput !== null) {
       return parsedInput;
+    }
+
+    if (hasLoadedBaseline) {
+      const trackedDecrease = Math.max(baselineLotSum - lotSum, 0);
+      return Math.max((currentStock ?? 0) - trackedDecrease, 0);
     }
 
     if (lotSum > 0) {
@@ -3295,7 +3359,7 @@ function StockLoadingModal({
     Boolean(getRowError(row.currentStock, row.product.id, row.variantId)),
   );
 
-  const loadLots = async (productId: string, variantId?: string | null) => {
+  const loadLots = useCallback(async (productId: string, variantId?: string | null) => {
     const key = lotOwnerKey(productId, variantId);
     if (loadedLots[key]) {
       setOpenLotPanels((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -3328,7 +3392,47 @@ function StockLoadingModal({
     } finally {
       setLotLoading((prev) => ({ ...prev, [key]: false }));
     }
-  };
+  }, [branchId, loadedLots]);
+
+  useEffect(() => {
+    if (!autoOpenLots || !lockedProductId || mode !== "corregir") {
+      autoPreparedLockedProductRef.current = null;
+      return;
+    }
+
+    if (autoPreparedLockedProductRef.current === lockedProductId) {
+      return;
+    }
+
+    const targetProduct = products.find((product) => product.id === lockedProductId);
+    if (!targetProduct) {
+      return;
+    }
+
+    autoPreparedLockedProductRef.current = lockedProductId;
+
+    if (!targetProduct.variants || targetProduct.variants.length === 0) {
+      void loadLots(targetProduct.id);
+      return;
+    }
+
+    const variantsToLoad = targetProduct.variants
+      .filter((variant): variant is Variant & { id: string } => Boolean(variant.id))
+      .filter((variant) =>
+        targetProduct.variants!.length <= 4 ||
+        variant.hasTrackedLots ||
+        (variant.expiredQuantity ?? 0) > 0 ||
+        (variant.expiringSoonQuantity ?? 0) > 0,
+      );
+
+    if (variantsToLoad.length === 0) {
+      return;
+    }
+
+    void Promise.all(
+      variantsToLoad.map((variant) => loadLots(targetProduct.id, variant.id)),
+    );
+  }, [autoOpenLots, loadLots, lockedProductId, mode, products]);
 
   const addLotRow = (productId: string, variantId?: string | null) => {
     const key = lotOwnerKey(productId, variantId);
@@ -3548,7 +3652,7 @@ function StockLoadingModal({
           <span style={{ fontSize: "11px", color: rowError ? "var(--red)" : "var(--text-3)" }}>
             {rowError || (mode === "sumar"
               ? "Los lotes se suman arriba del stock actual."
-              : "Si no tocás el total, se usa el stock físico actual.")}
+              : "Si no tocás el total, sumar lotes reclasifica stock y quitar lotes descuenta unidades.")}
           </span>
         </div>
       </div>
@@ -3649,7 +3753,7 @@ function StockLoadingModal({
             <span className="restock-modal__field-hint">
               {mode === "sumar"
                 ? "Usa lotes solo para las unidades con vencimiento."
-                : "Si completas lotes, se descuentan del stock final total."}
+                : "Si no tocás el total, agregar lotes reclasifica stock actual y quitar lotes baja el stock guardado."}
             </span>
           </label>
 
@@ -3659,7 +3763,7 @@ function StockLoadingModal({
             <span>
               {mode === "sumar"
                 ? "Se suma arriba del stock actual."
-                : "Representa el stock fisico final del producto."}
+                : "Si no tocás el total, quitar lotes también descuenta esas unidades."}
             </span>
           </div>
 
@@ -3960,20 +4064,28 @@ function StockLoadingModal({
           <div className="restock-modal__field-label" style={{ display: "none" }}>Buscar producto</div>
           <input
             className="input restock-modal__search-input"
-            placeholder="🔍 Filtrar por nombre, marca, código, proveedor..."
-            value={search}
+            placeholder={isLockedCorrectionFlow ? "Producto enfocado para esta corrección" : "🔍 Filtrar por nombre, marca, código, proveedor..."}
+            value={isLockedCorrectionFlow ? (lockedProduct?.name ?? search) : search}
             onChange={(e) => setSearch(e.target.value)}
-            autoFocus
+            autoFocus={!isLockedCorrectionFlow}
+            readOnly={isLockedCorrectionFlow}
           />
-          <div className="restock-modal__field-hint" style={{ display: "none" }}>{helperCopy}</div>
-          {isReceiveFlow && shouldLookupCollaborative && collaborativeLookupState === "loading" && (
+          <div className="restock-modal__field-hint" style={{ display: isLockedCorrectionFlow ? "block" : "none" }}>
+            Estás corrigiendo este producto. Cerrá el modal para cambiar a otro.
+          </div>
+          {!isLockedCorrectionFlow && isReceiveFlow && shouldLookupCollaborative && collaborativeLookupState === "loading" && (
             <div style={{ fontSize: "11px", color: "var(--text-3)" }}>
               Buscando también en la base colaborativa...
             </div>
           )}
-          {isReceiveFlow && collaborativeError && (
+          {!isLockedCorrectionFlow && isReceiveFlow && collaborativeError && (
             <div style={{ fontSize: "11px", color: "var(--amber)", fontWeight: 700 }}>
               {collaborativeError}
+            </div>
+          )}
+          {isLockedCorrectionFlow && (
+            <div style={{ fontSize: "11px", color: "var(--text-3)" }}>
+              Los lotes FEFO quedan listos acá mismo para corregir sin volver al listado.
             </div>
           )}
           {false && (
@@ -4003,31 +4115,35 @@ function StockLoadingModal({
           </div>
           )}
           <div className="restock-modal__search-row">
-            <div style={{ display: "none" }}>
-              {helperCopy}
-            </div>
-            <div className="restock-modal__quick-actions" style={{ display: "flex", flexWrap: "nowrap", gap: "6px", width: "100%", overflowX: "auto", paddingBottom: "2px" }}>
-              <button
-                type="button"
-                className="btn btn-ghost"
-                style={{ flex: "1 0 auto", padding: "0 12px", fontWeight: 700 }}
-                onClick={() => setScannerOpen(true)}
-                title="Escanear para buscar"
-              >
-                Escanear
-              </button>
-              <button
-                type="button"
-                className="btn btn-ghost"
-                style={{ flex: "1 0 auto", border: "1px solid var(--border)", fontWeight: 700 }}
-                onClick={openInlineCreate}
-              >
-                Crear producto
-              </button>
-              <button
-                type="button"
-                className="btn btn-ghost"
-                style={{ flex: "1 0 auto", border: "1px solid var(--border)", fontWeight: 700 }}
+          <div style={{ display: "none" }}>
+            {helperCopy}
+          </div>
+          <div className="restock-modal__quick-actions" style={{ display: "flex", flexWrap: "nowrap", gap: "6px", width: "100%", overflowX: "auto", paddingBottom: "2px" }}>
+            {!isLockedCorrectionFlow && (
+              <>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  style={{ flex: "1 0 auto", padding: "0 12px", fontWeight: 700 }}
+                  onClick={() => setScannerOpen(true)}
+                  title="Escanear para buscar"
+                >
+                  Escanear
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  style={{ flex: "1 0 auto", border: "1px solid var(--border)", fontWeight: 700 }}
+                  onClick={openInlineCreate}
+                >
+                  Crear producto
+                </button>
+              </>
+            )}
+            <button
+              type="button"
+              className="btn btn-ghost"
+              style={{ flex: "1 0 auto", border: "1px solid var(--border)", fontWeight: 700 }}
                 onClick={() => setDetailsOpen((prev) => !prev)}
               >
                 {detailsOpen ? "Ocultar detalles" : isReceiveFlow ? "Detalles" : "Motivos"}
@@ -6386,6 +6502,9 @@ export default function ProductosPage() {
               setStockModalPreset({
                 initialOperation: "correct",
                 spotlightProductId: editingId,
+                lockedProductId: editingId,
+                autoOpenLots: true,
+                entryNote: editingId ? "Corrige el stock final y los lotes FEFO de este producto sin salir del flujo." : null,
               });
               setShowStockModal(true);
             }}
@@ -6415,6 +6534,8 @@ export default function ProductosPage() {
               initialOperation={stockModalPreset?.initialOperation}
               spotlightProductId={stockModalPreset?.spotlightProductId}
               entryNote={stockModalPreset?.entryNote}
+              lockedProductId={stockModalPreset?.lockedProductId}
+              autoOpenLots={stockModalPreset?.autoOpenLots}
             />
           </ModalPortal>
         );

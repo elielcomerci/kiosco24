@@ -33,3 +33,7 @@ export const LEGACY_OFFLINE_DB_NAME = "kiosco24-db";
 export function getMercadoPagoPosExternalIds(branchId: string) {
   return [`clikit-pos-${branchId}`, `kiosco24-pos-${branchId}`] as const;
 }
+
+export function getMercadoPagoStoreExternalIds(branchId: string) {
+  return [`clikit-store-${branchId}`, `kiosco24-store-${branchId}`] as const;
+}

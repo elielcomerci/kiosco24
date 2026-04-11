@@ -10,6 +10,7 @@ import BranchSelector from "@/components/ui/BranchSelector";
 import DeviceTextScaleControl from "@/components/ui/DeviceTextScaleControl";
 import SoundToggle from "@/components/ui/SoundToggle";
 import UserSwitchModal from "@/components/ui/UserSwitchModal";
+import BrandLogo from "@/components/branding/BrandLogo";
 import type { DeviceTextScale } from "@/lib/device-text-scale";
 
 type BranchOption = {
@@ -64,7 +65,7 @@ export default function AppTopBar({
   initialTextScale,
 }: AppTopBarProps) {
   const pathname = usePathname();
-  const [open, setOpen] = useState(false);
+  const [menuState, setMenuState] = useState({ isOpen: false, pathname });
   const [showSwitch, setShowSwitch] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -74,22 +75,41 @@ export default function AppTopBar({
   const initials = getInitials(displayName);
   const canManage = user.role === "OWNER" || user.employeeRole === "MANAGER";
   const currentBranchName = branches.find((b) => b.id === currentBranchId)?.name ?? "Sucursal";
+  const open = menuState.isOpen && menuState.pathname === pathname;
 
-  useEffect(() => { setOpen(false); }, [pathname]);
+  const closeMenu = () => {
+    setMenuState((current) => {
+      if (!current.isOpen && current.pathname === pathname) return current;
+      return { isOpen: false, pathname };
+    });
+  };
+
+  const toggleMenu = () => {
+    setMenuState((current) => {
+      const isOpenOnCurrentPath = current.isOpen && current.pathname === pathname;
+      return { isOpen: !isOpenOnCurrentPath, pathname };
+    });
+  };
 
   useEffect(() => {
     if (!open) return;
     const onPointerDown = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setOpen(false);
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuState({ isOpen: false, pathname });
+      }
     };
-    const onEscape = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    const onEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setMenuState({ isOpen: false, pathname });
+      }
+    };
     document.addEventListener("mousedown", onPointerDown);
     document.addEventListener("keydown", onEscape);
     return () => {
       document.removeEventListener("mousedown", onPointerDown);
       document.removeEventListener("keydown", onEscape);
     };
-  }, [open]);
+  }, [open, pathname]);
 
   const handleSignOut = async () => {
     if (isSigningOut) return;
@@ -109,14 +129,18 @@ export default function AppTopBar({
         <BranchSelector branches={branches} currentBranchId={currentBranchId} />
       </div>
 
+      <div className="app-header-brand" aria-hidden="true">
+        <BrandLogo tone="white" width={72} />
+      </div>
+
       <div className="app-header-actions">
-        <div className="app-header-menu-shell" ref={menuRef}>
+        <div className="app-header-menu-shell" ref={menuRef} data-keynav-scope="account-menu">
 
           {/* ── Trigger ── */}
           <button
             type="button"
             className={`app-header-user-trigger ${open ? "active" : ""}`}
-            onClick={() => setOpen((v) => !v)}
+            onClick={toggleMenu}
             aria-haspopup="menu"
             aria-expanded={open}
             aria-label="Abrir menú de cuenta"
@@ -193,7 +217,7 @@ export default function AppTopBar({
                       href={`/${currentBranchId}/promociones`}
                       className="app-header-secondary-link"
                       role="menuitem"
-                      onClick={() => setOpen(false)}
+                      onClick={closeMenu}
                     >
                       <span aria-hidden="true">🏷️</span>
                       <span>Promociones</span>
@@ -202,7 +226,7 @@ export default function AppTopBar({
                       href={`/${currentBranchId}/configuracion`}
                       className="app-header-secondary-link"
                       role="menuitem"
-                      onClick={() => setOpen(false)}
+                      onClick={closeMenu}
                     >
                       <span aria-hidden="true">⚙️</span>
                       <span>Configuración del local</span>
@@ -212,7 +236,10 @@ export default function AppTopBar({
                 <button
                   type="button"
                   className="app-header-secondary-link"
-                  onClick={() => { setOpen(false); setShowSwitch(true); }}
+                  onClick={() => {
+                    closeMenu();
+                    setShowSwitch(true);
+                  }}
                 >
                   <span aria-hidden="true">🔄</span>
                   <span>Cambiar usuario</span>

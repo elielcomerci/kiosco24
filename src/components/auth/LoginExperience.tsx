@@ -304,14 +304,28 @@ export default function LoginExperience({
   const currentHighlights = mode === "employee" ? employeeHighlights : ownerHighlights;
 
   return (
+    <>
+      <style dangerouslySetInnerHTML={{ __html: `
+        @import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@700;800&family=Instrument+Sans:wght@400;500;600&display=swap');
+        .auth-scope { font-family: 'Instrument Sans', sans-serif; }
+        .auth-scope h1, .auth-scope h2 { font-family: 'Bricolage Grotesque', sans-serif; letter-spacing: -0.04em; }
+        .auth-scope .input { font-family: 'Instrument Sans', sans-serif; background: #0e1420; border: 1px solid rgba(255,255,255,0.07); color: #eef2f7; }
+        .auth-scope .input::placeholder { color: #6b7e96; }
+        .auth-scope .input:focus { border-color: #f5a623; box-shadow: 0 0 0 3px rgba(245,166,35,0.12); }
+        .auth-scope .btn { font-family: 'Instrument Sans', sans-serif; }
+        .auth-scope .btn-primary { background: #f5a623; color: #1a0f00; font-weight: 700; }
+        .auth-scope .btn-primary:hover { background: #f9b840; }
+        .auth-scope .btn-ghost { background: transparent; border: 1px solid rgba(255,255,255,0.13); color: #8fa3ba; }
+        .auth-scope .btn-ghost:hover { border-color: rgba(255,255,255,0.22); color: #eef2f7; }
+      `}} />
     <div
+      className="auth-scope"
       style={{
         minHeight: "100dvh",
         padding: "28px",
         display: "grid",
         placeItems: "center",
-        background:
-          "radial-gradient(circle at top left, rgba(14,165,233,.18), transparent 30%), radial-gradient(circle at bottom right, rgba(245,158,11,.15), transparent 24%), linear-gradient(180deg, #08111d 0%, #030712 46%, #020617 100%)",
+        background: "#06080d",
       }}
     >
       <div
@@ -332,8 +346,8 @@ export default function LoginExperience({
             gap: "24px",
             justifyContent: "space-between",
             background:
-              "linear-gradient(155deg, rgba(5,15,28,.96) 0%, rgba(11,31,52,.92) 52%, rgba(28,37,62,.9) 100%)",
-            border: "1px solid rgba(148,163,184,.14)",
+              "#0e1420",
+            border: "1px solid rgba(255,255,255,0.07)",
           }}
         >
           <div style={{ display: "grid", gap: "18px" }}>
@@ -345,7 +359,7 @@ export default function LoginExperience({
                 borderRadius: "999px",
                 background: "rgba(14,165,233,.12)",
                 border: "1px solid rgba(14,165,233,.22)",
-                color: "#bae6fd",
+                color: "#f5a623",
                 fontSize: "11px",
                 fontWeight: 800,
                 letterSpacing: ".08em",
@@ -361,17 +375,18 @@ export default function LoginExperience({
               <h1
                 style={{
                   margin: 0,
-                  color: "#f8fafc",
+                  color: "#eef2f7",
                   fontSize: "clamp(28px, 4vw, 42px)",
                   lineHeight: 1.04,
                   letterSpacing: "-0.04em",
+                  fontFamily: "'Bricolage Grotesque',sans-serif",
                 }}
               >
                 {mode === "employee"
                   ? "Tu equipo entra rapido, claro y con identidad."
                   : "Tu negocio te espera listo para seguir."}
               </h1>
-              <p style={{ margin: 0, color: "#cbd5e1", lineHeight: 1.7, fontSize: "15px" }}>
+              <p style={{ margin: 0, color: "#8fa3ba", lineHeight: 1.7, fontSize: "15px" }}>
                 {mode === "employee"
                   ? "Clikit lleva a cada persona a la sucursal correcta para que el turno empiece con claridad, confianza y sin rodeos."
                   : "Entra, retoma caja, stock y fiados, y sigue donde lo dejaste con una experiencia humana, agil y firme."}
@@ -387,12 +402,12 @@ export default function LoginExperience({
                   display: "flex",
                   gap: "10px",
                   alignItems: "flex-start",
-                  color: "#e2e8f0",
+                  color: "#eef2f7",
                   fontSize: "14px",
                   lineHeight: 1.5,
                 }}
               >
-                <span style={{ color: "#38bdf8", fontWeight: 900 }}>+</span>
+                <span style={{ color: "#f5a623", fontWeight: 900 }}>+</span>
                 <span>{item}</span>
               </div>
             ))}
@@ -404,14 +419,14 @@ export default function LoginExperience({
               gap: "10px",
               padding: "16px",
               borderRadius: "18px",
-              background: "rgba(15,23,42,.55)",
-              border: "1px solid rgba(148,163,184,.14)",
+              background: "#0e1420",
+              border: "1px solid rgba(255,255,255,0.07)",
             }}
           >
-            <div style={{ color: "#e2e8f0", fontSize: "14px", fontWeight: 700 }}>
+            <div style={{ color: "#eef2f7", fontSize: "14px", fontWeight: 700 }}>
               {mode === "employee" ? "Acceso de equipo" : "Acceso principal"}
             </div>
-            <div style={{ color: "#94a3b8", fontSize: "13px", lineHeight: 1.6 }}>
+            <div style={{ color: "#6b7e96", fontSize: "13px", lineHeight: 1.6 }}>
               {mode === "employee"
                 ? "ódigo de sucursal, persona y PIN si hace falta. Rapido y ordenado."
                 : "Email, contraseña y adentro. Claro, directo y sin frialdad."}
@@ -425,8 +440,8 @@ export default function LoginExperience({
             padding: "32px",
             display: "grid",
             gap: "22px",
-            border: "1px solid rgba(148,163,184,.14)",
-            background: "rgba(2, 6, 23, 0.9)",
+            border: "1px solid rgba(255,255,255,0.07)",
+            background: "#131b2a",
           }}
         >
           <div style={{ display: "grid", gap: "12px" }}>
@@ -438,7 +453,7 @@ export default function LoginExperience({
                 padding: "6px",
                 borderRadius: "18px",
                 background: "rgba(15,23,42,.72)",
-                border: "1px solid rgba(148,163,184,.14)",
+                border: "1px solid rgba(255,255,255,0.07)",
               }}
             >
               <button
@@ -462,10 +477,10 @@ export default function LoginExperience({
             </div>
 
             <div>
-              <h2 style={{ margin: 0, color: "#f8fafc", fontSize: "26px", fontWeight: 800 }}>
+              <h2 style={{ margin: 0, color: "#eef2f7", fontSize: "26px", fontWeight: 800 }}>
                 {mode === "employee" ? employeeStepMeta.title : "Entrar a Clikit"}
               </h2>
-              <p style={{ margin: "8px 0 0", color: "#94a3b8", fontSize: "14px", lineHeight: 1.6 }}>
+              <p style={{ margin: "8px 0 0", color: "#6b7e96", fontSize: "14px", lineHeight: 1.6 }}>
                 {mode === "employee" ? employeeStepMeta.text : "Volvamos a poner tu negocio en marcha."}
               </p>
             </div>
@@ -494,9 +509,9 @@ export default function LoginExperience({
                   width: "fit-content",
                   padding: "6px 10px",
                   borderRadius: "999px",
-                  background: "rgba(56,189,248,.12)",
-                  border: "1px solid rgba(56,189,248,.22)",
-                  color: "#bae6fd",
+                  background: "rgba(245,166,35,0.11)",
+                  border: "1px solid rgba(245,166,35,0.28)",
+                  color: "#f5a623",
                   fontSize: "11px",
                   fontWeight: 800,
                   letterSpacing: ".08em",
@@ -513,8 +528,8 @@ export default function LoginExperience({
                       padding: "14px 16px",
                       borderRadius: "16px",
                       background: "rgba(15,23,42,.72)",
-                      border: "1px solid rgba(148,163,184,.14)",
-                      color: "#cbd5e1",
+                      border: "1px solid rgba(255,255,255,0.07)",
+                      color: "#8fa3ba",
                       fontSize: "14px",
                       lineHeight: 1.6,
                     }}
@@ -566,7 +581,7 @@ export default function LoginExperience({
                       padding: "16px",
                       borderRadius: "18px",
                       background: "rgba(15,23,42,.72)",
-                      border: "1px solid rgba(148,163,184,.14)",
+                      border: "1px solid rgba(255,255,255,0.07)",
                       display: "grid",
                       gap: "6px",
                     }}
@@ -577,13 +592,13 @@ export default function LoginExperience({
                         fontWeight: 800,
                         letterSpacing: ".08em",
                         textTransform: "uppercase",
-                        color: "#94a3b8",
+                        color: "#6b7e96",
                       }}
                     >
                       Sucursal autorizada
                     </div>
-                    <div style={{ fontSize: "18px", fontWeight: 800, color: "#f8fafc" }}>{branchName}</div>
-                    <div style={{ fontSize: "13px", color: "#94a3b8" }}>
+                    <div style={{ fontSize: "18px", fontWeight: 800, color: "#eef2f7" }}>{branchName}</div>
+                    <div style={{ fontSize: "13px", color: "#6b7e96" }}>
                       Elige quien entra para seguir con la operación correcta.
                     </div>
                   </div>
@@ -601,7 +616,7 @@ export default function LoginExperience({
                           flexDirection: "column",
                           gap: "8px",
                           background: "rgba(15,23,42,.62)",
-                          border: "1px solid rgba(148,163,184,.14)",
+                          border: "1px solid rgba(255,255,255,0.07)",
                         }}
                       >
                         <div
@@ -648,7 +663,7 @@ export default function LoginExperience({
                       padding: "18px",
                       borderRadius: "18px",
                       background: "rgba(15,23,42,.72)",
-                      border: "1px solid rgba(148,163,184,.14)",
+                      border: "1px solid rgba(255,255,255,0.07)",
                       textAlign: "center",
                     }}
                   >
@@ -668,8 +683,8 @@ export default function LoginExperience({
                     >
                       {selectedEmployee.name.charAt(0).toUpperCase()}
                     </div>
-                    <div style={{ fontWeight: 800, color: "#f8fafc" }}>{selectedEmployee.name}</div>
-                    <div style={{ fontSize: "13px", color: "#94a3b8", marginTop: "6px" }}>
+                    <div style={{ fontWeight: 800, color: "#eef2f7" }}>{selectedEmployee.name}</div>
+                    <div style={{ fontSize: "13px", color: "#6b7e96", marginTop: "6px" }}>
                       Ingresa tu PIN para terminar el acceso.
                     </div>
                   </div>
@@ -736,12 +751,12 @@ export default function LoginExperience({
                     fontWeight: 800,
                     letterSpacing: ".08em",
                     textTransform: "uppercase",
-                    color: "#bae6fd",
+                    color: "#f5a623",
                   }}
                 >
                   Alta nueva
                 </div>
-                <div style={{ fontSize: "14px", color: "#e2e8f0", lineHeight: 1.6 }}>
+                <div style={{ fontSize: "14px", color: "#eef2f7", lineHeight: 1.6 }}>
                   Si todavia no tienes cuenta, crea tu negocio y empieza con una experiencia pensada para vender de verdad.
                 </div>
                 <Link href="/register" className="btn btn-primary btn-full" style={{ textDecoration: "none" }}>
@@ -830,5 +845,6 @@ export default function LoginExperience({
         </section>
       </div>
     </div>
+    </>
   );
 }

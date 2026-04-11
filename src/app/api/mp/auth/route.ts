@@ -1,6 +1,11 @@
 import { auth } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 import { getBranchId } from "@/lib/branch";
+import {
+  generateMercadoPagoCodeChallenge,
+  generateMercadoPagoCodeVerifier,
+  getMercadoPagoCallbackUrl,
+} from "@/lib/mp-oauth";
 
 /**
  * GET /api/mp/auth
@@ -19,17 +24,31 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "No branch" }, { status: 404 });
   }
 
-  const authUrl = new URL("https://auth.mercadopago.com.ar/authorization");
-  authUrl.searchParams.set("client_id", process.env.MP_CLIENT_ID!);
-  authUrl.searchParams.set("response_type", "code");
-  authUrl.searchParams.set(
-    "redirect_uri",
-    `${process.env.NEXTAUTH_URL}/api/mp/callback`
-  );
-  // offline_access = habilita el refresh_token para renovar sin re-autorizar
-  authUrl.searchParams.set("scope", "offline_access read write");
-  // El state viaja de ida y vuelta — lo usamos para saber a qué branch guardar los tokens
-  authUrl.searchParams.set("state", branchId);
+  const redirectUri = getMercadoPagoCallbackUrl(process.env.NEXTAUTH_URL || req.nextUrl.origin);
+  if (!redirectUri || !process.env.MP_CLIENT_ID) {
+    return NextResponse.json({ error: "MercadoPago OAuth no configurado" }, { status: 500 });
+  }
 
-  return NextResponse.redirect(authUrl.toString());
+  const oauthState = crypto.randomUUID();
+  const codeVerifier = generateMercadoPagoCodeVerifier();
+  const codeChallenge = generateMercadoPagoCodeChallenge(codeVerifier);
+  const authUrl = new URL("https://auth.mercadopago.com/authorization");
+  authUrl.searchParams.set("client_id", process.env.MP_CLIENT_ID);
+  authUrl.searchParams.set("response_type", "code");
+  authUrl.searchParams.set("platform_id", "mp");
+  authUrl.searchParams.set("redirect_uri", redirectUri);
+  authUrl.searchParams.set("code_challenge", codeChallenge);
+  authUrl.searchParams.set("code_challenge_method", "S256");
+  authUrl.searchParams.set("state", oauthState);
+
+  const response = NextResponse.redirect(authUrl.toString());
+  response.cookies.set("mp_oauth_state", JSON.stringify({ state: oauthState, branchId, codeVerifier }), {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: redirectUri.startsWith("https://"),
+    path: "/api/mp",
+    maxAge: 60 * 10,
+  });
+
+  return response;
 }

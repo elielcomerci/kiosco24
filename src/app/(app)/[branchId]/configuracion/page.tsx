@@ -16,7 +16,6 @@ import {
 import { optimizeBrandingImage } from "@/lib/image-upload";
 import type { TicketPreviewData } from "@/lib/ticket-format";
 import { getTicketPrintModeLabel, type TicketPrintMode } from "@/lib/ticketing";
-import ConfigTabsContainer from "./ConfigTabsContainer";
 import type { Employee, Category, Branch, PricingMode, FiscalEnvironment, Subscription } from "./types";
 import ZapAdSlot from "@/components/ads/ZapAdSlot";
 
@@ -711,15 +710,53 @@ export default function ConfiguracionPage() {
   const [mpSetupLoading, setMpSetupLoading] = useState(false);
   const [mpSetupError, setMpSetupError] = useState<string | null>(null);
 
+  const getMpUiErrorMessage = useCallback((errorCode: string | null) => {
+    switch (errorCode) {
+      case "mp_oauth_not_configured":
+        return "Falta configurar el OAuth de MercadoPago en el servidor o la Redirect URL no coincide exactamente.";
+      case "mp_failed":
+        return "MercadoPago rechazó el intercambio del código OAuth. Revisá la Redirect URL y la configuración de la app en Developers.";
+      case "mp_cancelled":
+        return "La autorización de MercadoPago se canceló o el state devuelto no coincide con el inicio del flujo.";
+      default:
+        return null;
+    }
+  }, []);
+
+  const extractMpErrorMessage = useCallback((data: unknown) => {
+    const payload = data as {
+      error?: string;
+      detail?: {
+        message?: string;
+        cause?: Array<{ description?: string }>;
+      };
+    } | null;
+
+    const detailedCause = payload?.detail?.cause
+      ?.map((cause) => cause.description?.trim())
+      .filter(Boolean)
+      .join(" ");
+
+    return detailedCause || payload?.detail?.message || payload?.error || "Error configurando punto de venta.";
+  }, []);
+
   const accessEntryUrl =
     currentBranch?.accessKey && typeof window !== "undefined"
       ? `${window.location.origin}/${currentBranch.accessKey}`
       : "";
 
-  // Auto-trigger setup-pos cuando MP acaba de conectarse (viene con ?mp=connected)
+  // Maneja el retorno de MercadoPago y dispara el setup del POS cuando corresponde.
   useEffect(() => {
     if (typeof window === "undefined") return;
     const url = new URL(window.location.href);
+    const oauthError = getMpUiErrorMessage(url.searchParams.get("error"));
+    if (oauthError) {
+      setMpSetupError(oauthError);
+      url.searchParams.delete("error");
+      window.history.replaceState({}, "", url.toString());
+      return;
+    }
+
     if (url.searchParams.get("mp") === "connected") {
       // Limpiar el query param sin recargar
       url.searchParams.delete("mp");
@@ -728,7 +765,7 @@ export default function ConfiguracionPage() {
       handleMpSetupPos();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentBranch]);
+  }, [currentBranch, getMpUiErrorMessage]);
 
   const fetchEmployees = useCallback(async () => {
     setLoadingEmployees(true);
@@ -1239,8 +1276,8 @@ export default function ConfiguracionPage() {
     if (res.ok) {
       fetchCurrentBranch(); // Recargar para mostrar estado actualizado
     } else {
-      const data = await res.json();
-      setMpSetupError(data.error ?? "Error configurando punto de venta.");
+      const data = await res.json().catch(() => null);
+      setMpSetupError(extractMpErrorMessage(data));
     }
     setMpSetupLoading(false);
   };

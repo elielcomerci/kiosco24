@@ -91,7 +91,7 @@ export default function RegisterExperience({
 
       const callbackUrl =
         typeof data.branchId === "string"
-          ? `/${data.branchId}/productos?welcome-subscription=1`
+          ? `/${data.branchId}/productos`
           : "/";
       const result = await withTimeout(
         signIn("credentials", {

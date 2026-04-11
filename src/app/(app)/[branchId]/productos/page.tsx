@@ -20,6 +20,7 @@ import ProductThumb from "@/components/products/ProductThumb";
 import ProductsActionsMenu from "@/components/products/ProductsActionsMenu";
 import RestockHistoryModal from "@/components/products/RestockHistoryModal";
 import WelcomeSubscriptionOfferModal from "@/components/subscription/WelcomeSubscriptionOfferModal";
+import BranchOnboardingTour from "@/components/onboarding/BranchOnboardingTour";
 import BackButton from "@/components/ui/BackButton";
 import ModalPortal from "@/components/ui/ModalPortal";
 import PrintablePage from "@/components/print/PrintablePage";
@@ -5965,7 +5966,7 @@ export default function ProductosPage() {
                 onUpdatePrices={() => setShowUpdateModal(true)}
                 onSelectionMode={toggleSelectionMode}
               />
-              <button className="btn btn-sm btn-green" onClick={() => setModal("new")} style={{ fontWeight: 800 }}>+ Nuevo</button>
+              <button id="tour-new-product" className="btn btn-sm btn-green" onClick={() => setModal("new")} style={{ fontWeight: 800 }}>+ Nuevo</button>
             </>
           )}
         </div>
@@ -6017,7 +6018,8 @@ export default function ProductosPage() {
         <div style={{ textAlign: "center", padding: "40px", color: "var(--text-3)" }}>Cargando...</div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "8px", flex: 1, overflowY: "auto" }}>
-          {filtered.map((p) => {
+          <BranchOnboardingTour />
+          {filtered.map((p, productIndex) => {
             const isSelected = selected.has(p.id);
             const expiryBadge = renderExpiryBadge(p);
             const stockBadge = renderStockBadge(p);
@@ -6137,6 +6139,7 @@ export default function ProductosPage() {
               // ─── Normal Card
               <button
                 key={p.id}
+                id={productIndex === 0 ? "tour-first-product" : undefined}
                 className="card"
                 style={{
                   padding: "14px 16px",

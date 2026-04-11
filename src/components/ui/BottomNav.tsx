@@ -43,6 +43,7 @@ export default function BottomNav() {
         <Link
           key={item.href}
           href={item.href}
+          id={item.href.endsWith("/caja") ? "tour-caja-tab" : undefined}
           className={`bottom-nav-item ${pathname.startsWith(item.href) ? "active" : ""}`}
         >
           <span style={{ fontSize: "22px" }}>{item.icon}</span>

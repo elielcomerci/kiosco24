@@ -13,10 +13,6 @@ import {
   normalizeBusinessActivityCode,
 } from "@/lib/business-activities";
 import { ensureBusinessActivitiesSeeded } from "@/lib/business-activities-store";
-import {
-  DEFAULT_KIOSCO_CATEGORIES,
-  DEFAULT_KIOSCO_PRODUCTS,
-} from "@/lib/default-kiosco-catalog";
 import { prisma } from "@/lib/prisma";
 
 type PlatformProductDraft = {
@@ -99,66 +95,10 @@ function normalizeVariants(
     });
 }
 
-let seedPromise: Promise<void> | null = null;
-const defaultCategoryNameByKey = new Map(
-  DEFAULT_KIOSCO_CATEGORIES.map((category) => [category.key, category.name]),
-);
-
 export async function ensurePlatformCatalogSeeded() {
+  // La base colaborativa se gestiona desde el panel de admin.
+  // Aquí solo garantizamos que las actividades comerciales estén inicializadas.
   await ensureBusinessActivitiesSeeded();
-
-  const existing = await prisma.platformProduct.findMany({
-    where: {
-      barcode: {
-        in: DEFAULT_KIOSCO_PRODUCTS.map((product) => product.barcode),
-      },
-    },
-    select: { barcode: true },
-  });
-
-  const existingBarcodes = new Set(existing.map((product) => product.barcode));
-  const missingProducts = DEFAULT_KIOSCO_PRODUCTS.filter(
-    (product) => !existingBarcodes.has(product.barcode),
-  );
-
-  if (missingProducts.length === 0) {
-    return;
-  }
-
-  if (!seedPromise) {
-    seedPromise = (async () => {
-      for (const product of missingProducts) {
-        await prisma.platformProduct.upsert({
-          where: { barcode: product.barcode },
-          update: {
-            businessActivity: DEFAULT_BUSINESS_ACTIVITY_CODE,
-            name: product.name,
-            brand: product.brand ?? null,
-            categoryName: defaultCategoryNameByKey.get(product.categoryKey) ?? null,
-            description: product.description ?? null,
-            presentation: product.presentation ?? null,
-            image: null,
-            status: PlatformProductStatus.APPROVED,
-          },
-          create: {
-            barcode: product.barcode,
-            businessActivity: DEFAULT_BUSINESS_ACTIVITY_CODE,
-            name: product.name,
-            brand: product.brand ?? null,
-            categoryName: defaultCategoryNameByKey.get(product.categoryKey) ?? null,
-            description: product.description ?? null,
-            presentation: product.presentation ?? null,
-            image: null,
-            status: PlatformProductStatus.APPROVED,
-          },
-        });
-      }
-    })().finally(() => {
-      seedPromise = null;
-    });
-  }
-
-  await seedPromise;
 }
 
 export async function findApprovedPlatformProductByBarcode(

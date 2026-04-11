@@ -34,7 +34,6 @@ export async function POST(req: Request) {
     ownerId: session.user.id,
     kioscoName: kioscoName ?? "Mi Kiosco",
     mainBusinessActivity: "KIOSCO",
-    seedDefaultCatalog: true,
   });
 
   return NextResponse.json({

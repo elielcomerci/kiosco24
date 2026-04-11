@@ -85,7 +85,6 @@ export async function POST(req: Request) {
           ownerId: user.id,
           kioscoName: businessName,
           mainBusinessActivity,
-          seedDefaultCatalog,
           subscriptionOfferPriceArs: subscriptionOffer.priceArs,
           subscriptionOfferFreezeEndsAt: subscriptionOffer.freezeEndsAt,
         },

@@ -1,15 +1,15 @@
 import type { Prisma } from "@prisma/client";
 import {
-  DEFAULT_KIOSCO_CATEGORIES,
-  DEFAULT_KIOSCO_PRODUCTS,
+  DEFAULT_SEED_BY_ACTIVITY,
+  DEFAULT_SEED_FALLBACK,
 } from "@/lib/default-kiosco-catalog";
 import { prisma } from "@/lib/prisma";
+import { findApprovedPlatformProductByBarcode } from "@/lib/platform-catalog";
 
 type ProvisionOwnerKioscoInput = {
   ownerId: string;
   kioscoName: string;
   mainBusinessActivity?: string | null;
-  seedDefaultCatalog?: boolean;
   subscriptionOfferPriceArs?: number | null;
   subscriptionOfferFreezeEndsAt?: Date | null;
 };
@@ -20,7 +20,6 @@ async function provisionOwnerKioscoWithClient(
     ownerId,
     kioscoName,
     mainBusinessActivity = null,
-    seedDefaultCatalog = true,
     subscriptionOfferPriceArs = null,
     subscriptionOfferFreezeEndsAt = null,
   }: ProvisionOwnerKioscoInput,
@@ -42,58 +41,48 @@ async function provisionOwnerKioscoWithClient(
     },
   });
 
-  if (!seedDefaultCatalog) {
-    return {
-      kiosco,
-      mainBranch,
-    };
-  }
+  // Siempre sembramos 1 producto representativo del rubro elegido,
+  // para que la grilla no quede vacía al primer ingreso.
+  const activityKey = (mainBusinessActivity ?? "OTRO").toUpperCase();
+  const seed = DEFAULT_SEED_BY_ACTIVITY[activityKey] ?? DEFAULT_SEED_FALLBACK;
 
-  const createdCategories = await Promise.all(
-    DEFAULT_KIOSCO_CATEGORIES.map((category) =>
-      tx.category.create({
-        data: {
-          name: category.name,
-          color: category.color,
-          kioscoId: kiosco.id,
-          showInGrid: true,
-        },
-      }),
-    ),
-  );
+  const createdCategory = await tx.category.create({
+    data: {
+      name: seed.category.name,
+      color: seed.category.color,
+      kioscoId: kiosco.id,
+      showInGrid: true,
+    },
+  });
 
-  const categoryIdByKey = new Map(
-    createdCategories.map((category, index) => [DEFAULT_KIOSCO_CATEGORIES[index].key, category.id]),
-  );
+  const platformProduct = seed.product.barcode 
+    ? await findApprovedPlatformProductByBarcode(seed.product.barcode) 
+    : null;
 
-  const createdProducts = [];
+  const createdProduct = await tx.product.create({
+    data: {
+      name: platformProduct?.name ?? seed.product.name,
+      barcode: seed.product.barcode,
+      brand: platformProduct?.brand ?? seed.product.brand ?? null,
+      description: platformProduct?.description ?? seed.product.description ?? null,
+      presentation: platformProduct?.presentation ?? seed.product.presentation ?? null,
+      image: platformProduct?.image ?? null,
+      platformProductId: platformProduct?.id ?? null,
+      categoryId: createdCategory.id,
+      kioscoId: kiosco.id,
+    },
+  });
 
-  for (const product of DEFAULT_KIOSCO_PRODUCTS) {
-    const createdProduct = await tx.product.create({
-      data: {
-        name: product.name,
-        barcode: product.barcode,
-        brand: product.brand ?? null,
-        description: product.description ?? null,
-        presentation: product.presentation ?? null,
-        categoryId: categoryIdByKey.get(product.categoryKey) ?? null,
-        kioscoId: kiosco.id,
-      },
-    });
-
-    createdProducts.push(createdProduct);
-  }
-
-  await tx.inventoryRecord.createMany({
-    data: createdProducts.map((product, index) => ({
-      productId: product.id,
+  await tx.inventoryRecord.create({
+    data: {
+      productId: createdProduct.id,
       branchId: mainBranch.id,
-      price: DEFAULT_KIOSCO_PRODUCTS[index].price,
-      cost: DEFAULT_KIOSCO_PRODUCTS[index].cost,
+      price: seed.product.price,
+      cost: seed.product.cost,
       stock: 0,
       minStock: 0,
       showInGrid: true,
-    })),
+    },
   });
 
   return {
@@ -106,7 +95,6 @@ export async function provisionOwnerKiosco({
   ownerId,
   kioscoName,
   mainBusinessActivity = null,
-  seedDefaultCatalog = true,
   subscriptionOfferPriceArs = null,
   subscriptionOfferFreezeEndsAt = null,
 }: ProvisionOwnerKioscoInput, tx?: Prisma.TransactionClient) {
@@ -115,7 +103,6 @@ export async function provisionOwnerKiosco({
       ownerId,
       kioscoName,
       mainBusinessActivity,
-      seedDefaultCatalog,
       subscriptionOfferPriceArs,
       subscriptionOfferFreezeEndsAt,
     });
@@ -126,7 +113,6 @@ export async function provisionOwnerKiosco({
       ownerId,
       kioscoName,
       mainBusinessActivity,
-      seedDefaultCatalog,
       subscriptionOfferPriceArs,
       subscriptionOfferFreezeEndsAt,
     }),

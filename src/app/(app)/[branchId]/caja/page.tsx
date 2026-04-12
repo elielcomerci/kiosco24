@@ -24,6 +24,7 @@ import InvoiceModal from "@/components/fiscal/InvoiceModal";
 import type { InvoicePreviewData } from "@/lib/invoice-format";
 import DigitalSalesCarousel from "@/components/caja/DigitalSalesCarousel";
 import OperationalSubscriptionModal from "@/components/subscription/OperationalSubscriptionModal";
+import { CheckoutTour } from "@/components/onboarding/CheckoutTour";
 
 import { savePendingSale } from "@/lib/offline/db";
 import { useOnlineStatus } from "@/lib/offline/sync";
@@ -2037,6 +2038,7 @@ export default function CajaPage() {
   // ─── Main caja screen ─────────────────────────────────────────────────────
   return (
     <div className="pos-layout">
+      <CheckoutTour />
 
       {/* Status Bar */}
       <div className="status-bar">
@@ -2169,7 +2171,7 @@ export default function CajaPage() {
         <div className="pos-main no-print">
         
         {/* Search bar */}
-        <div style={{ padding: "12px 16px 0", display: "flex", gap: "8px", flexShrink: 0 }}>
+        <div id="checkout-search" style={{ padding: "12px 16px 0", display: "flex", gap: "8px", flexShrink: 0 }}>
           <div style={{ position: "relative", flex: 1 }}>
             <span style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", fontSize: "14px" }}>🔍</span>
             <input
@@ -2414,7 +2416,7 @@ export default function CajaPage() {
 
 
       {/* Sidebar - Panel de Caja (aparece desde atrás de la barra inferior en móvil) */}
-      <div className={`pos-sidebar no-print ${ticket.length > 0 ? 'has-content' : 'collapsed'}`}>
+      <div id="checkout-ticket" className={`pos-sidebar no-print ${ticket.length > 0 ? 'has-content' : 'collapsed'}`}>
         
         {/* Ticket Header / Summary (Sticky dentro del sidebar) */}
         {ticket.length > 0 ? (
@@ -2675,7 +2677,7 @@ export default function CajaPage() {
             </div>
 
             {/* Payment Methods Grid */}
-            <div style={{
+            <div id="checkout-pay" style={{
               padding: "0 12px 16px",
               display: "grid",
               gridTemplateColumns: "repeat(3, 1fr)",

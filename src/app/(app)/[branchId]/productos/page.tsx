@@ -20,7 +20,9 @@ import ProductThumb from "@/components/products/ProductThumb";
 import ProductsActionsMenu from "@/components/products/ProductsActionsMenu";
 import RestockHistoryModal from "@/components/products/RestockHistoryModal";
 import WelcomeSubscriptionOfferModal from "@/components/subscription/WelcomeSubscriptionOfferModal";
-import BranchOnboardingTour from "@/components/onboarding/BranchOnboardingTour";
+import { ProductsGridTour } from "@/components/onboarding/ProductsGridTour";
+import { ProductModalTour } from "@/components/onboarding/ProductModalTour";
+import { StockModalTour } from "@/components/onboarding/StockModalTour";
 import BackButton from "@/components/ui/BackButton";
 import ModalPortal from "@/components/ui/ModalPortal";
 import PrintablePage from "@/components/print/PrintablePage";
@@ -1195,6 +1197,7 @@ function ProductModal({
         onClick={onClose}
         style={{ zIndex: 9999, alignItems: "flex-end", padding: "16px", paddingBottom: "max(16px, env(safe-area-inset-bottom))" }} // Alineado abajo para tel.
       >
+        <ProductModalTour />
         <div 
           className="modal animate-slide-up" 
           onClick={(e) => e.stopPropagation()}
@@ -1299,6 +1302,7 @@ function ProductModal({
                   {barcode || showBarcodeHeaderInput ? (
                      <div style={{ display: "flex", gap: "8px", alignItems: "flex-end" }}>
                         <input
+                          id="product-modal-barcode"
                           ref={barcodeRef}
                           style={{ background: "transparent", border: "none", outline: "none", color: "var(--text)", width: "100%", fontSize: "12px", padding: "2px 0", borderBottom: "1px solid var(--border)" }}
                           placeholder="Código de barras (EAN)"
@@ -1981,7 +1985,7 @@ function ProductModal({
           </div>
 
           {!isInlineCreateOnly && !hasVariants && (
-            <div style={{ display: "flex", gap: "10px", marginBottom: "12px" }}>
+            <div id="product-modal-prices" style={{ display: "flex", gap: "10px", marginBottom: "12px" }}>
               <div style={{ display: "flex", flex: 1, alignItems: "center", background: "var(--surface)", border: "0.5px solid var(--border)", borderRadius: "var(--radius)", padding: "0 10px" }}>
                 <span style={{ fontSize: "11px", color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase", width: "45px", flexShrink: 0 }}>Precio</span>
                 <input
@@ -3743,6 +3747,7 @@ function StockLoadingModal({
           <label className="restock-modal__field-card">
             <span className="restock-modal__field-label">{mode === "sumar" ? "Unidades que entran" : "Stock final"}</span>
             <input
+              id="stock-modal-quantity"
               className="input restock-modal__qty-input"
               type="number"
               inputMode="numeric"
@@ -3769,6 +3774,7 @@ function StockLoadingModal({
           </div>
 
           <button
+            id="stock-modal-lotes"
             type="button"
             className="btn btn-sm btn-ghost restock-modal__lot-button"
             onClick={() => void loadLots(product.id, variantId)}
@@ -4043,6 +4049,7 @@ function StockLoadingModal({
 
   return (
     <>
+      <StockModalTour />
       <div
       className="modal-overlay animate-fade-in"
       onClick={onClose}
@@ -6019,7 +6026,7 @@ export default function ProductosPage() {
         <div style={{ textAlign: "center", padding: "40px", color: "var(--text-3)" }}>Cargando...</div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "8px", flex: 1, overflowY: "auto" }}>
-          <BranchOnboardingTour shouldShow={products.length <= 1} />
+          <ProductsGridTour shouldShow={products.length <= 1} />
           {filtered.map((p, productIndex) => {
             const isSelected = selected.has(p.id);
             const expiryBadge = renderExpiryBadge(p);

@@ -23,6 +23,7 @@ model User {
   accessOverrideChanges     Kiosco[]                    @relation("KioscoAccessOverrideBy")
   submittedPlatformProducts PlatformProductSubmission[] @relation("PlatformProductSubmissionSubmitter")
   reviewedPlatformProducts  PlatformProductSubmission[] @relation("PlatformProductSubmissionReviewer")
+  onboardingFlags           Json?                       @default("{}")
   createdAt                 DateTime                    @default(now())
   updatedAt                 DateTime                    @updatedAt
 }

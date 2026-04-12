@@ -85,6 +85,13 @@ export default function ProductsActionsMenu({
             zIndex: 120,
           }}
         >
+          <button
+            className="btn btn-ghost"
+            style={menuButtonStyle}
+            onClick={() => run(() => window.dispatchEvent(new CustomEvent("clikit:start-tour")))}
+          >
+            Ver tutorial rápido
+          </button>
           <button className="btn btn-ghost" style={menuButtonStyle} onClick={() => run(onUpdatePrices)}>
             Actualizar precios
           </button>

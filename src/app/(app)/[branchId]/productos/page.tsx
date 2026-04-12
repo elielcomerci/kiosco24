@@ -5911,6 +5911,7 @@ export default function ProductosPage() {
                   setStockModalPreset({ initialOperation: "receive" });
                   setShowStockModal(true);
                 }}
+                id="tour-receive-btn"
                 title="Recibir mercadería"
               >📥 Recibir</button>
               {isOwner && (
@@ -6018,7 +6019,7 @@ export default function ProductosPage() {
         <div style={{ textAlign: "center", padding: "40px", color: "var(--text-3)" }}>Cargando...</div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "8px", flex: 1, overflowY: "auto" }}>
-          <BranchOnboardingTour />
+          <BranchOnboardingTour shouldShow={products.length <= 1} />
           {filtered.map((p, productIndex) => {
             const isSelected = selected.has(p.id);
             const expiryBadge = renderExpiryBadge(p);

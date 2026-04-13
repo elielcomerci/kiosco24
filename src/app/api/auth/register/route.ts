@@ -1,6 +1,7 @@
 import bcrypt from "bcryptjs";
 import { UserRole } from "@prisma/client";
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
 
 import {
   isValidBusinessActivity,
@@ -17,6 +18,7 @@ type RegisterPayload = {
   mainBusinessActivity?: string;
   email?: string;
   password?: string;
+  referralCode?: string;
 };
 
 function normalizeText(value: unknown) {
@@ -33,6 +35,11 @@ export async function POST(req: Request) {
     const email = normalizeText(body.email).toLowerCase();
     const password = typeof body.password === "string" ? body.password : "";
     const mainBusinessActivity = normalizeText(body.mainBusinessActivity);
+    const referralCode = normalizeText(body.referralCode);
+
+    // Fallback: if no referralCode in body, try the attribution cookie
+    const cookieStore = await cookies();
+    const effectiveReferralCode = referralCode || cookieStore.get("clikit_ref")?.value || null;
 
     if (!firstName || !lastName || !businessName || !email || !password || !mainBusinessActivity) {
       return NextResponse.json(
@@ -91,10 +98,30 @@ export async function POST(req: Request) {
         tx,
       );
 
+      // Link to partner referral if a valid referral code was provided (body or cookie)
+      let linkedReferralId: string | undefined;
+      if (effectiveReferralCode) {
+        const partner = await tx.partnerProfile.findUnique({
+          where: { referralCode: effectiveReferralCode },
+          select: { id: true },
+        });
+        if (partner) {
+          const referral = await tx.referral.create({
+            data: {
+              partnerId: partner.id,
+              referredKioscoId: provisioned.kiosco.id,
+              status: "PENDING",
+            },
+          });
+          linkedReferralId = referral.id;
+        }
+      }
+
       return {
         user,
         kiosco: provisioned.kiosco,
         branchId: provisioned.mainBranch.id,
+        referralId: linkedReferralId,
       };
     });
 

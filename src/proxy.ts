@@ -12,6 +12,23 @@ function isPartnerSubdomain(hostname: string): boolean {
   return PARTNER_HOSTNAMES.some((h) => hostname === h || hostname.startsWith(h));
 }
 
+/**
+ * Extract subdomain from hostname for dynamic partner-view routing.
+ *   pablo.clikit.com.ar → "pablo"
+ *   maria.clikit.com.ar → "maria"
+ *   clikit.com.ar       → null
+ */
+function getViewSlug(hostname: string): string | null {
+  const host = hostname.split(":")[0];
+  const parts = host.split(".");
+  if (parts.length <= 3) return null;
+  const slug = parts[0].toLowerCase();
+  // Exclude known subdomains that have their own routing
+  if (PARTNER_HOSTNAMES.includes(host)) return null;
+  if (slug === "www") return null;
+  return slug;
+}
+
 export default auth((req: NextAuthRequest) => {
   const { nextUrl } = req;
   const hostname = req.headers.get("host") ?? "";
@@ -38,6 +55,14 @@ export default auth((req: NextAuthRequest) => {
       `/partner${nextUrl.pathname === "/" ? "" : nextUrl.pathname}`,
       nextUrl,
     );
+    rewriteUrl.search = nextUrl.search;
+    return NextResponse.rewrite(rewriteUrl);
+  }
+
+  // ── Subdominio dinámico {slug} → /partner-view/{slug} ─────────────────
+  const viewSlug = getViewSlug(hostname);
+  if (viewSlug) {
+    const rewriteUrl = new URL(`/partner-view/${viewSlug}`, nextUrl);
     rewriteUrl.search = nextUrl.search;
     return NextResponse.rewrite(rewriteUrl);
   }

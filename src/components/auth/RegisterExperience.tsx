@@ -43,8 +43,12 @@ function getRegisterErrorMessage(error: unknown) {
 
 export default function RegisterExperience({
   businessActivities,
+  referralCode,
+  referredBy,
 }: {
   businessActivities: BusinessActivityOption[];
+  referralCode?: string | null;
+  referredBy?: string | null;
 }) {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -79,6 +83,7 @@ export default function RegisterExperience({
           mainBusinessActivity,
           email,
           password,
+          referralCode: referralCode || undefined,
         }),
       });
 
@@ -270,6 +275,26 @@ export default function RegisterExperience({
               </p>
             </div>
           </div>
+
+          {referredBy ? (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                padding: "10px 14px",
+                borderRadius: "10px",
+                background: "rgba(34,217,138,0.08)",
+                border: "1px solid rgba(34,217,138,0.2)",
+                fontSize: "13px",
+                color: "#a0f0cc",
+                lineHeight: 1.5,
+              }}
+            >
+              <span style={{ fontSize: "16px", flexShrink: 0 }}>👤</span>
+              Te está invitando <strong style={{ color: "#22d98a" }}>{referredBy}</strong>
+            </div>
+          ) : null}
 
           {error ? (
             <div

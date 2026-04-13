@@ -22,7 +22,14 @@
       "Bash(cargo build *)",
       "Bash(cargo run *)",
       "Bash(cargo add *)",
-      "Bash(copy *)"
+      "Bash(copy *)",
+      "Bash(taskkill *)",
+      "Bash(cmd *)",
+      "Bash(@echo *)",
+      "Bash(wc *)",
+      "Bash(@echo)",
+      "Bash(type *)",
+      "Bash(powershell *)"
     ]
   },
   "$version": 3

@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rentabilidad — Clikit Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@400;500&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0d0d0d;
+    --surface: #161616;
+    --surface2: #1e1e1e;
+    --border: #2a2a2a;
+    --border2: #333;
+    --text: #f0ede8;
+    --muted: #888;
+    --hint: #555;
+    --accent: #c8f060;
+    --accent2: #60d4a0;
+    --red: #f06060;
+    --amber: #f0b860;
+    --blue: #60a8f0;
+
+    --LISTA: 14900;
+    --MP_NETO: 13709.98;
+    --COMM1: 0.50;
+    --COMM2: 0.30;
+  }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Instrument Sans', sans-serif;
+    min-height: 100vh;
+    padding: 2rem 1rem 5rem;
+  }
+  .wrap { max-width: 820px; margin: 0 auto; }
+
+  .logo { font-family: 'DM Serif Display', serif; font-size: 12px; letter-spacing: .15em; color: var(--muted); text-transform: uppercase; margin-bottom: 2rem; }
+  h1 { font-family: 'DM Serif Display', serif; font-size: clamp(1.8rem, 4vw, 2.8rem); font-weight: 400; line-height: 1.15; margin-bottom: .6rem; }
+  h1 em { font-style: italic; color: var(--accent2); }
+  .sub { font-size: 14px; color: var(--muted); line-height: 1.6; margin-bottom: 2rem; }
+
+  hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+
+  /* SLIDER */
+  .slider-row { margin-bottom: 1.5rem; }
+  .slider-row label { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; font-size: 14px; color: var(--muted); }
+  .slider-row label span { font-family: 'DM Mono', monospace; font-size: 18px; color: var(--text); }
+  input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 2px; background: var(--border2); border-radius: 2px; outline: none; cursor: pointer; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%; background: var(--accent2); border: 3px solid var(--bg); box-shadow: 0 0 0 1px var(--accent2); cursor: pointer; transition: transform .15s; }
+  input[type=range]::-webkit-slider-thumb:hover { transform: scale(1.2); }
+  input[type=range]::-moz-range-thumb { width: 18px; height: 18px; border-radius: 50%; background: var(--accent2); border: 3px solid var(--bg); cursor: pointer; }
+
+  /* WATERFALL — por venta */
+  .waterfall {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.4rem 1.5rem;
+    margin-bottom: 1.2rem;
+  }
+  .wf-title { font-size: 11px; color: var(--muted); letter-spacing: .06em; text-transform: uppercase; margin-bottom: 1.2rem; }
+  .wf-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: .5rem 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 14px;
+  }
+  .wf-row:last-child { border-bottom: none; }
+  .wf-row.total { padding-top: .8rem; margin-top: .2rem; }
+  .wf-label { color: var(--muted); }
+  .wf-label small { display: block; font-size: 11px; color: var(--hint); margin-top: 2px; }
+  .wf-val { font-family: 'DM Mono', monospace; font-size: 15px; }
+  .wf-val.neg { color: var(--red); }
+  .wf-val.pos { color: var(--accent2); }
+  .wf-val.base { color: var(--text); }
+  .wf-val.result { color: var(--accent); font-size: 18px; font-weight: 500; }
+  .wf-val.result2 { color: var(--accent2); font-size: 18px; font-weight: 500; }
+  .wf-pct { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--hint); margin-left: 8px; }
+
+  /* METRICS GRID */
+  .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 2rem; }
+  .metric { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: .9rem 1rem; }
+  .metric.hi-green { border-color: rgba(200,240,96,.3); background: rgba(200,240,96,.04); }
+  .metric.hi-teal  { border-color: rgba(96,212,160,.3); background: rgba(96,212,160,.04); }
+  .metric.hi-red   { border-color: rgba(240,96,96,.25); background: rgba(240,96,96,.04); }
+  .metric.hi-blue  { border-color: rgba(96,168,240,.25); background: rgba(96,168,240,.04); }
+  .metric-label { font-size: 11px; color: var(--muted); letter-spacing: .04em; text-transform: uppercase; margin-bottom: 6px; }
+  .metric-value { font-family: 'DM Mono', monospace; font-size: 19px; font-weight: 500; line-height: 1; }
+  .metric.hi-green .metric-value { color: var(--accent); }
+  .metric.hi-teal  .metric-value { color: var(--accent2); }
+  .metric.hi-red   .metric-value { color: var(--red); }
+  .metric.hi-blue  .metric-value { color: var(--blue); }
+  .metric-sub { font-size: 11px; color: var(--hint); margin-top: 4px; }
+
+  /* CHARTS */
+  .chart-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 1.4rem 1.5rem; margin-bottom: 1.2rem; }
+  .chart-title { font-size: 11px; color: var(--muted); letter-spacing: .06em; text-transform: uppercase; margin-bottom: .8rem; }
+  .chart-legend { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 1rem; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+  .legend-dot { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+  canvas { display: block; width: 100% !important; }
+
+  /* TABS */
+  .tabs { display: flex; gap: 8px; margin-bottom: 1.2rem; }
+  .tab { font-size: 13px; padding: 6px 16px; border-radius: 100px; border: 1px solid var(--border2); background: transparent; color: var(--muted); cursor: pointer; transition: all .15s; font-family: 'Instrument Sans', sans-serif; }
+  .tab.active { background: var(--surface2); color: var(--text); border-color: var(--border2); }
+
+  /* TABLE */
+  .table-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-bottom: 2rem; }
+  .table-header { padding: .8rem 1.2rem; border-bottom: 1px solid var(--border); font-size: 11px; color: var(--muted); letter-spacing: .06em; text-transform: uppercase; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  thead th { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--hint); text-align: right; padding: .55rem 1rem; border-bottom: 1px solid var(--border); font-weight: 400; letter-spacing: .04em; }
+  thead th:first-child { text-align: left; }
+  tbody tr { border-bottom: 1px solid var(--border); }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: var(--surface2); }
+  td { padding: .55rem 1rem; text-align: right; font-family: 'DM Mono', monospace; font-size: 11px; color: var(--muted); }
+  td:first-child { text-align: left; color: var(--text); font-family: 'Instrument Sans', sans-serif; font-size: 12px; }
+  td.neg { color: var(--red); }
+  td.pos { color: var(--accent2); }
+  td.total-col { color: var(--accent); font-weight: 500; }
+
+  footer { border-top: 1px solid var(--border); padding-top: 1.5rem; font-size: 12px; color: var(--hint); line-height: 1.8; }
+  footer strong { color: var(--muted); font-weight: 500; }
+
+  section-label { display: block; font-size: 11px; color: var(--muted); letter-spacing: .06em; text-transform: uppercase; margin-bottom: .8rem; }
+
+  @media(max-width:500px) {
+    h1 { font-size: 1.6rem; }
+    td, thead th { padding: .45rem .6rem; font-size: 10px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header style="margin-bottom:2.5rem">
+    <div class="logo">Clikit · Panel de rentabilidad</div>
+    <h1>Lo que queda<br>en <em>tu bolsillo</em></h1>
+    <p class="sub">Desglose real por cliente: precio de lista, comisión de MercadoPago y comisiones de vendedores. Lo que ves es lo que cobrás.</p>
+  </header>
+
+  <hr>
+
+  <!-- WATERFALL POR VENTA -->
+  <p style="font-size:11px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;margin-bottom:.8rem">Desglose por cliente · mes 1 (primera factura)</p>
+  <div class="waterfall">
+    <div class="wf-title">Cascada de ingresos — primera factura</div>
+    <div class="wf-row">
+      <div class="wf-label">Precio de lista<small>lo que paga el cliente</small></div>
+      <div class="wf-val base">$14.900</div>
+    </div>
+    <div class="wf-row">
+      <div class="wf-label">Comisión MercadoPago<small>8% aprox · suscripción</small></div>
+      <div class="wf-val neg">− $1.190<span class="wf-pct">8%</span></div>
+    </div>
+    <div class="wf-row">
+      <div class="wf-label">Neto recibido de MP<small>acreditado en tu cuenta</small></div>
+      <div class="wf-val base">$13.710</div>
+    </div>
+    <div class="wf-row">
+      <div class="wf-label">Comisión vendedor · primera factura<small>50% del precio de lista</small></div>
+      <div class="wf-val neg">− $7.450<span class="wf-pct">50%</span></div>
+    </div>
+    <div class="wf-row total">
+      <div class="wf-label" style="color:var(--text);font-weight:500">Te queda · mes 1</div>
+      <div class="wf-val result">$6.260</div>
+    </div>
+  </div>
+
+  <div class="waterfall">
+    <div class="wf-title">Cascada de ingresos — factura recurrente (mes 2 en adelante)</div>
+    <div class="wf-row">
+      <div class="wf-label">Precio de lista<small>lo que paga el cliente</small></div>
+      <div class="wf-val base">$14.900</div>
+    </div>
+    <div class="wf-row">
+      <div class="wf-label">Comisión MercadoPago<small>8% aprox · suscripción</small></div>
+      <div class="wf-val neg">− $1.190<span class="wf-pct">8%</span></div>
+    </div>
+    <div class="wf-row">
+      <div class="wf-label">Neto recibido de MP<small>acreditado en tu cuenta</small></div>
+      <div class="wf-val base">$13.710</div>
+    </div>
+    <div class="wf-row">
+      <div class="wf-label">Comisión vendedor · recurrente<small>30% del precio de lista</small></div>
+      <div class="wf-val neg">− $4.470<span class="wf-pct">30%</span></div>
+    </div>
+    <div class="wf-row total">
+      <div class="wf-label" style="color:var(--text);font-weight:500">Te queda · mes 2+</div>
+      <div class="wf-val result2">$9.240</div>
+    </div>
+  </div>
+
+  <hr>
+
+  <!-- SLIDER -->
+  <div class="slider-row" style="margin-bottom:1rem">
+    <label>Clientes activos totales <span id="clients-out">100 clientes</span></label>
+    <input type="range" id="clients" min="1" max="500" value="100" step="1">
+    <div style="position:relative;height:16px;margin-top:6px">
+      <span style="position:absolute;left:0%;font-family:'DM Mono',monospace;font-size:10px;color:#555">1</span>
+      <span style="position:absolute;left:19.8%;font-family:'DM Mono',monospace;font-size:10px;color:#555;transform:translateX(-50%)">100</span>
+      <span style="position:absolute;left:39.9%;font-family:'DM Mono',monospace;font-size:10px;color:#555;transform:translateX(-50%)">200</span>
+      <span style="position:absolute;left:59.9%;font-family:'DM Mono',monospace;font-size:10px;color:#555;transform:translateX(-50%)">300</span>
+      <span style="position:absolute;left:79.9%;font-family:'DM Mono',monospace;font-size:10px;color:#555;transform:translateX(-50%)">400</span>
+      <span style="position:absolute;left:100%;font-family:'DM Mono',monospace;font-size:10px;color:#555;transform:translateX(-100%)">500</span>
+    </div>
+  </div>
+
+  <div class="slider-row" style="margin-bottom:2rem">
+    <label>Nuevos clientes ese mes <span id="new-out">20 nuevos</span></label>
+    <input type="range" id="newclients" min="0" max="100" value="20" step="1">
+    <div style="position:relative;height:16px;margin-top:6px">
+      <span style="position:absolute;left:0%;font-family:'DM Mono',monospace;font-size:10px;color:#555">0</span>
+      <span style="position:absolute;left:25%;font-family:'DM Mono',monospace;font-size:10px;color:#555;transform:translateX(-50%)">25</span>
+      <span style="position:absolute;left:50%;font-family:'DM Mono',monospace;font-size:10px;color:#555;transform:translateX(-50%)">50</span>
+      <span style="position:absolute;left:75%;font-family:'DM Mono',monospace;font-size:10px;color:#555;transform:translateX(-50%)">75</span>
+      <span style="position:absolute;left:100%;font-family:'DM Mono',monospace;font-size:10px;color:#555;transform:translateX(-100%)">100</span>
+    </div>
+  </div>
+
+  <!-- MÉTRICAS -->
+  <div class="metrics" id="metrics"></div>
+
+  <!-- GRÁFICO 1: desglose del mes actual -->
+  <div class="chart-wrap">
+    <div class="chart-title">Distribución del ingreso bruto del mes</div>
+    <div class="chart-legend">
+      <div class="legend-item"><div class="legend-dot" style="background:#60d4a0"></div>Tu ganancia neta</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#c8f060"></div>Comisión vendedores</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#f06060"></div>Comisión MP</div>
+    </div>
+    <div style="position:relative;height:80px">
+      <canvas id="barChart" role="img" aria-label="Distribución del ingreso entre ganancia, vendedores y MP"></canvas>
+    </div>
+  </div>
+
+  <!-- GRÁFICO 2: proyección acumulada -->
+  <div class="chart-wrap">
+    <div class="chart-title">Proyección acumulada — tu ganancia mensual si crecés a este ritmo (12 meses)</div>
+    <div class="chart-legend">
+      <div class="legend-item"><div class="legend-dot" style="background:#60d4a0"></div>Tu ganancia neta mensual</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#c8f060;height:2px;border-radius:0"></div>Ingreso bruto MP</div>
+    </div>
+    <div style="position:relative;height:260px">
+      <canvas id="lineChart" role="img" aria-label="Proyección de ganancia mensual a 12 meses"></canvas>
+    </div>
+  </div>
+
+  <!-- TABLA PROYECCIÓN -->
+  <div class="table-wrap">
+    <div class="table-header">Proyección mes a mes · 12 meses desde hoy</div>
+    <table>
+      <thead>
+        <tr>
+          <th>Mes</th>
+          <th>Clientes</th>
+          <th>Nuevos</th>
+          <th>Bruto MP</th>
+          <th>− MP fee</th>
+          <th>− Vendedores</th>
+          <th>Tu ganancia</th>
+        </tr>
+      </thead>
+      <tbody id="tabla"></tbody>
+    </table>
+  </div>
+
+  <hr>
+  <footer>
+    <strong>Base de cálculo:</strong> Precio de lista $14.900 · MercadoPago acredita $13.709,98 (retiene $1.190,02 aprox 8%) · Comisión vendedor primera factura: 50% del lista ($7.450) · Comisión vendedor recurrente: 30% del lista ($4.470) · Las comisiones de vendedores se calculan siempre sobre el precio de lista, no sobre lo que acredita MP.<br><br>
+    <strong>Nota:</strong> El fee real de MP puede variar según el plan contratado y el medio de pago del cliente. El valor usado ($1.190,02) es el observado en una suscripción real.
+  </footer>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+const LISTA = 14900;
+const MP_NETO = 13709.98;
+const MP_FEE = LISTA - MP_NETO;
+const COMM1_AMT = Math.round(LISTA * 0.50); // 7450
+const COMM2_AMT = Math.round(LISTA * 0.30); // 4470
+const NET1 = MP_NETO - COMM1_AMT; // primera factura
+const NET2 = MP_NETO - COMM2_AMT; // recurrente
+
+function fmt(n) {
+  const abs = Math.abs(Math.round(n));
+  const s = abs.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return (n < 0 ? '−$' : '$') + s;
+}
+
+function fmtPlain(n) {
+  return '$' + Math.round(Math.abs(n)).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+}
+
+let barChart, lineChart;
+
+function computeMonth(totalClients, newClients) {
+  const recurrentClients = totalClients - newClients;
+  const bruto = totalClients * LISTA;
+  const mpFeeTotal = totalClients * MP_FEE;
+  const mpNeto = totalClients * MP_NETO;
+  const commVend = (newClients * COMM1_AMT) + (recurrentClients * COMM2_AMT);
+  const ganancia = mpNeto - commVend;
+  return { bruto, mpFeeTotal, mpNeto, commVend, ganancia, recurrentClients, newClients, totalClients };
+}
+
+function computeProjection(startClients, newPerMonth, months) {
+  const rows = [];
+  let clients = startClients;
+  for (let m = 1; m <= months; m++) {
+    const newC = newPerMonth;
+    clients += (m === 1 ? 0 : newC);
+    const actualNew = m === 1 ? newPerMonth : newPerMonth;
+    const rec = clients - actualNew;
+    const bruto = clients * LISTA;
+    const mpFeeTotal = clients * MP_FEE;
+    const mpNeto = clients * MP_NETO;
+    const commVend = (actualNew * COMM1_AMT) + (rec * COMM2_AMT);
+    const ganancia = mpNeto - commVend;
+    rows.push({ m, clients, actualNew, bruto, mpFeeTotal, mpNeto, commVend, ganancia });
+    if (m < months) clients += newC;
+  }
+  return rows;
+}
+
+function render() {
+  const totalClients = parseInt(document.getElementById('clients').value);
+  const newClients = Math.min(parseInt(document.getElementById('newclients').value), totalClients);
+
+  document.getElementById('clients-out').textContent = totalClients + (totalClients === 1 ? ' cliente' : ' clientes');
+  document.getElementById('new-out').textContent = newClients + (newClients === 1 ? ' nuevo' : ' nuevos');
+
+  const d = computeMonth(totalClients, newClients);
+
+  // MÉTRICAS
+  const pctGanancia = Math.round((d.ganancia / d.bruto) * 100);
+  const pctMP = Math.round((d.mpFeeTotal / d.bruto) * 100);
+  const pctVend = Math.round((d.commVend / d.bruto) * 100);
+  document.getElementById('metrics').innerHTML = `
+    <div class="metric hi-teal">
+      <div class="metric-label">Tu ganancia neta</div>
+      <div class="metric-value">${fmtPlain(d.ganancia)}</div>
+      <div class="metric-sub">${pctGanancia}% del bruto · ${totalClients} clientes</div>
+    </div>
+    <div class="metric hi-green">
+      <div class="metric-label">Por cliente recurrente</div>
+      <div class="metric-value">${fmtPlain(NET2)}</div>
+      <div class="metric-sub">mes 2 en adelante</div>
+    </div>
+    <div class="metric hi-red">
+      <div class="metric-label">Comisión MP total</div>
+      <div class="metric-value">${fmtPlain(d.mpFeeTotal)}</div>
+      <div class="metric-sub">${pctMP}% del bruto</div>
+    </div>
+    <div class="metric hi-blue">
+      <div class="metric-label">Comisión vendedores</div>
+      <div class="metric-value">${fmtPlain(d.commVend)}</div>
+      <div class="metric-sub">${pctVend}% del bruto</div>
+    </div>
+  `;
+
+  // BAR CHART (horizontal stacked)
+  const barData = [d.ganancia, d.commVend, d.mpFeeTotal];
+  const barTotal = d.bruto;
+  if (barChart) {
+    barChart.data.datasets[0].data = [d.ganancia];
+    barChart.data.datasets[1].data = [d.commVend];
+    barChart.data.datasets[2].data = [d.mpFeeTotal];
+    barChart.update('none');
+  } else {
+    barChart = new Chart(document.getElementById('barChart'), {
+      type: 'bar',
+      data: {
+        labels: [''],
+        datasets: [
+          { label: 'Tu ganancia', data: [d.ganancia], backgroundColor: 'rgba(96,212,160,0.8)', borderRadius: 4, stack: 'a' },
+          { label: 'Vendedores', data: [d.commVend], backgroundColor: 'rgba(200,240,96,0.7)', borderRadius: 0, stack: 'a' },
+          { label: 'MP fee', data: [d.mpFeeTotal], backgroundColor: 'rgba(240,96,96,0.7)', borderRadius: 4, stack: 'a' },
+        ]
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: ctx => ctx.dataset.label + ': ' + fmtPlain(ctx.parsed.x) + ' (' + Math.round(ctx.parsed.x / barTotal * 100) + '%)' } }
+        },
+        scales: {
+          x: { stacked: true, ticks: { color: '#555', font: { size: 10, family: 'DM Mono' }, callback: v => fmtPlain(v) }, grid: { color: 'rgba(255,255,255,0.05)' }, border: { color: '#2a2a2a' } },
+          y: { stacked: true, ticks: { display: false }, grid: { display: false }, border: { display: false } }
+        }
+      }
+    });
+  }
+
+  // LINE CHART (proyección 12 meses)
+  const proj = computeProjection(totalClients, newClients, 12);
+  const labels = proj.map(r => 'M' + r.m);
+  const ganData = proj.map(r => r.ganancia);
+  const brutoData = proj.map(r => r.mpNeto);
+
+  if (lineChart) {
+    lineChart.data.labels = labels;
+    lineChart.data.datasets[0].data = ganData;
+    lineChart.data.datasets[1].data = brutoData;
+    lineChart.update('none');
+  } else {
+    lineChart = new Chart(document.getElementById('lineChart'), {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          { label: 'Tu ganancia neta', data: ganData, borderColor: '#60d4a0', backgroundColor: 'rgba(96,212,160,0.08)', borderWidth: 2, fill: true, tension: 0.3, pointRadius: 3, pointBackgroundColor: '#60d4a0' },
+          { label: 'Bruto neto MP', data: brutoData, borderColor: 'rgba(200,240,96,0.5)', borderWidth: 1.5, borderDash: [5,4], pointRadius: 0, fill: false, tension: 0.3 },
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: ctx => ctx.dataset.label + ': ' + fmtPlain(ctx.parsed.y) } }
+        },
+        scales: {
+          x: { ticks: { color: '#555', font: { size: 11, family: 'DM Mono' } }, grid: { display: false }, border: { color: '#2a2a2a' } },
+          y: { ticks: { color: '#555', font: { size: 11, family: 'DM Mono' }, callback: v => v >= 1000000 ? '$' + (v/1000000).toFixed(1) + 'M' : '$' + Math.round(v/1000) + 'K' }, grid: { color: 'rgba(255,255,255,0.05)' }, border: { color: '#2a2a2a' } }
+        }
+      }
+    });
+  }
+
+  // TABLA
+  document.getElementById('tabla').innerHTML = proj.map(r => `
+    <tr>
+      <td>Mes ${r.m}</td>
+      <td>${r.clients}</td>
+      <td>${r.actualNew}</td>
+      <td>${fmtPlain(r.bruto)}</td>
+      <td class="neg">−${fmtPlain(r.mpFeeTotal)}</td>
+      <td class="neg">−${fmtPlain(r.commVend)}</td>
+      <td class="total-col">${fmtPlain(r.ganancia)}</td>
+    </tr>
+  `).join('');
+}
+
+document.getElementById('clients').addEventListener('input', render);
+document.getElementById('newclients').addEventListener('input', render);
+render();
+</script>
+</body>
+</html>

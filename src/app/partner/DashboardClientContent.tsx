@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
+import PartnerCalculator from "@/components/partner/PartnerCalculator";
 
 interface RecentItem {
   id: string;
@@ -23,19 +23,7 @@ export default function DashboardClientContent({
   activeClients,
   pendingAmount,
   recent,
-  recurringAmount,
 }: DashboardClientContentProps) {
-  const [targetSales, setTargetSales] = useState(10);
-  const [targetMonths, setTargetMonths] = useState(12);
-
-  const projectedMonthly = monthlyIncome + targetSales * targetMonths * recurringAmount;
-
-  const milestones = [
-    { value: 150000, label: "🚀 Primer Objetivo" },
-    { value: 400000, label: "💼 Sueldo Full" },
-    { value: 1000000, label: "🏆 Escala VIP" },
-  ];
-
   return (
     <div className="dashboard">
       <header className="dashboard__header">
@@ -65,53 +53,8 @@ export default function DashboardClientContent({
       <div className="dashboard__layout">
         <div className="dashboard__main">
 
-          {/* CALCULADORA DE PROYECCIÓN */}
-          <section className="calculator">
-            <div className="calculator__header">
-              <h3>Simulador de Crecimiento</h3>
-              <p>Proyectá tus ganancias según tu ritmo de ventas.</p>
-            </div>
-
-            <div className="calculator__body">
-              <div className="calculator__inputs">
-                <div className="input-field">
-                  <label>Ventas nuevas por mes</label>
-                  <input
-                    type="range" min="1" max="50" value={targetSales}
-                    onChange={(e) => setTargetSales(parseInt(e.target.value))}
-                  />
-                  <span className="input-display">{targetSales} clientes/mes</span>
-                </div>
-                <div className="input-field">
-                  <label>Meses de proyección</label>
-                  <input
-                    type="range" min="1" max="24" value={targetMonths}
-                    onChange={(e) => setTargetMonths(parseInt(e.target.value))}
-                  />
-                  <span className="input-display">{targetMonths} meses</span>
-                </div>
-              </div>
-
-              <div className="calculator__result">
-                <span className="result-label">Ingreso mensual proyectado:</span>
-                <div className="result-value">
-                  ${projectedMonthly.toLocaleString("es-AR")}
-                  <small>/mes</small>
-                </div>
-
-                <div className="milestones-track">
-                  {milestones.map((m) => (
-                    <div
-                      key={m.value}
-                      className={`milestone ${projectedMonthly >= m.value ? 'active' : ''}`}
-                    >
-                      {m.label}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </section>
+          {/* CALCULADORA DE INGRESOS */}
+          <PartnerCalculator />
 
           {/* RECIENTES */}
           <section className="dashboard__section">
@@ -163,33 +106,6 @@ export default function DashboardClientContent({
 
         .dashboard__layout { display: grid; grid-template-columns: 1fr 320px; gap: 32px; }
 
-        /* CALCULADORA */
-        .calculator {
-          background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
-          margin-bottom: 32px; overflow: hidden;
-        }
-        .calculator__header { padding: 16px 24px; border-bottom: 1px solid var(--border); background: var(--surface-2); }
-        .calculator__header h3 { font-size: 14px; font-weight: 700; }
-        .calculator__header p { font-size: 12px; color: var(--text-3); }
-
-        .calculator__body { display: grid; grid-template-columns: 1fr 1fr; }
-        .calculator__inputs { padding: 24px; border-right: 1px solid var(--border); display: flex; flex-direction: column; gap: 20px; }
-        .input-field label { display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--text-3); margin-bottom: 8px; }
-        .input-field input { width: 100%; accent-color: var(--primary); }
-        .input-display { font-size: 12px; font-weight: 700; color: var(--primary); margin-top: 4px; display: block; }
-
-        .calculator__result { padding: 24px; display: flex; flex-direction: column; justify-content: center; background: color-mix(in srgb, var(--primary) 2%, transparent); }
-        .result-label { font-size: 12px; color: var(--text-3); }
-        .result-value { font-size: 32px; font-weight: 900; color: var(--text); }
-        .result-value small { font-size: 14px; color: var(--text-3); margin-left: 4px; }
-
-        .milestones-track { display: flex; gap: 6px; margin-top: 16px; }
-        .milestone {
-          font-size: 9px; padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border);
-          color: var(--text-3); font-weight: 700; opacity: 0.5; transition: 0.3s;
-        }
-        .milestone.active { opacity: 1; border-color: var(--primary); background: var(--primary); color: white; }
-
         /* LISTA RECIENTES */
         .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
         .section-header__title { font-size: 14px; font-weight: 700; }
@@ -210,8 +126,6 @@ export default function DashboardClientContent({
 
         @media (max-width: 900px) {
           .dashboard__layout { grid-template-columns: 1fr; }
-          .calculator__body { grid-template-columns: 1fr; }
-          .calculator__inputs { border-right: none; border-bottom: 1px solid var(--border); }
         }
       `}</style>
     </div>

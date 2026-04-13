@@ -2,6 +2,8 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import DashboardClientContent from "./DashboardClientContent";
+import { calculatePartnerStats } from "@/lib/partner-stats";
+import PartnerBankingForm from "@/components/partner/PartnerBankingForm";
 
 export default async function PartnerDashboard() {
   const session = await auth();
@@ -11,23 +13,20 @@ export default async function PartnerDashboard() {
     where: { userId: session.user.id },
     select: { 
       id: true, 
+      bankAlias: true,
+      bankCbu: true,
+      bankAccountHolder: true,
       user: { select: { image: true } } 
     },
   });
 
   if (!partner) return <div className="p-10 text-center">Cargando perfil...</div>;
 
-  const [mrr, activeClients, pending, recent, commissionSample] = await Promise.all([
-    prisma.recurringCommission.aggregate({
-      _sum: { recurringAmount: true },
-      where: { partnerId: partner.id, active: true, clientActive: true },
-    }),
-    prisma.recurringCommission.count({
-      where: { partnerId: partner.id, active: true, clientActive: true },
-    }),
-    prisma.commission.aggregate({
-      _sum: { amount: true },
-      where: { partnerId: partner.id, status: "PENDING" },
+  const stats = await calculatePartnerStats(partner.id);
+
+  const [activeClients, recent] = await Promise.all([
+    prisma.referral.count({
+      where: { partnerId: partner.id, status: "ACTIVE" },
     }),
     prisma.referral.findMany({
       where: { partnerId: partner.id },
@@ -39,20 +38,24 @@ export default async function PartnerDashboard() {
         referredKiosco: { select: { name: true } },
         recurring: { select: { recurringAmount: true, clientActive: true } },
       },
-    }),
-    prisma.recurringCommission.findFirst({
-      where: { partnerId: partner.id },
-    }),
+    })
   ]);
 
   return (
-    <DashboardClientContent
-      monthlyIncome={mrr._sum.recurringAmount ?? 0}
-      activeClients={activeClients}
-      pendingAmount={pending._sum.amount ?? 0}
-      recent={recent}
-      recurringAmount={commissionSample?.recurringAmount ?? 4500}
-      userImage={partner.user.image}
-    />
+    <div>
+      <DashboardClientContent
+        stats={stats}
+        activeClients={activeClients}
+        recent={recent!}
+        userImage={partner.user.image}
+      />
+      <div style={{ maxWidth: "600px", margin: "0 auto", padding: "0 24px 40px" }}>
+        <PartnerBankingForm current={{
+          bankAlias: partner.bankAlias,
+          bankCbu: partner.bankCbu,
+          bankAccountHolder: partner.bankAccountHolder,
+        }} />
+      </div>
+    </div>
   );
 }

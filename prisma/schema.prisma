@@ -962,21 +962,25 @@ model ZapCampaign {
 }
 
 model PartnerProfile {
-  id           String                @id @default(cuid())
-  userId       String                @unique
-  referralCode String                @unique
-  isApproved   Boolean               @default(false)
-  invitedById  String?
-  phone        String?
-  createdAt    DateTime              @default(now())
-  updatedAt    DateTime              @updatedAt
-  commissions  Commission[]
-  snapshots    MonthlySnapshot[]
-  user         User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  recurring    RecurringCommission[]
-  referrals    Referral[]
-  invitedBy    PartnerProfile?       @relation("PartnerReferral", fields: [invitedById], references: [id])
-  invitedPartners PartnerProfile[]   @relation("PartnerReferral")
+  id                 String                @id @default(cuid())
+  userId             String                @unique
+  referralCode       String                @unique
+  isApproved         Boolean               @default(false)
+  invitedById        String?
+  phone              String?
+  bankAlias          String?
+  bankCbu            String?
+  bankAccountHolder  String?
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+  commissions        Commission[]
+  payouts            PayoutRequest[]
+  snapshots          MonthlySnapshot[]
+  user               User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recurring          RecurringCommission[]
+  referrals          Referral[]
+  invitedBy          PartnerProfile?       @relation("PartnerReferral", fields: [invitedById], references: [id])
+  invitedPartners    PartnerProfile[]      @relation("PartnerReferral")
 }
 
 model Referral {
@@ -1037,6 +1041,23 @@ model Commission {
   @@unique([recurringId, period, type])
   @@index([partnerId, createdAt])
   @@index([status, createdAt])
+}
+
+model PayoutRequest {
+  id             String       @id @default(cuid())
+  partnerId      String
+  amount         Float
+  status         PayoutStatus @default(PENDING)
+  idempotencyKey String       @unique
+  retryCount     Int          @default(0)
+  processedAt    DateTime?
+  createdAt      DateTime     @default(now())
+  paidAt         DateTime?
+  partner        PartnerProfile @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  @@index([partnerId, createdAt])
+  @@index([status])
+  @@index([status, retryCount])
 }
 
 model MonthlySnapshot {
@@ -1249,6 +1270,13 @@ enum CommissionStatus {
   APPROVED
   PAID
   CANCELLED
+}
+
+enum PayoutStatus {
+  PENDING
+  APPROVED
+  PAID
+  REJECTED
 }
 
 enum SnapshotStatus {

@@ -318,6 +318,13 @@ export default async function AdminLayout({
               </svg>
               Liquidaciones
             </Link>
+
+            <Link href="/admin/partners/payouts" className="admin-nav__link">
+              <svg className="admin-nav__icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path d="M8 2v12M4 6l4-4 4 4M4 10l4 4 4-4" />
+              </svg>
+              Retiros Partners
+            </Link>
           </nav>
 
           <div className="admin-sidebar__footer">

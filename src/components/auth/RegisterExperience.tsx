@@ -291,8 +291,8 @@ export default function RegisterExperience({
                 lineHeight: 1.5,
               }}
             >
-              <span style={{ fontSize: "16px", flexShrink: 0 }}>👤</span>
-              Te está invitando <strong style={{ color: "#22d98a" }}>{referredBy}</strong>
+              <span style={{ fontSize: "16px", flexShrink: 0 }}>🤝</span>
+              Te estás registrando a través del Partner Oficial: <strong style={{ color: "#22d98a", marginLeft: "4px" }}>{referredBy}</strong>
             </div>
           ) : null}
 

@@ -74,7 +74,8 @@ export default async function PartnerViewPage({ params }: PartnerViewPageProps) 
     "Vendedor Clikit";
 
   const initials = (partner.user.firstName?.[0] ?? partner.user.name?.[0] ?? "P").toUpperCase();
-  const registerHref = `/register?ref=${encodeURIComponent(slug)}`;
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://clikit.com.ar";
+  const registerHref = `${baseUrl}/register?ref=${encodeURIComponent(slug)}`;
   const year = new Date().getFullYear();
 
   return (

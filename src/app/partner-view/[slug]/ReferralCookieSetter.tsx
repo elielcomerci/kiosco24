@@ -10,8 +10,14 @@ export default function ReferralCookieSetter({ slug }: { slug: string }) {
   useEffect(() => {
     if (!slug) return;
 
-    // Set cookie for 30 days on the current domain
-    document.cookie = `clikit_ref=${encodeURIComponent(slug)}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax`;
+    const hostname = window.location.hostname;
+    const domainParts = hostname.split('.');
+    const isLocalhost = hostname.includes('localhost') || hostname.includes('127.0.0.1');
+    const rootDomain = domainParts.length > 2 && !isLocalhost
+      ? `.${domainParts.slice(-2).join('.')}`
+      : isLocalhost ? '' : `.${hostname}`;
+      
+    document.cookie = `clikit_ref=${encodeURIComponent(slug)}; path=/; ${rootDomain ? `domain=${rootDomain}; ` : ''}max-age=${60 * 60 * 24 * 30}; SameSite=Lax`;
   }, [slug]);
 
   return null;

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import PartnerCalculator from "@/components/partner/PartnerCalculator";
+import PartnerImageUploader from "@/components/partner/PartnerImageUploader";
 
 interface RecentItem {
   id: string;
@@ -16,6 +17,7 @@ interface DashboardClientContentProps {
   pendingAmount: number;
   recent: RecentItem[];
   recurringAmount: number;
+  userImage?: string | null;
 }
 
 export default function DashboardClientContent({
@@ -23,6 +25,7 @@ export default function DashboardClientContent({
   activeClients,
   pendingAmount,
   recent,
+  userImage,
 }: DashboardClientContentProps) {
   return (
     <div className="dashboard">
@@ -83,6 +86,8 @@ export default function DashboardClientContent({
         </div>
 
         <aside className="dashboard__aside">
+          <PartnerImageUploader currentImage={userImage ?? null} />
+
           <div className="promo-card">
             <h4>Expandí tu red</h4>
             <p>Usá tu link personal para registrar nuevos clientes y asegurar tu comisión.</p>

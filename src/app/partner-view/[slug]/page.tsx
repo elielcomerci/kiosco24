@@ -62,11 +62,7 @@ export default async function PartnerViewPage({ params }: PartnerViewPageProps) 
           createdAt: true,
         },
       },
-      _count: {
-        select: {
-          referrals: true,
-        },
-      },
+      _count: false,
     },
   });
 
@@ -77,8 +73,7 @@ export default async function PartnerViewPage({ params }: PartnerViewPageProps) 
     [partner.user.firstName, partner.user.lastName].filter(Boolean).join(" ") ??
     "Vendedor Clikit";
 
-  const initials = (partner.user.firstName?.[0] ?? partner.user.name?.[0] ?? "V").toUpperCase();
-  const firstName = partner.user.firstName ?? partner.user.name?.split(" ")[0] ?? "tu vendedor";
+  const initials = (partner.user.firstName?.[0] ?? partner.user.name?.[0] ?? "P").toUpperCase();
   const registerHref = `/register?ref=${encodeURIComponent(slug)}`;
   const year = new Date().getFullYear();
 
@@ -220,7 +215,7 @@ export default async function PartnerViewPage({ params }: PartnerViewPageProps) 
           <div className="pv-hero-left">
             <div className="pv-eyebrow">
               <div className="pv-dot"></div>
-              Recomendado por {firstName}
+              Recomendado por {displayName}
             </div>
             <h1>Tu negocio funciona.<br /><em>Aunque no estés.</em></h1>
             <p className="pv-hero-sub">
@@ -253,17 +248,7 @@ export default async function PartnerViewPage({ params }: PartnerViewPageProps) 
                 )}
               </div>
               <div className="pv-pcard-name">{displayName}</div>
-              <div className="pv-pcard-role">Vendedor partner de Clikit</div>
-              <div className="pv-pcard-stats">
-                <div className="pv-pstat">
-                  <div className="pv-pstat-val">{partner._count.referrals}</div>
-                  <div className="pv-pstat-lbl">negocios</div>
-                </div>
-                <div className="pv-pstat">
-                  <div className="pv-pstat-val">{partner.isApproved ? "✓" : "⏳"}</div>
-                  <div className="pv-pstat-lbl">{partner.isApproved ? "verificado" : "pendiente"}</div>
-                </div>
-              </div>
+              <div className="pv-pcard-role">Partner Oficial de Clikit</div>
               <div className={`pv-pcard-badge ${partner.isApproved ? "pv-pcard-badge--approved" : "pv-pcard-badge--pending"}`}>
                 {partner.isApproved ? "Partner verificado" : "Verificando"}
               </div>
@@ -378,7 +363,7 @@ export default async function PartnerViewPage({ params }: PartnerViewPageProps) 
         {/* CTA FINAL */}
         <div className="pv-cta-wrap">
           <div className="pv-cta-glow" />
-          <h2>{firstName} te invita a probar Clikit</h2>
+          <h2>{displayName} te invita a probar Clikit</h2>
           <p>
             Creá tu cuenta ahora. {SUBSCRIPTION_PROMO_LABEL} Sin configuración, sin permanencia.
           </p>

@@ -9,7 +9,10 @@ export default async function PartnerDashboard() {
 
   const partner = await prisma.partnerProfile.findUnique({
     where: { userId: session.user.id },
-    select: { id: true },
+    select: { 
+      id: true, 
+      user: { select: { image: true } } 
+    },
   });
 
   if (!partner) return <div className="p-10 text-center">Cargando perfil...</div>;
@@ -49,6 +52,7 @@ export default async function PartnerDashboard() {
       pendingAmount={pending._sum.amount ?? 0}
       recent={recent}
       recurringAmount={commissionSample?.recurringAmount ?? 4500}
+      userImage={partner.user.image}
     />
   );
 }

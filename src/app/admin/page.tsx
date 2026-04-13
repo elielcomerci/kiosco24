@@ -3,6 +3,7 @@ import AdminRentabilityCalculator from "@/components/admin/AdminRentabilityCalcu
 import MacroStatsWidget from "@/components/admin/widgets/MacroStatsWidget";
 import OperationsHealthWidget from "@/components/admin/widgets/OperationsHealthWidget";
 import PartnersWidget from "@/components/admin/widgets/PartnersWidget";
+import "./admin-dashboard.css";
 
 function WidgetSkeleton({ title }: { title: string }) {
   return (
@@ -18,240 +19,45 @@ function WidgetSkeleton({ title }: { title: string }) {
 
 export default function AdminDashboard() {
   return (
-    <>
-      <div className="admin-dashboard">
-        <div className="admin-dashboard__header">
-          <div>
-            <h1 className="admin-dashboard__title">Panel Estratégico</h1>
-            <p className="admin-dashboard__subtitle">
-              Métricas globales del sistema en tiempo real.
-            </p>
-          </div>
-          <div className="admin-dashboard__actions">
-            <span className="live-indicator">
-              <span className="pulse-dot"></span> Live
-            </span>
-          </div>
+    <div className="admin-dashboard">
+      <div className="admin-dashboard__header">
+        <div>
+          <h1 className="admin-dashboard__title">Panel Estratégico</h1>
+          <p className="admin-dashboard__subtitle">
+            Métricas globales del sistema en tiempo real.
+          </p>
         </div>
-
-        <div className="bento-layout">
-          {/* Main Financial & Growth Column */}
-          <div className="bento-col-main">
-            <Suspense fallback={<WidgetSkeleton title="Macro Economía" />}>
-              <MacroStatsWidget />
-            </Suspense>
-          </div>
-
-          {/* Secondary Column: Operations & Partners */}
-          <div className="bento-col-side">
-            <Suspense fallback={<WidgetSkeleton title="Salud Operacional" />}>
-              <OperationsHealthWidget />
-            </Suspense>
-            
-            <Suspense fallback={<WidgetSkeleton title="Programa Partners" />}>
-              <PartnersWidget />
-            </Suspense>
-          </div>
+        <div className="admin-dashboard__actions">
+          <span className="live-indicator">
+            <span className="pulse-dot"></span> Live
+          </span>
         </div>
-
-        <section className="admin-dashboard__section">
-          <h2 className="admin-dashboard__section-title">Calculadora de rentabilidad</h2>
-          <AdminRentabilityCalculator />
-        </section>
       </div>
 
-      <style jsx>{`
-        .admin-dashboard__header { 
-          display: flex; justify-content: space-between; align-items: flex-end;
-          margin-bottom: 24px; 
-        }
-        .admin-dashboard__title { font-size: 24px; font-weight: 800; letter-spacing: -0.03em; margin-bottom: 4px; color: #f0ede8; }
-        .admin-dashboard__subtitle { font-size: 14px; color: var(--text-3, #888); }
-        
-        .live-indicator {
-          display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: #22c55e;
-          background: rgba(34, 197, 94, 0.1); padding: 6px 12px; border-radius: 20px; border: 1px solid rgba(34,197,94,0.2);
-        }
-        .pulse-dot {
-          width: 8px; height: 8px; background: #22c55e; border-radius: 50%; box-shadow: 0 0 8px #22c55e;
-          animation: pulse 2s infinite;
-        }
+      <div className="bento-layout">
+        {/* Main Financial & Growth Column */}
+        <div className="bento-col-main">
+          <Suspense fallback={<WidgetSkeleton title="Macro Economía" />}>
+            <MacroStatsWidget />
+          </Suspense>
+        </div>
 
-        @keyframes pulse {
-          0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7); }
-          70% { box-shadow: 0 0 0 6px rgba(34, 197, 94, 0); }
-          100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
-        }
+        {/* Secondary Column: Operations & Partners */}
+        <div className="bento-col-side">
+          <Suspense fallback={<WidgetSkeleton title="Salud Operacional" />}>
+            <OperationsHealthWidget />
+          </Suspense>
+          
+          <Suspense fallback={<WidgetSkeleton title="Programa Partners" />}>
+            <PartnersWidget />
+          </Suspense>
+        </div>
+      </div>
 
-        .admin-dashboard__section { margin-top: 48px; margin-bottom: 32px; }
-        .admin-dashboard__section-title { font-size: 14px; font-weight: 700; margin-bottom: 14px; color: var(--text-3, #888); text-transform: uppercase; letter-spacing: .06em; }
-      `}</style>
-
-      {/* Global Bento Grid Styles */}
-      <style jsx global>{`
-        .bento-layout {
-          display: grid;
-          grid-template-columns: 2fr 1fr;
-          gap: 16px;
-        }
-
-        @media (max-width: 1024px) {
-          .bento-layout { grid-template-columns: 1fr; }
-        }
-
-        .bento-col-main, .bento-col-side {
-          display: flex;
-          flex-direction: column;
-          gap: 16px;
-        }
-
-        .bento-card {
-          background: rgba(22, 22, 22, 0.7);
-          backdrop-filter: blur(12px);
-          -webkit-backdrop-filter: blur(12px);
-          border: 1px solid rgba(255, 255, 255, 0.05);
-          border-radius: var(--radius-lg, 16px);
-          padding: 20px;
-          position: relative;
-          overflow: hidden;
-          box-shadow: 0 4px 24px -8px rgba(0,0,0,0.5);
-          transition: transform 0.2s ease, border-color 0.2s ease;
-        }
-
-        .bento-card:hover {
-          border-color: rgba(255, 255, 255, 0.1);
-          transform: translateY(-2px);
-        }
-
-        .bento-card-header {
-          display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;
-        }
-
-        .bento-card-title {
-          font-size: 12px;
-          font-weight: 700;
-          text-transform: uppercase;
-          letter-spacing: 0.08em;
-          color: #a1a1aa;
-        }
-
-        .bento-card-value {
-          font-size: 32px;
-          font-weight: 800;
-          letter-spacing: -0.04em;
-          color: #f0ede8;
-          line-height: 1.1;
-        }
-        
-        .bento-card-value.highlight {
-          background: linear-gradient(135deg, #f0ede8 0%, #a1a1aa 100%);
-          -webkit-background-clip: text;
-          background-clip: text;
-          color: transparent;
-          font-size: 42px;
-        }
-
-        .bento-card-subtext {
-          font-size: 13px;
-          color: #71717a;
-          margin-top: 4px;
-        }
-
-        .bento-badge {
-          background: rgba(59, 130, 246, 0.15);
-          color: #60a5fa;
-          font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.1em;
-          padding: 4px 8px; border-radius: 12px;
-        }
-
-        .bento-btn {
-          background: #f0ede8; color: #000; font-size: 11px; font-weight: 700; text-transform: uppercase;
-          padding: 6px 12px; border-radius: 6px; text-decoration: none;
-        }
-        .bento-btn:hover { background: #fff; }
-
-        .bento-link {
-          font-size: 12px; font-weight: 600; color: #60a5fa; text-decoration: none;
-        }
-
-        .bento-chart-container {
-          margin-top: 24px;
-          margin-left: -20px;
-          margin-right: -20px;
-          margin-bottom: -20px;
-        }
-        
-        .bento-chart-container-small {
-          margin-top: 16px;
-          margin-bottom: -16px;
-        }
-
-        /* Macro Bento Inner Grid */
-        .macro-bento-grid {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 16px;
-        }
-        .gmv-card {
-          grid-column: span 2;
-        }
-        
-        @media (max-width: 640px) {
-          .macro-bento-grid { grid-template-columns: 1fr; }
-          .gmv-card { grid-column: span 1; }
-        }
-
-        /* Operations List */
-        .operations-list {
-          display: flex; flex-direction: column; gap: 12px; margin-top: 16px;
-        }
-        .operation-item {
-          display: flex; justify-content: space-between; align-items: center;
-          background: rgba(0,0,0,0.2); padding: 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.03);
-        }
-        .operation-info { display: flex; align-items: center; gap: 10px; }
-        .operation-name { font-size: 13px; font-weight: 500; color: #d4d4d8; }
-        .operation-action { display: flex; align-items: center; gap: 12px; }
-        .operation-value { font-size: 13px; font-weight: 700; color: #f0ede8; }
-        
-        .status-dot { width: 8px; height: 8px; border-radius: 50%; }
-        .status-dot.ok { background: #22c55e; box-shadow: 0 0 6px #22c55e; }
-        .status-dot.warning { background: #eab308; box-shadow: 0 0 6px #eab308; }
-        .status-dot.danger { background: #ef4444; box-shadow: 0 0 6px #ef4444; }
-
-        /* Partners Metrics */
-        .partners-content {
-          margin-top: 16px;
-        }
-        .partner-stat {
-          display: flex; flex-direction: column; gap: 4px; margin-bottom: 20px;
-        }
-        .partner-stat-label { font-size: 12px; color: #a1a1aa; text-transform: uppercase; letter-spacing: 0.05em; }
-        .partner-stat-value { font-size: 28px; font-weight: 800; color: #f0ede8; }
-        
-        .partner-metrics {
-          display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
-          border-top: 1px solid rgba(255,255,255,0.05); padding-top: 16px;
-        }
-        .partner-metrics .metric { display: flex; flex-direction: column; gap: 2px; }
-        .partner-metrics .metric-value { font-size: 18px; font-weight: 700; color: #f0ede8; }
-        .partner-metrics .metric-label { font-size: 11px; color: #71717a; text-transform: uppercase; letter-spacing: 0.05em;}
-
-        /* Skeleton Loading */
-        .skeleton-card {
-          min-height: 200px;
-        }
-        .skeleton-line {
-          background: linear-gradient(90deg, rgba(255,255,255,0.05) 25%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0.05) 75%);
-          background-size: 200% 100%;
-          border-radius: 4px;
-          animation: shimmer 1.5s infinite;
-        }
-        @keyframes shimmer {
-          0% { background-position: 200% 0; }
-          100% { background-position: -200% 0; }
-        }
-      `}</style>
-    </>
+      <section className="admin-dashboard__section">
+        <h2 className="admin-dashboard__section-title">Calculadora de rentabilidad</h2>
+        <AdminRentabilityCalculator />
+      </section>
+    </div>
   );
 }

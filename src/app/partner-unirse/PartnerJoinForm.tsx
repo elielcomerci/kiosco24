@@ -2,13 +2,24 @@
 
 import { useState, type FormEvent } from "react";
 
+function slugify(value: string) {
+  return value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .substring(0, 20);
+}
+
 export default function PartnerJoinForm() {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
-  const [referralCode, setReferralCode] = useState("");
+  const [customSlug, setCustomSlug] = useState("");
+  const [referrerSlug, setReferrerSlug] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState<{ referralCode: string } | null>(null);
@@ -24,11 +35,28 @@ export default function PartnerJoinForm() {
       return;
     }
 
+    if (customSlug) {
+      const slug = slugify(customSlug);
+      if (slug.length < 3) {
+        setError("El slug debe tener al menos 3 caracteres.");
+        setLoading(false);
+        return;
+      }
+    }
+
     try {
       const res = await fetch("/api/partner/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ firstName, lastName, email, phone, password, referralCode }),
+        body: JSON.stringify({
+          firstName,
+          lastName,
+          email,
+          phone,
+          password,
+          customSlug,
+          referrerSlug,
+        }),
       });
 
       const data = await res.json().catch(() => ({}));
@@ -79,12 +107,14 @@ export default function PartnerJoinForm() {
             {success.referralCode}
           </div>
         </div>
-        <p style={{ margin: 0, fontSize: "12px", color: "#6b7e96" }}>
-          Guardá este código. Tu link será: <strong style={{ color: "#22d98a" }}>clikit.com/partner-view/{success.referralCode}</strong>
+        <p style={{ margin: 0, fontSize: "12px", color: "#6b7e96", lineHeight: 1.7 }}>
+          Tu link para compartir: <strong style={{ color: "#22d98a" }}>{success.referralCode}.clikit.com.ar</strong>
         </p>
       </div>
     );
   }
+
+  const slugPreview = customSlug ? slugify(customSlug) : "";
 
   return (
     <form onSubmit={handleSubmit} className="pj-form">
@@ -139,11 +169,32 @@ export default function PartnerJoinForm() {
         minLength={8}
         required
       />
+      <div style={{ position: "relative" }}>
+        <input
+          type="text"
+          placeholder="Tu link personalizado (ej: kiosco-maria)"
+          value={customSlug}
+          onChange={(e) => {
+            const val = e.target.value;
+            setCustomSlug(val);
+          }}
+        />
+        {slugPreview && (
+          <div style={{
+            fontSize: "11px",
+            color: "var(--green)",
+            marginTop: "4px",
+            fontFamily: "'DM Mono', monospace",
+          }}>
+            {slugPreview}.clikit.com.ar
+          </div>
+        )}
+      </div>
       <input
         type="text"
-        placeholder="Código de referido de otro partner (opcional)"
-        value={referralCode}
-        onChange={(e) => setReferralCode(e.target.value)}
+        placeholder="Código de otro partner que te invitó (opcional)"
+        value={referrerSlug}
+        onChange={(e) => setReferrerSlug(e.target.value)}
       />
       <button type="submit" disabled={loading}>
         {loading ? "Enviando solicitud..." : "Quiero ser partner"}

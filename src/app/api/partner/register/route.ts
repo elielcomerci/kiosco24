@@ -8,11 +8,22 @@ type PartnerRegisterPayload = {
   email: string;
   phone?: string;
   password: string;
-  referralCode?: string;
+  customSlug?: string;
+  referrerSlug?: string;
 };
 
 function normalizeText(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function slugify(value: string) {
+  return value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .substring(0, 20);
 }
 
 export async function POST(req: Request) {
@@ -23,7 +34,8 @@ export async function POST(req: Request) {
     const email = normalizeText(body.email).toLowerCase();
     const phone = normalizeText(body.phone);
     const password = body.password;
-    const invitedByCode = normalizeText(body.referralCode);
+    const customSlug = normalizeText(body.customSlug);
+    const referrerSlug = normalizeText(body.referrerSlug);
 
     if (!firstName || !lastName || !email || !password) {
       return NextResponse.json(
@@ -58,29 +70,45 @@ export async function POST(req: Request) {
       );
     }
 
-    // Generate unique referral code from firstName + lastName
-    const fullName = `${firstName} ${lastName}`;
-    const baseCode = fullName
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .replace(/[^a-z0-9]/g, "-")
-      .replace(/-+/g, "-")
-      .replace(/^-|-$/g, "")
-      .substring(0, 20);
-
-    let referralCode = baseCode;
-    let counter = 1;
-    while (await prisma.partnerProfile.findUnique({ where: { referralCode } })) {
-      referralCode = `${baseCode}-${counter}`;
-      counter++;
+    // Determine referral code
+    let referralCode: string;
+    if (customSlug) {
+      const slug = slugify(customSlug);
+      if (slug.length < 3) {
+        return NextResponse.json(
+          { error: "El link debe tener al menos 3 caracteres." },
+          { status: 400 },
+        );
+      }
+      // Check availability
+      const taken = await prisma.partnerProfile.findUnique({
+        where: { referralCode: slug },
+        select: { id: true },
+      });
+      if (taken) {
+        return NextResponse.json(
+          { error: "Ese link ya está en uso. Probá con otro." },
+          { status: 400 },
+        );
+      }
+      referralCode = slug;
+    } else {
+      // Auto-generate from name
+      const fullName = `${firstName} ${lastName}`;
+      const baseCode = slugify(fullName);
+      referralCode = baseCode;
+      let counter = 1;
+      while (await prisma.partnerProfile.findUnique({ where: { referralCode } })) {
+        referralCode = `${baseCode}-${counter}`;
+        counter++;
+      }
     }
 
     // Check if invited by another partner
     let invitedById: string | null = null;
-    if (invitedByCode) {
+    if (referrerSlug) {
       const inviter = await prisma.partnerProfile.findUnique({
-        where: { referralCode: invitedByCode },
+        where: { referralCode: referrerSlug },
         select: { id: true },
       });
       if (inviter) invitedById = inviter.id;

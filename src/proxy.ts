@@ -44,32 +44,29 @@ export default auth((req: NextAuthRequest) => {
     const protectedPaths = ["/partner/cartera", "/partner/link", "/partner/ganancias", "/partner/clientes"];
     const isProtected = protectedPaths.some((p) => nextUrl.pathname.startsWith(p));
 
-    // Rutas públicas: landing, unirse, auth
+    // Auth paths
     const isAuthPath = nextUrl.pathname.startsWith("/login") ||
                        nextUrl.pathname === "/register" ||
                        nextUrl.pathname.startsWith("/api/auth");
+
+    // Public landing paths
     const isPublicLanding = nextUrl.pathname === "/" ||
-                            nextUrl.pathname === "/landing" ||
-                            nextUrl.pathname === "/unirse";
+                            nextUrl.pathname === "/landing";
+    const isPublicUnirse = nextUrl.pathname === "/unirse";
 
     // Auth paths: render normally
     if (isAuthPath) {
       return NextResponse.next();
     }
 
-    // Public landing paths → rewrite to /partner/landing or /partner/unirse
-    if (nextUrl.pathname === "/") {
-      const url = new URL("/partner/landing", origin);
+    // Public landing → rewrite to /partner-pub (no partner layout auth)
+    if (isPublicLanding) {
+      const url = new URL("/partner-pub", origin);
       url.search = nextUrl.search;
       return NextResponse.rewrite(url);
     }
-    if (nextUrl.pathname === "/landing") {
-      const url = new URL("/partner/landing", origin);
-      url.search = nextUrl.search;
-      return NextResponse.rewrite(url);
-    }
-    if (nextUrl.pathname === "/unirse") {
-      const url = new URL("/partner/unirse", origin);
+    if (isPublicUnirse) {
+      const url = new URL("/partner-unirse", origin);
       url.search = nextUrl.search;
       return NextResponse.rewrite(url);
     }

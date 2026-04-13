@@ -70,7 +70,7 @@ export default async function PartnerSubHome() {
           </div>
           <div className="psh-nav-right">
             <Link href="/login" className="psh-btn psh-btn-ghost">Acceder</Link>
-            <Link href="/partner/unirse" className="psh-btn psh-btn-cta">Quiero ser partner</Link>
+            <Link href="/unirse" className="psh-btn psh-btn-cta">Quiero ser partner</Link>
           </div>
         </nav>
 
@@ -83,7 +83,7 @@ export default async function PartnerSubHome() {
             Cobrás el 50% de la primera factura y 30% recurrente de por vida.
             Sin inversión inicial, sin límite de clientes.
           </p>
-          <Link href="/partner/unirse" className="psh-btn psh-btn-cta psh-btn-lg">Quiero ser partner</Link>
+          <Link href="/unirse" className="psh-btn psh-btn-cta psh-btn-lg">Quiero ser partner</Link>
         </div>
 
         <div className="psh-div" />
@@ -155,7 +155,7 @@ export default async function PartnerSubHome() {
         <div className="psh-cta-wrap">
           <h2>¿Estás listo para empezar?</h2>
           <p>Completá tus datos y te contactamos para activar tu cuenta de partner.</p>
-          <Link href="/partner/unirse" className="psh-btn psh-btn-cta psh-btn-lg">Quiero ser partner →</Link>
+          <Link href="/unirse" className="psh-btn psh-btn-cta psh-btn-lg">Quiero ser partner →</Link>
         </div>
 
         <div className="psh-footer">

@@ -3,7 +3,8 @@ import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 
 type PartnerRegisterPayload = {
-  name: string;
+  firstName: string;
+  lastName: string;
   email: string;
   phone?: string;
   password: string;
@@ -17,15 +18,16 @@ function normalizeText(value: unknown) {
 export async function POST(req: Request) {
   try {
     const body = (await req.json()) as PartnerRegisterPayload;
-    const name = normalizeText(body.name);
+    const firstName = normalizeText(body.firstName);
+    const lastName = normalizeText(body.lastName);
     const email = normalizeText(body.email).toLowerCase();
     const phone = normalizeText(body.phone);
     const password = body.password;
     const invitedByCode = normalizeText(body.referralCode);
 
-    if (!name || !email || !password) {
+    if (!firstName || !lastName || !email || !password) {
       return NextResponse.json(
-        { error: "Completá nombre, email y contraseña." },
+        { error: "Completá nombre, apellido, email y contraseña." },
         { status: 400 },
       );
     }
@@ -56,8 +58,9 @@ export async function POST(req: Request) {
       );
     }
 
-    // Generate unique referral code from name
-    const baseCode = name
+    // Generate unique referral code from firstName + lastName
+    const fullName = `${firstName} ${lastName}`;
+    const baseCode = fullName
       .toLowerCase()
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "")
@@ -86,10 +89,11 @@ export async function POST(req: Request) {
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Create user with PARTNER role + hashed password
+    // Create user with PARTNER role
     const user = await prisma.user.create({
       data: {
-        name,
+        firstName,
+        lastName,
         email,
         role: "PARTNER",
         password: hashedPassword,

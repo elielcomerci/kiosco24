@@ -3,7 +3,8 @@
 import { useState, type FormEvent } from "react";
 
 export default function PartnerJoinForm() {
-  const [name, setName] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
@@ -27,7 +28,7 @@ export default function PartnerJoinForm() {
       const res = await fetch("/api/partner/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, phone, password, referralCode }),
+        body: JSON.stringify({ firstName, lastName, email, phone, password, referralCode }),
       });
 
       const data = await res.json().catch(() => ({}));
@@ -101,13 +102,22 @@ export default function PartnerJoinForm() {
           {error}
         </div>
       )}
-      <input
-        type="text"
-        placeholder="Tu nombre completo"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        required
-      />
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+        <input
+          type="text"
+          placeholder="Nombre"
+          value={firstName}
+          onChange={(e) => setFirstName(e.target.value)}
+          required
+        />
+        <input
+          type="text"
+          placeholder="Apellido"
+          value={lastName}
+          onChange={(e) => setLastName(e.target.value)}
+          required
+        />
+      </div>
       <input
         type="email"
         placeholder="tu@email.com"

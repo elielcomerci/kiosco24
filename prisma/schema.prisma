@@ -966,6 +966,8 @@ model PartnerProfile {
   userId       String                @unique
   referralCode String                @unique
   isApproved   Boolean               @default(false)
+  invitedById  String?
+  phone        String?
   createdAt    DateTime              @default(now())
   updatedAt    DateTime              @updatedAt
   commissions  Commission[]
@@ -973,6 +975,8 @@ model PartnerProfile {
   user         User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
   recurring    RecurringCommission[]
   referrals    Referral[]
+  invitedBy    PartnerProfile?       @relation("PartnerReferral", fields: [invitedById], references: [id])
+  invitedPartners PartnerProfile[]   @relation("PartnerReferral")
 }
 
 model Referral {

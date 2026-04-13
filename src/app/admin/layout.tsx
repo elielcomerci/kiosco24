@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { isPlatformAdmin } from "@/lib/platform-admin";
+import { prisma } from "@/lib/prisma";
 import { signOut } from "@/lib/auth";
 
 async function AdminSignOut() {
@@ -28,6 +29,10 @@ export default async function AdminLayout({
   if (!session?.user?.id || !isPlatformAdmin(session.user)) {
     redirect("/login");
   }
+
+  const pendingCount = await prisma.partnerProfile.count({
+    where: { isApproved: false },
+  });
 
   return (
     <>
@@ -278,7 +283,32 @@ export default async function AdminLayout({
                 <path d="M11 7l2 2 3-3" />
               </svg>
               Vendedores
+              {pendingCount > 0 && (
+                <span style={{
+                  marginLeft: "auto",
+                  background: "#f5a623",
+                  color: "#1a0f00",
+                  fontSize: "10px",
+                  fontWeight: 800,
+                  borderRadius: "999px",
+                  padding: "1px 7px",
+                  minWidth: "18px",
+                  textAlign: "center",
+                }}>
+                  {pendingCount}
+                </span>
+              )}
             </Link>
+
+            {pendingCount > 0 && (
+              <Link href="/admin/partners/pending" className="admin-nav__link" style={{ color: "var(--primary)" }}>
+                <svg className="admin-nav__icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <circle cx="8" cy="8" r="6" />
+                  <path d="M8 5v3l2 1" />
+                </svg>
+                Solicitudes pendientes
+              </Link>
+            )}
 
             <Link href="/admin/liquidaciones" className="admin-nav__link">
               <svg className="admin-nav__icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">

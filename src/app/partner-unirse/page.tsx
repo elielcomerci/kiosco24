@@ -1,4 +1,5 @@
 import Link from "next/link";
+import PartnerJoinForm from "./PartnerJoinForm";
 
 export default async function PartnerJoinPage() {
   return (
@@ -173,13 +174,7 @@ export default async function PartnerJoinPage() {
         <section className="pj-cta-section">
           <h2>¿Estás listo para empezar?</h2>
           <p>Completá tus datos y te contactamos para activar tu cuenta de partner.</p>
-          <div className="pj-form">
-            <input type="text" name="partnerName" placeholder="Tu nombre completo" required />
-            <input type="email" name="partnerEmail" placeholder="tu@email.com" required />
-            <input type="text" name="partnerPhone" placeholder="Tu teléfono (opcional)" />
-            <input type="text" name="partnerCode" placeholder="Código de referido (si te invitó un partner)" />
-            <button type="submit">Quiero ser partner</button>
-          </div>
+          <PartnerJoinForm />
           <div className="pj-fine">Revisamos cada solicitud personalmente. Respuesta en 24-48 horas.</div>
         </section>
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useTour } from "../onboarding/TourProvider";
 
 export default function ProductsActionsMenu({
   isOwner,
@@ -37,6 +38,7 @@ export default function ProductsActionsMenu({
 }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const { reactivateAll } = useTour();
 
   useEffect(() => {
     if (!open) {
@@ -88,7 +90,7 @@ export default function ProductsActionsMenu({
           <button
             className="btn btn-ghost"
             style={menuButtonStyle}
-            onClick={() => run(() => window.dispatchEvent(new CustomEvent("clikit:start-tour")))}
+            onClick={() => run(reactivateAll)}
           >
             Ver tutorial rápido
           </button>

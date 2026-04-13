@@ -23,6 +23,11 @@ interface ReportData {
     totalRetiros: number;
     ganancia: number | null;
     hasCosts: boolean;
+    // Fiscal breakdown
+    totalFacturado: number;
+    totalTicketInterno: number;
+    totalDirecto: number;
+    porcentajeFacturado: number;
   };
   stats: {
     totalVentas: number;
@@ -37,6 +42,13 @@ interface ReportData {
     paymentMethod: string;
     employeeName: string;
     itemsCount: number;
+    fiscalType: "FACTURADA" | "TICKET_INTERNO" | "DIRECTA";
+    invoiceInfo?: {
+      nro: string;
+      cae: string;
+      fechaEmision: string;
+    };
+    ticketNumber?: number;
   }>;
   expenses: Array<{
     id: string;
@@ -158,12 +170,53 @@ const styles = StyleSheet.create({
   tableRowAlt: {
     backgroundColor: "#f9fafb",
   },
-  col1: { width: "18%" },
+  tableCell: {
+    paddingVertical: 4,
+  },
+  tableTotalRow: {
+    backgroundColor: "#f3f4f6",
+    flexDirection: "row",
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    fontWeight: "bold",
+    fontSize: 9,
+    borderTop: "1 solid #d1d5db",
+  },
+  col1: { width: "15%" },
   col2: { width: "15%" },
   col3: { width: "20%" },
-  col4: { width: "15%" },
-  col5: { width: "12%" },
-  col6: { width: "20%" },
+  col4: { width: "10%" },
+  col5: { width: "15%" },
+  colFiscal: { width: "25%" },
+  colTicket: { width: "10%" },
+  colMethod: { width: "12%" },
+  colTotal: { width: "13%", textAlign: "right" },
+  colFull: { width: "87%" },
+  ivaNote: {
+    fontSize: 8,
+    color: "#6b7280",
+    marginTop: 5,
+    fontStyle: "italic",
+  },
+  percentageBox: {
+    marginTop: 10,
+    backgroundColor: "#ecfdf5",
+    borderWidth: 1,
+    borderColor: "#10b981",
+    padding: 10,
+    borderRadius: 4,
+  },
+  percentageTitle: {
+    fontSize: 10,
+    color: "#047857",
+    fontWeight: "bold",
+  },
+  percentageValue: {
+    fontSize: 18,
+    color: "#059669",
+    fontWeight: "bold",
+    marginTop: 2,
+  },
   footer: {
     position: "absolute",
     bottom: 30,
@@ -338,21 +391,90 @@ export default function VentasReportPDF({ data }: { data: ReportData }) {
           </View>
         </View>
 
-        {/* Ventas */}
-        {sales.length > 0 && (
+        {/* Resumen Fiscal */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Desglose Fiscal</Text>
+          <View style={styles.summaryGrid}>
+            <View style={styles.summaryCard}>
+              <Text style={styles.summaryCardLabel}>Ventas Facturadas</Text>
+              <Text style={styles.summaryCardValue}>
+                {formatCurrency(summary.totalFacturado)}
+              </Text>
+            </View>
+            <View style={styles.summaryCard}>
+              <Text style={styles.summaryCardLabel}>Ticket Interno (No Fiscal)</Text>
+              <Text style={styles.summaryCardValue}>
+                {formatCurrency(summary.totalTicketInterno)}
+              </Text>
+            </View>
+            <View style={styles.summaryCard}>
+              <Text style={styles.summaryCardLabel}>Ventas Directas</Text>
+              <Text style={styles.summaryCardValue}>
+                {formatCurrency(summary.totalDirecto)}
+              </Text>
+            </View>
+            <View style={styles.summaryCard}>
+              <Text style={styles.summaryCardLabel}>Estado General</Text>
+              <Text style={styles.summaryCardValue}>
+                {summary.porcentajeFacturado}% Facturado
+              </Text>
+            </View>
+          </View>
+          <Text style={styles.ivaNote}>* Todos los montos se expresan en valores finales (IVA incluido).</Text>
+        </View>
+
+        {/* Ventas Facturadas */}
+        {sales.some(s => s.fiscalType === "FACTURADA") && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>
-              Ventas ({sales.length} registros)
-            </Text>
+            <Text style={styles.sectionTitle}>Ventas Facturadas (Fiscales)</Text>
+            <View style={styles.table}>
+              <View style={styles.tableHeader}>
+                <Text style={styles.col1}>Fecha Emisión</Text>
+                <Text style={styles.colFiscal}>Nro Factura / CAE</Text>
+                <Text style={styles.colMethod}>Método</Text>
+                <Text style={styles.col3}>Responsable</Text>
+                <Text style={styles.colTotal}>Total</Text>
+              </View>
+              {sales.filter(s => s.fiscalType === "FACTURADA").map((sale, index) => (
+                <View
+                  key={sale.id}
+                  style={[
+                    styles.tableRow,
+                    ...(index % 2 === 1 ? [styles.tableRowAlt] : []),
+                  ]}
+                >
+                  <Text style={styles.col1}>{formatDateTime(sale.invoiceInfo?.fechaEmision || sale.date)}</Text>
+                  <View style={styles.colFiscal}>
+                    <Text style={{ fontWeight: "bold" }}>{sale.invoiceInfo?.nro}</Text>
+                    <Text style={{ fontSize: 7, color: "#6b7280" }}>CAE: {sale.invoiceInfo?.cae}</Text>
+                  </View>
+                  <Text style={styles.colMethod}>{getPaymentMethodLabel(sale.paymentMethod)}</Text>
+                  <Text style={styles.col3}>{sale.employeeName}</Text>
+                  <Text style={styles.colTotal}>{formatCurrency(sale.total)}</Text>
+                </View>
+              ))}
+              <View style={styles.tableTotalRow}>
+                <Text style={styles.colFull}>Total Facturado</Text>
+                <Text style={styles.colTotal}>{formatCurrency(summary.totalFacturado)}</Text>
+              </View>
+            </View>
+          </View>
+        )}
+
+        {/* Ventas Ticket Interno */}
+        {sales.some(s => s.fiscalType === "TICKET_INTERNO") && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Ventas con Ticket Interno (No Fiscal)</Text>
             <View style={styles.table}>
               <View style={styles.tableHeader}>
                 <Text style={styles.col1}>Fecha</Text>
-                <Text style={styles.col2}>Método</Text>
-                <Text style={styles.col3}>Empleado</Text>
+                <Text style={styles.colTicket}>Ticket</Text>
+                <Text style={styles.colMethod}>Método</Text>
+                <Text style={styles.col3}>Responsable</Text>
                 <Text style={styles.col4}>Items</Text>
-                <Text style={styles.col5}>Total</Text>
+                <Text style={styles.colTotal}>Total</Text>
               </View>
-              {sales.slice(0, 50).map((sale, index) => (
+              {sales.filter(s => s.fiscalType === "TICKET_INTERNO").map((sale, index) => (
                 <View
                   key={sale.id}
                   style={[
@@ -361,24 +483,52 @@ export default function VentasReportPDF({ data }: { data: ReportData }) {
                   ]}
                 >
                   <Text style={styles.col1}>{formatDateTime(sale.date)}</Text>
-                  <Text style={styles.col2}>
-                    {getPaymentMethodLabel(sale.paymentMethod)}
-                  </Text>
+                  <Text style={styles.colTicket}>#{sale.ticketNumber}</Text>
+                  <Text style={styles.colMethod}>{getPaymentMethodLabel(sale.paymentMethod)}</Text>
                   <Text style={styles.col3}>{sale.employeeName}</Text>
                   <Text style={styles.col4}>{sale.itemsCount}</Text>
-                  <Text style={styles.col5}>
-                    {formatCurrency(sale.total)}
-                  </Text>
+                  <Text style={styles.colTotal}>{formatCurrency(sale.total)}</Text>
                 </View>
               ))}
-              {sales.length > 50 && (
-                <View style={{ padding: 8, backgroundColor: "#fef3c7" }}>
-                  <Text style={{ fontSize: 9, color: "#92400e" }}>
-                    * Se muestran las primeras 50 ventas de {sales.length}{" "}
-                    registros
-                  </Text>
+              <View style={styles.tableTotalRow}>
+                <Text style={styles.colFull}>Total Ticket Interno</Text>
+                <Text style={styles.colTotal}>{formatCurrency(summary.totalTicketInterno)}</Text>
+              </View>
+            </View>
+          </View>
+        )}
+
+        {/* Ventas Directas */}
+        {sales.some(s => s.fiscalType === "DIRECTA") && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Ventas Directas (Sin Comprobante)</Text>
+            <View style={styles.table}>
+              <View style={styles.tableHeader}>
+                <Text style={styles.col1}>Fecha</Text>
+                <Text style={styles.colMethod}>Método</Text>
+                <Text style={styles.col3}>Responsable</Text>
+                <Text style={styles.col4}>Items</Text>
+                <Text style={styles.colTotal}>Total</Text>
+              </View>
+              {sales.filter(s => s.fiscalType === "DIRECTA").map((sale, index) => (
+                <View
+                  key={sale.id}
+                  style={[
+                    styles.tableRow,
+                    ...(index % 2 === 1 ? [styles.tableRowAlt] : []),
+                  ]}
+                >
+                  <Text style={styles.col1}>{formatDateTime(sale.date)}</Text>
+                  <Text style={styles.colMethod}>{getPaymentMethodLabel(sale.paymentMethod)}</Text>
+                  <Text style={styles.col3}>{sale.employeeName}</Text>
+                  <Text style={styles.col4}>{sale.itemsCount}</Text>
+                  <Text style={styles.colTotal}>{formatCurrency(sale.total)}</Text>
                 </View>
-              )}
+              ))}
+              <View style={styles.tableTotalRow}>
+                <Text style={styles.colFull}>Total Directo</Text>
+                <Text style={styles.colTotal}>{formatCurrency(summary.totalDirecto)}</Text>
+              </View>
             </View>
           </View>
         )}

@@ -424,26 +424,17 @@ export default async function LandingPage() {
           </div>
         </section>
 
-        {/* RUBROS */}
+       {/* RUBROS */}
 <div className="l-div" />
 <section className="l-section">
   <div className="lbl lbl-gold">Pensado para tu negocio</div>
-  <h2>Diseñado para no perder tiempo.</h2>
+  <h2>Hecho para negocios que no pueden perder tiempo.</h2>
 
   <div className="rubro-grid">
     {[
-      { icon: "🏪", name: "Kiosco", desc: "Más control, menos dependencia." },
-      { icon: "🛒", name: "Almacén", desc: "Stock ordenado sin esfuerzo." },
-      { icon: "🥩", name: "Carnicería", desc: "Menos merma, más margen." },
-      { icon: "🥖", name: "Panadería", desc: "Menos sobrante, más control." },
-      { icon: "🍎", name: "Verdulería", desc: "Menos merma, más rotación." },
-      { icon: "🍕", name: "Rotisería", desc: "Más velocidad, mismo orden." },
-      { icon: "💊", name: "Farmacia", desc: "Menos vencido, más control." },
-      { icon: "🌸", name: "Perfumería", desc: "Más claridad, menos errores." },
-      { icon: "🐶", name: "Pet shop", desc: "Stock siempre disponible." },
-      { icon: "📚", name: "Librería", desc: "Todo ubicable al instante." },
-      { icon: "👕", name: "Indumentaria", desc: "Variantes bajo control." },
-      { icon: "📦", name: "Mayorista", desc: "Volumen sin desorden." },
+      { icon: "🏪", name: "Kioscos", desc: "Ventas rápidas, control total." },
+      { icon: "🛒", name: "Almacenes", desc: "Stock ordenado sin esfuerzo." },
+      { icon: "⚡", name: "Negocios de Alto flujo", desc: "Velocidad sin errores." },
     ].map((item) => (
       <div key={item.name} className="rubro-card">
         <div style={{ fontSize: "28px" }}>{item.icon}</div>

@@ -1,7 +1,8 @@
 "use client";
 
-import { createContext, useContext, useState, ReactNode, useEffect } from "react";
+import { createContext, useContext, useState, ReactNode, useEffect, useCallback, useMemo } from "react";
 import { updateOnboardingFlags } from "@/app/actions/tour";
+import "driver.js/dist/driver.css";
 
 type OnboardingFlags = Record<string, boolean>;
 
@@ -12,6 +13,7 @@ interface TourContextType {
   masterActive: boolean;
   dismissAll: () => void;
   reactivateAll: () => void;
+  lastManualTrigger: number;
 }
 
 const TourContext = createContext<TourContextType | null>(null);
@@ -24,50 +26,63 @@ export function TourProvider({
   initialFlags?: OnboardingFlags;
 }) {
   const [flags, setFlags] = useState<OnboardingFlags>(initialFlags);
+  const [lastManualTrigger, setLastManualTrigger] = useState(0);
 
   useEffect(() => {
     setFlags(initialFlags);
   }, [initialFlags]);
 
-  const markModuleCompleted = (moduleName: string) => {
-    if (flags[moduleName]) return;
-    const newFlags = { ...flags, [moduleName]: true };
-    setFlags(newFlags);
+  const flagsRef = useMemo(() => ({ current: flags }), [flags]);
+
+  const markModuleCompleted = useCallback((moduleName: string) => {
+    if (flagsRef.current[moduleName]) return;
+
+    setFlags(prev => ({ ...prev, [moduleName]: true }));
+    
+    // Ejecutamos la acción fuera del ciclo de renderizado
     updateOnboardingFlags({ [moduleName]: true }).catch(console.error);
-  };
+  }, [flagsRef]);
 
-  const dismissAll = () => {
-    const newFlags = { ...flags, masterDismissed: true };
-    setFlags(newFlags);
+  const dismissAll = useCallback(() => {
+    if (flagsRef.current.masterDismissed) return;
+
+    setFlags(prev => ({ ...prev, masterDismissed: true }));
     updateOnboardingFlags({ masterDismissed: true }).catch(console.error);
-  };
+  }, [flagsRef]);
 
-  const reactivateAll = () => {
-    // Para reactivarlo, forzamos false en masterDismissed y en los módulos
-    const clearFlags = Object.keys(flags).reduce((acc, key) => {
+  const reactivateAll = useCallback(() => {
+    // Reseteamos todas las flags conocidas a false
+    const clearFlags = Object.keys(flagsRef.current).reduce((acc, key) => {
       acc[key] = false;
       return acc;
     }, {} as Record<string, boolean>);
     
+    // Forzamos que el despido maestro sea false
+    clearFlags.masterDismissed = false;
+    
     setFlags(clearFlags);
+    setLastManualTrigger(Date.now());
     updateOnboardingFlags(clearFlags).catch(console.error);
-  };
+  }, [flagsRef]);
 
-  const isModuleCompleted = (moduleName: string) => {
+  const isModuleCompleted = useCallback((moduleName: string) => {
     return !!flags[moduleName] || !!flags["masterDismissed"];
-  };
+  }, [flags]);
 
-  const masterActive = !flags["masterDismissed"];
+  const masterActive = useMemo(() => !flags["masterDismissed"], [flags]);
+
+  const contextValue = useMemo(() => ({
+    flags,
+    markModuleCompleted,
+    isModuleCompleted,
+    masterActive,
+    dismissAll,
+    reactivateAll,
+    lastManualTrigger
+  }), [flags, markModuleCompleted, isModuleCompleted, masterActive, dismissAll, reactivateAll, lastManualTrigger]);
 
   return (
-    <TourContext.Provider value={{
-      flags,
-      markModuleCompleted,
-      isModuleCompleted,
-      masterActive,
-      dismissAll,
-      reactivateAll
-    }}>
+    <TourContext.Provider value={contextValue}>
       {children}
     </TourContext.Provider>
   );

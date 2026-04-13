@@ -2681,3 +2681,81 @@ body[data-text-scale] .product-btn-price,
     margin: 0 !important;
   }
 }
+
+
+/* ─── Clikit Tour: Opaque Focus Design (Driver.js) ─── */
+
+/* Overlay oscuro sólido para concentrar la atención y mejorar legibilidad */
+.driver-overlay {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* El Popover con fondo sólido y alto contraste */
+.clikit-tour-popover {
+  background: var(--surface) !important;
+  border: 1px solid var(--border-2) !important;
+  border-radius: 16px !important;
+  box-shadow: 
+    0 20px 40px rgba(0, 0, 0, 0.6),
+    0 0 0 1px rgba(255, 255, 255, 0.05) !important;
+  color: var(--text) !important;
+  padding: 24px !important;
+  font-family: var(--font-sans) !important;
+  max-width: 340px !important;
+}
+
+/* Título con peso para lectura rápida */
+.clikit-tour-popover .driver-popover-title {
+  font-size: 19px !important;
+  font-weight: 800 !important;
+  color: #fff !important;
+  margin-bottom: 8px !important;
+  letter-spacing: -0.02em !important;
+}
+
+/* Descripción con alto contraste */
+.clikit-tour-popover .driver-popover-description {
+  font-size: 14.5px !important;
+  color: #e2e8f0 !important;
+  line-height: 1.55 !important;
+}
+
+/* Footer y Botones */
+.clikit-tour-popover .driver-popover-footer {
+  margin-top: 20px !important;
+  display: flex !important;
+  gap: 8px !important;
+  justify-content: flex-end !important;
+}
+
+/* Botón Principal (Verde Clikit) */
+.clikit-tour-popover .driver-popover-btn {
+  background: var(--primary) !important;
+  color: #000 !important;
+  border: none !important;
+  border-radius: 10px !important;
+  padding: 9px 16px !important;
+  font-size: 13.5px !important;
+  font-weight: 700 !important;
+  text-shadow: none !important;
+}
+
+/* Botón Secundario */
+.clikit-tour-popover .driver-popover-prev-btn {
+  background: var(--surface-2) !important;
+  color: var(--text-2) !important;
+  border: 1px solid var(--border-2) !important;
+}
+
+/* Estilo del "Highlight" (Stage) con borde verde */
+.driver-stage {
+  border: 2px solid var(--primary) !important;
+  box-shadow: 0 0 0 4000px rgba(6, 8, 13, 0.88) !important; /* Forzamos opacidad en el stage */
+  background-color: transparent !important;
+}
+
+/* Flecha */
+.driver-popover-arrow {
+  border-color: var(--surface) !important;
+}

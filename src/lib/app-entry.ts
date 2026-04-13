@@ -39,12 +39,20 @@ function canStartInSetup(
   );
 }
 
+export function isPartner(user: AppEntryUserLike | null | undefined): boolean {
+  return user?.role === "PARTNER";
+}
+
 export function resolveAccessAwareAppStartPath(
   user: AppEntryUserLike | null | undefined,
   access: Pick<AppAccessLike, "allowed" | "reason" | "firstBranchId" | "kioscoId">,
 ) {
   if (isPlatformAdmin(user)) {
     return "/admin";
+  }
+
+  if (isPartner(user)) {
+    return "/partner";
   }
 
   if (access.reason === "NO_KIOSCO" || !access.kioscoId) {
@@ -79,6 +87,10 @@ export function resolveSessionAppStartPath(user: AppEntryUserLike | null | undef
     return "/admin";
   }
 
+  if (isPartner(user)) {
+    return "/partner";
+  }
+
   if (typeof user.appStartPath === "string" && user.appStartPath) {
     return user.appStartPath;
   }
@@ -97,6 +109,10 @@ export function resolveSessionAppLabel(user: AppEntryUserLike | null | undefined
 
   if (isPlatformAdmin(user)) {
     return "Ir al admin";
+  }
+
+  if (isPartner(user)) {
+    return "Ver mi panel";
   }
 
   const appStartPath = resolveSessionAppStartPath(user);

@@ -5,10 +5,44 @@ import { resolveSessionAppStartPath } from "@/lib/app-entry";
 import { auth } from "@/lib/auth";
 import { isBranchAccessKeyPath } from "@/lib/branch-access-key";
 
+// Subdominios que sirven el panel del partner
+const PARTNER_HOSTNAMES = ["partner.clikit.com.ar", "partners.clikit.com.ar"];
+
+function isPartnerSubdomain(hostname: string): boolean {
+  return PARTNER_HOSTNAMES.some((h) => hostname === h || hostname.startsWith(h));
+}
+
 export default auth((req: NextAuthRequest) => {
   const { nextUrl } = req;
+  const hostname = req.headers.get("host") ?? "";
   const isLoggedIn = !!req.auth?.user?.id;
+  const userRole = req.auth?.user?.role;
   const appStartPath = isLoggedIn ? resolveSessionAppStartPath(req.auth?.user) : null;
+
+  // ── Subdominio partner → reescribir a /partner internamente ──────────────
+  if (isPartnerSubdomain(hostname)) {
+    // Si no está logueado, mandar al login con callbackUrl
+    if (!isLoggedIn) {
+      const loginUrl = new URL("/login", nextUrl);
+      loginUrl.searchParams.set("callbackUrl", nextUrl.toString());
+      return Response.redirect(loginUrl);
+    }
+
+    // Si está logueado pero no es PARTNER, redirigir a su path correcto
+    if (userRole !== "PARTNER") {
+      return Response.redirect(new URL(appStartPath ?? "/", nextUrl));
+    }
+
+    // Reescribir /cualquier-cosa → /partner/cualquier-cosa internamente
+    const rewriteUrl = new URL(
+      `/partner${nextUrl.pathname === "/" ? "" : nextUrl.pathname}`,
+      nextUrl,
+    );
+    rewriteUrl.search = nextUrl.search;
+    return NextResponse.rewrite(rewriteUrl);
+  }
+
+  // ── Lógica existente ─────────────────────────────────────────────────────
   const isEmployeeAccessLink = isBranchAccessKeyPath(nextUrl.pathname);
   const isInternalEmployeeAccess = nextUrl.pathname.startsWith("/employee-access/");
   const isOnLogin = nextUrl.pathname.startsWith("/login");
@@ -32,6 +66,30 @@ export default auth((req: NextAuthRequest) => {
     return Response.redirect(new URL(appStartPath ?? "/", nextUrl));
   }
 
+  // ── Protección de rutas por rol ──────────────────────────────────────────
+
+  // /admin solo para PLATFORM_ADMIN
+  if (nextUrl.pathname.startsWith("/admin")) {
+    if (!isLoggedIn) {
+      return Response.redirect(new URL("/login", nextUrl));
+    }
+    if (userRole !== "PLATFORM_ADMIN") {
+      return Response.redirect(new URL(appStartPath ?? "/", nextUrl));
+    }
+  }
+
+  // /partner solo para PARTNER — en el dominio principal
+  // (en subdominio ya está manejado arriba)
+  if (nextUrl.pathname.startsWith("/partner")) {
+    if (!isLoggedIn) {
+      return Response.redirect(new URL("/login", nextUrl));
+    }
+    if (userRole !== "PARTNER") {
+      return Response.redirect(new URL(appStartPath ?? "/", nextUrl));
+    }
+  }
+
+  // ── Rutas públicas ───────────────────────────────────────────────────────
   const isPublic =
     nextUrl.pathname === "/" ||
     isOnLogin ||
@@ -48,7 +106,8 @@ export default auth((req: NextAuthRequest) => {
     return;
   }
 
-  const isApiRoute = nextUrl.pathname.startsWith("/api") && !nextUrl.pathname.startsWith("/api/auth");
+  const isApiRoute =
+    nextUrl.pathname.startsWith("/api") && !nextUrl.pathname.startsWith("/api/auth");
   if (isApiRoute) {
     return;
   }

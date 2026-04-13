@@ -15,6 +15,9 @@ export function ProductModalTour() {
 
     // Pequeño delay para que el modal termine de renderizarse
     const timer = setTimeout(() => {
+      // Verificamos si los elementos clave están en el DOM antes de disparar el tour
+      if (!document.querySelector("#product-modal-barcode")) return;
+
       import("driver.js").then(({ driver }) => {
         if (destroyed) return;
 
@@ -22,21 +25,23 @@ export function ProductModalTour() {
           showProgress: false,
           animate: true,
           smoothScroll: true,
-          allowClose: false,
+          allowClose: true,
           // @ts-expect-error The type definitions for driver.js are outdated but it works
           allowInteraction: true,
-          overlayColor: "rgba(6, 8, 13, 0.8)",
+          overlayColor: "rgba(6, 8, 13, 0.9)",
+          stagePadding: 16, // Más padding para que el input respire en el modal
+          stageRadius: 16,
           popoverClass: "clikit-tour-popover",
           onDestroyStarted: () => {
-            markModuleCompleted("product-modal");
-            driverObj?.destroy();
+             markModuleCompleted("product-modal");
+             driverObj?.destroy();
           },
           steps: [
             {
               element: "#product-modal-barcode",
               popover: {
                 title: "Código de Barras 🎯",
-                description: "Si el producto tiene código, anotalo o escanealo acá. ¡Te va a salvar la vida cuando quieras cobrar rápido!",
+                description: "Si el producto tiene código, anotalo o escanealo acá para que la caja lo reconozca al instante.",
                 side: "bottom",
                 align: "start",
                 nextBtnText: "Siguiente →",
@@ -46,8 +51,8 @@ export function ProductModalTour() {
             {
               element: "#product-modal-prices",
               popover: {
-                title: "Precios y Rentabilidad 💰",
-                description: "Podés poner el Costo y el Precio de Venta. Te vamos a calcular automáticamente tu rentabilidad.",
+                title: "Precios y Margen 💰",
+                description: "Cargando el costo y el precio de venta, te calculamos automáticamente la rentabilidad de cada producto.",
                 side: "bottom",
                 align: "center",
                 nextBtnText: "Entendido",
@@ -62,13 +67,11 @@ export function ProductModalTour() {
           ],
         });
 
-        window.requestAnimationFrame(() => {
-          if (!destroyed && driverObj) {
-            driverObj.drive();
-          }
-        });
+        if (!destroyed && driverObj) {
+          driverObj.drive();
+        }
       });
-    }, 400); // 400ms delay for mount animation
+    }, 500); // 500ms delay for mount animation
 
     return () => {
       destroyed = true;

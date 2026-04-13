@@ -19,6 +19,10 @@ interface ReportData {
     totalRetiros: number;
     ganancia: number | null;
     hasCosts: boolean;
+    totalFacturado: number;
+    totalTicketInterno: number;
+    totalDirecto: number;
+    porcentajeFacturado: number;
   };
   stats: {
     totalVentas: number;
@@ -33,6 +37,13 @@ interface ReportData {
     paymentMethod: string;
     employeeName: string;
     itemsCount: number;
+    fiscalType: "FACTURADA" | "TICKET_INTERNO" | "DIRECTA";
+    invoiceInfo?: {
+      nro: string;
+      cae: string;
+      fechaEmision: string;
+    };
+    ticketNumber?: number;
   }>;
   expenses: Array<{
     id: string;

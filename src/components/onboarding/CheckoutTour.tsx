@@ -13,6 +13,10 @@ export function CheckoutTour() {
     let destroyed = false;
 
     const timer = setTimeout(() => {
+      // Verificamos si los elementos clave están en el DOM antes de disparar el tour
+      const searchBox = document.querySelector("#checkout-search");
+      if (!searchBox) return;
+
       import("driver.js").then(({ driver }) => {
         if (destroyed) return;
 
@@ -20,10 +24,12 @@ export function CheckoutTour() {
           showProgress: false,
           animate: true,
           smoothScroll: true,
-          allowClose: false,
+          allowClose: true,
           // @ts-expect-error The type definitions for driver.js are outdated but it works
           allowInteraction: true,
-          overlayColor: "rgba(6, 8, 13, 0.8)",
+          overlayColor: "rgba(6, 8, 13, 0.9)",
+          stagePadding: 10,
+          stageRadius: 16,
           popoverClass: "clikit-tour-popover",
           onDestroyStarted: () => {
              markModuleCompleted("checkout");
@@ -34,7 +40,7 @@ export function CheckoutTour() {
               element: "#checkout-search",
               popover: {
                 title: "Buscador y Lector 🔍",
-                description: "Acá podés buscar productos por nombre, o usar tu lector de códigos de barras (funciona en cualquier momento, sin cliquear acá).",
+                description: "Acá podés buscar productos por nombre, o usar tu lector de códigos de barras (funciona en cualquier momento).",
                 side: "bottom",
                 align: "start",
                 nextBtnText: "Siguiente →",
@@ -57,7 +63,7 @@ export function CheckoutTour() {
               element: "#checkout-pay",
               popover: {
                 title: "Cobrar 💵",
-                description: "Cuando termines, elegí el medio de pago (Efectivo, Mercado Pago, etc) y la venta se guardará automáticamente.",
+                description: "Cuando termines, elegí el medio de pago. Tip: Si no hay ticket, esta área se mantiene oculta para ahorrar espacio.",
                 side: "top",
                 align: "center",
                 nextBtnText: "Entendido",
@@ -72,13 +78,11 @@ export function CheckoutTour() {
           ],
         });
 
-        window.requestAnimationFrame(() => {
-          if (!destroyed && driverObj) {
-            driverObj.drive();
-          }
-        });
+        if (!destroyed && driverObj) {
+          driverObj.drive();
+        }
       });
-    }, 400);
+    }, 800);
 
     return () => {
       destroyed = true;

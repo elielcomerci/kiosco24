@@ -75,6 +75,15 @@ async function resolveOwnerAppContext(user: OwnerTokenUser) {
     };
   }
 
+  // PARTNER — no tiene kiosco, no necesita consultar access context
+  if (user.role === UserRole.PARTNER) {
+    return {
+      branchId: undefined,
+      mainBusinessActivity: undefined,
+      appStartPath: "/partner",
+    };
+  }
+
   const [access, kiosco] = await Promise.all([
     getKioscoAccessContextForSession({
       id: user.id,
@@ -114,6 +123,22 @@ function applyEmployeeAppContext(
   token.branchId = user.branchId;
   delete token.mainBusinessActivity;
   token.appStartPath = user.branchId ? `/${user.branchId}/caja` : "/onboarding";
+  token.appContextVersion = APP_CONTEXT_VERSION;
+}
+
+function applyPartnerAppContext(token: {
+  employeeId?: string;
+  employeeRole?: EmployeeRole;
+  branchId?: string;
+  mainBusinessActivity?: string;
+  appStartPath?: string;
+  appContextVersion?: number;
+}) {
+  delete token.employeeId;
+  delete token.employeeRole;
+  delete token.branchId;
+  delete token.mainBusinessActivity;
+  token.appStartPath = "/partner";
   token.appContextVersion = APP_CONTEXT_VERSION;
 }
 
@@ -277,6 +302,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         if ((user.role ?? UserRole.OWNER) === UserRole.EMPLOYEE) {
           applyEmployeeAppContext(token, user);
+        } else if (user.role === UserRole.PARTNER) {
+          // PARTNER — contexto simple, sin queries a kiosco
+          applyPartnerAppContext(token);
         } else {
           await applyOwnerAppContext(token, {
             id: userId,
@@ -315,6 +343,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         return token;
       }
 
+      // Requests subsiguientes: partner
+      if (token.role === UserRole.PARTNER) {
+        if (token.appContextVersion !== APP_CONTEXT_VERSION) {
+          applyPartnerAppContext(token);
+        }
+        return token;
+      }
+
       if (!token.role) {
         token.role = UserRole.OWNER;
       }
@@ -327,7 +363,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             email: token.email ?? null,
           });
         } else {
-          token.appStartPath = isPlatformAdmin({ role: token.role as UserRole | undefined, email: token.email ?? null })
+          token.appStartPath = isPlatformAdmin({
+            role: token.role as UserRole | undefined,
+            email: token.email ?? null,
+          })
             ? "/admin"
             : "/onboarding";
           token.appContextVersion = APP_CONTEXT_VERSION;

@@ -4,30 +4,36 @@ import { useEffect } from "react";
 import { useTour } from "./TourProvider";
 
 export function ProductsGridTour({ shouldShow }: { shouldShow: boolean }) {
-  const { masterActive, isModuleCompleted, markModuleCompleted, dismissAll } = useTour();
-
+  const { masterActive, isModuleCompleted, markModuleCompleted, dismissAll, lastManualTrigger } = useTour();
+  
   useEffect(() => {
     // Si la persona ya desactivó todo o si este módulo se completó, abortamos.
     if (!masterActive || isModuleCompleted("productos-grid")) return;
-    if (!shouldShow) return;
+
+    // Si NO es un trigger manual reciente (últimos 2 seg), respetamos shouldShow
+    const isManual = (Date.now() - lastManualTrigger) < 2000;
+    if (!shouldShow && !isManual) return;
 
     let driverObj: any = null;
     let destroyed = false;
 
     const initTour = () => {
-      import("driver.js").then(({ driver }) => {
-        import("driver.js/dist/driver.css" as unknown as string).catch(() => {});
+      // Verificamos si los elementos clave están en el DOM antes de disparar el tour
+      if (!document.querySelector("#tour-new-product")) return;
 
+      import("driver.js").then(({ driver }) => {
         if (destroyed) return;
 
         driverObj = driver({
           showProgress: false,
           animate: true,
           smoothScroll: true,
-          allowClose: false,
+          allowClose: true,
           // @ts-expect-error The type definitions for driver.js are outdated but it works
           allowInteraction: true,
-          overlayColor: "rgba(6, 8, 13, 0.82)",
+          overlayColor: "rgba(6, 8, 13, 0.9)",
+          stagePadding: 10,
+          stageRadius: 16,
           popoverClass: "clikit-tour-popover",
           onDestroyStarted: () => {
             driverObj?.destroy();
@@ -36,9 +42,9 @@ export function ProductsGridTour({ shouldShow }: { shouldShow: boolean }) {
             {
               element: "#tour-new-product",
               popover: {
-                title: "Empezar a agregar productos 📦",
+                title: "Nuevo Producto 📦",
                 description:
-                  "Tocá acá para cargar tu inventario. Podés escanear el código de barras y te traemos la foto y marca automáticamente.",
+                  "Tocá acá para cargar tu inventario. Podés escanear el código de barras y te traemos los datos automáticamente.",
                 side: "bottom",
                 align: "start",
                 nextBtnText: "Siguiente →",
@@ -48,14 +54,14 @@ export function ProductsGridTour({ shouldShow }: { shouldShow: boolean }) {
             {
               element: "#tour-receive-btn",
               popover: {
-                title: "Sumar stock velozmente 📥",
+                title: "Ingreso de Stock 📥",
                 description:
-                  "Cuando te llegue mercadería, desde acá podés sumar las cantidades y cargar fechas de vencimiento.",
+                  "Cuando llegue mercadería, usá este botón para sumar cantidades y cargar vencimientos rápidamente.",
                 side: "bottom",
                 align: "start",
                 nextBtnText: "Siguiente →",
                 prevBtnText: "← Atrás",
-                doneBtnText: "Entendido, no mostrar más",
+                doneBtnText: "Entendido",
                 onNextClick: () => {
                    markModuleCompleted("productos-grid");
                    driverObj?.destroy();
@@ -65,23 +71,23 @@ export function ProductsGridTour({ shouldShow }: { shouldShow: boolean }) {
           ],
         });
 
-        window.requestAnimationFrame(() => {
-          if (!destroyed && driverObj) {
-            driverObj.drive();
-          }
-        });
+        if (!destroyed && driverObj) {
+          driverObj.drive();
+        }
       });
     };
 
-    initTour();
+    // Pequeño delay para asegurar que el DOM esté listo tras el clic en el menú
+    const timer = setTimeout(initTour, 200);
 
     return () => {
       destroyed = true;
+      clearTimeout(timer);
       if (driverObj) {
         driverObj.destroy();
       }
     };
-  }, [masterActive, isModuleCompleted, shouldShow, markModuleCompleted, dismissAll]);
+  }, [masterActive, isModuleCompleted, shouldShow, markModuleCompleted, dismissAll, lastManualTrigger]);
 
   return null;
 }

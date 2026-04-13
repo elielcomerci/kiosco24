@@ -18,6 +18,11 @@ type ReportVentas = {
     totalRetiros: number;
     ganancia: number | null;
     hasCosts: boolean;
+    // Fiscal breakdown
+    totalFacturado: number;
+    totalTicketInterno: number;
+    totalDirecto: number;
+    porcentajeFacturado: number;
   };
   stats: {
     totalVentas: number;
@@ -32,6 +37,14 @@ type ReportVentas = {
     paymentMethod: string;
     employeeName: string;
     itemsCount: number;
+    // Fiscal info
+    fiscalType: "FACTURADA" | "TICKET_INTERNO" | "DIRECTA";
+    invoiceInfo?: {
+      nro: string;
+      cae: string;
+      fechaEmision: string;
+    };
+    ticketNumber?: number;
   }>;
   expenses: Array<{
     id: string;
@@ -51,7 +64,7 @@ type ReportVentas = {
   shifts: Array<{
     id: string;
     openedAt: string;
-    closedAt?: string;
+    closedAt: string | null;
     employeeName: string;
     openingAmount: number;
     closingAmount: number | null;
@@ -64,6 +77,15 @@ type SaleRow = {
   total: number;
   paymentMethod: string;
   createdAt: Date;
+  ticketNumber: number | null;
+  invoice: {
+    comprobanteTipo: number | null;
+    comprobanteNro: number | null;
+    puntoDeVenta: number | null;
+    cae: string | null;
+    status: string;
+    fechaEmision: Date | null;
+  } | null;
   items: Array<{
     name: string;
     quantity: number;
@@ -123,15 +145,26 @@ export const getVentasReport = async (branchId: string, from: string, to: string
           total: true,
           paymentMethod: true,
           createdAt: true,
-        items: {
-          select: {
-            name: true,
-            quantity: true,
-            price: true,
-            cost: true,
-            soldByWeight: true,
+          ticketNumber: true,
+          invoice: {
+            select: {
+              comprobanteTipo: true,
+              comprobanteNro: true,
+              puntoDeVenta: true,
+              cae: true,
+              status: true,
+              fechaEmision: true,
+            }
           },
-        },
+          items: {
+            select: {
+              name: true,
+              quantity: true,
+              price: true,
+              cost: true,
+              soldByWeight: true,
+            },
+          },
           shift: { select: { employeeName: true } },
           createdByEmployee: { select: { name: true } },
         },
@@ -197,6 +230,11 @@ export const getVentasReport = async (branchId: string, from: string, to: string
     let ganancia = 0;
     let hasCosts = false;
 
+    // Fiscal breakdown
+    let totalFacturado = 0;
+    let totalTicketInterno = 0;
+    let totalDirecto = 0;
+
     for (const sale of sales as SaleRow[]) {
       switch (sale.paymentMethod) {
         case "CASH":
@@ -219,9 +257,19 @@ export const getVentasReport = async (branchId: string, from: string, to: string
           break;
       }
 
+      // Classification priority:
+      // 1. Facturada (Valid invoice + CAE + Issued)
+      // 2. Ticket Interno (TicketNumber exists)
+      // 3. Directa (Rest)
+      if (sale.invoice?.status === "ISSUED" && sale.invoice.cae) {
+        totalFacturado += sale.total;
+      } else if (sale.ticketNumber !== null) {
+        totalTicketInterno += sale.total;
+      } else {
+        totalDirecto += sale.total;
+      }
+
       for (const item of sale.items) {
-        // The report needs the gross margin estimate by item cost.
-        // Cost is not returned to the client, only used for this aggregation.
         const cost = item.cost;
         if (cost !== null) {
           hasCosts = true;
@@ -253,6 +301,8 @@ export const getVentasReport = async (branchId: string, from: string, to: string
       ganancia -= totalGastos;
     }
 
+    const porcentajeFacturado = totalVentas > 0 ? (totalFacturado / totalVentas) * 100 : 0;
+
     return {
       branchName: branch?.name ?? "Sucursal",
       kioscoName: branch?.kiosco?.name ?? "Kiosco",
@@ -269,6 +319,10 @@ export const getVentasReport = async (branchId: string, from: string, to: string
         totalRetiros: roundMoney(totalRetiros),
         ganancia: hasCosts ? roundMoney(ganancia) : null,
         hasCosts,
+        totalFacturado: roundMoney(totalFacturado),
+        totalTicketInterno: roundMoney(totalTicketInterno),
+        totalDirecto: roundMoney(totalDirecto),
+        porcentajeFacturado: Math.round(porcentajeFacturado),
       },
       stats: {
         totalVentas: sales.length,
@@ -276,14 +330,33 @@ export const getVentasReport = async (branchId: string, from: string, to: string
         totalRetiros: withdrawals.length,
         totalTurnos: shifts.length,
       },
-      sales: (sales as SaleRow[]).map((s) => ({
-        id: s.id,
-        date: s.createdAt.toISOString(),
-        total: s.total,
-        paymentMethod: s.paymentMethod,
-        employeeName: s.createdByEmployee?.name ?? s.shift?.employeeName ?? "N/A",
-        itemsCount: s.items.length,
-      })),
+      sales: (sales as SaleRow[]).map((s) => {
+        let fiscalType: "FACTURADA" | "TICKET_INTERNO" | "DIRECTA" = "DIRECTA";
+        let invoiceInfo = undefined;
+
+        if (s.invoice?.status === "ISSUED" && s.invoice.cae) {
+          fiscalType = "FACTURADA";
+          invoiceInfo = {
+            nro: `${String(s.invoice.puntoDeVenta).padStart(4, "0")}-${String(s.invoice.comprobanteNro).padStart(8, "0")}`,
+            cae: s.invoice.cae,
+            fechaEmision: (s.invoice.fechaEmision || s.createdAt).toISOString(),
+          };
+        } else if (s.ticketNumber !== null) {
+          fiscalType = "TICKET_INTERNO";
+        }
+
+        return {
+          id: s.id,
+          date: s.createdAt.toISOString(),
+          total: s.total,
+          paymentMethod: s.paymentMethod,
+          employeeName: s.createdByEmployee?.name ?? s.shift?.employeeName ?? "N/A",
+          itemsCount: s.items.length,
+          fiscalType,
+          invoiceInfo,
+          ticketNumber: s.ticketNumber || undefined,
+        };
+      }),
       expenses: (expenses as ExpenseRow[]).map((e) => ({
         id: e.id,
         date: e.createdAt.toISOString(),
@@ -302,7 +375,7 @@ export const getVentasReport = async (branchId: string, from: string, to: string
       shifts: (shifts as ShiftRow[]).map((s) => ({
         id: s.id,
         openedAt: s.openedAt.toISOString(),
-        closedAt: s.closedAt?.toISOString(),
+        closedAt: s.closedAt?.toISOString() || null,
         employeeName: s.employeeName,
         openingAmount: s.openingAmount,
         closingAmount: s.closingAmount,

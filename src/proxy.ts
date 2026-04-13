@@ -39,28 +39,54 @@ export default auth((req: NextAuthRequest) => {
   // ── Subdominio partner → reescribir a /partner internamente ──────────────
   if (isPartnerSubdomain(hostname)) {
     const origin = `${req.nextUrl.protocol}//${hostname}`;
+
+    // Rutas protegidas: requieren PARTNER + auth
+    const protectedPaths = ["/partner/cartera", "/partner/link", "/partner/ganancias", "/partner/clientes"];
+    const isProtected = protectedPaths.some((p) => nextUrl.pathname.startsWith(p));
+
+    // Rutas públicas: landing, unirse, auth
     const isAuthPath = nextUrl.pathname.startsWith("/login") ||
                        nextUrl.pathname === "/register" ||
                        nextUrl.pathname.startsWith("/api/auth");
+    const isPublicLanding = nextUrl.pathname === "/" ||
+                            nextUrl.pathname === "/landing" ||
+                            nextUrl.pathname === "/unirse";
 
-    // Auth paths: let them render normally (no redirect loop)
+    // Auth paths: render normally
     if (isAuthPath) {
       return NextResponse.next();
     }
 
-    // Si no está logueado, mandar al login con callbackUrl
-    if (!isLoggedIn) {
+    // Public landing paths → rewrite to /partner/landing or /partner/unirse
+    if (nextUrl.pathname === "/") {
+      const url = new URL("/partner/landing", origin);
+      url.search = nextUrl.search;
+      return NextResponse.rewrite(url);
+    }
+    if (nextUrl.pathname === "/landing") {
+      const url = new URL("/partner/landing", origin);
+      url.search = nextUrl.search;
+      return NextResponse.rewrite(url);
+    }
+    if (nextUrl.pathname === "/unirse") {
+      const url = new URL("/partner/unirse", origin);
+      url.search = nextUrl.search;
+      return NextResponse.rewrite(url);
+    }
+
+    // Rutas protegidas sin auth → redirect al login
+    if (isProtected && !isLoggedIn) {
       const loginUrl = new URL("/login", origin);
       loginUrl.searchParams.set("callbackUrl", `${origin}/`);
       return Response.redirect(loginUrl);
     }
 
-    // Si está logueado pero no es PARTNER, redirigir a su path correcto
+    // Si está logueado pero no es PARTNER → redirigir a su app
     if (userRole !== "PARTNER") {
       return Response.redirect(new URL(appStartPath ?? "/", origin));
     }
 
-    // Reescribir /cualquier-cosa → /partner/cualquier-cosa internamente
+    // Partners logueados → reescribir a /partner/...
     const rewriteUrl = new URL(
       `/partner${nextUrl.pathname === "/" ? "" : nextUrl.pathname}`,
       origin,

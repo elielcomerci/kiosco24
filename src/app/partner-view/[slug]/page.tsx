@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import BrandLogo from "@/components/branding/BrandLogo";
@@ -246,7 +247,7 @@ export default async function PartnerViewPage({ params }: PartnerViewPageProps) 
             <div className="pv-partner-card">
               <div className="pv-avatar">
                 {partner.user.image ? (
-                  <img src={partner.user.image} alt={displayName} />
+                  <Image src={partner.user.image} alt={displayName} fill className="object-cover" />
                 ) : (
                   initials
                 )}

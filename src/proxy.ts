@@ -38,22 +38,24 @@ export default auth((req: NextAuthRequest) => {
 
   // ── Subdominio partner → reescribir a /partner internamente ──────────────
   if (isPartnerSubdomain(hostname)) {
+    const origin = `${req.nextUrl.protocol}//${hostname}`;
+
     // Si no está logueado, mandar al login con callbackUrl
     if (!isLoggedIn) {
-      const loginUrl = new URL("/login", nextUrl);
-      loginUrl.searchParams.set("callbackUrl", nextUrl.toString());
+      const loginUrl = new URL("/login", origin);
+      loginUrl.searchParams.set("callbackUrl", `${origin}/`);
       return Response.redirect(loginUrl);
     }
 
     // Si está logueado pero no es PARTNER, redirigir a su path correcto
     if (userRole !== "PARTNER") {
-      return Response.redirect(new URL(appStartPath ?? "/", nextUrl));
+      return Response.redirect(new URL(appStartPath ?? "/", origin));
     }
 
     // Reescribir /cualquier-cosa → /partner/cualquier-cosa internamente
     const rewriteUrl = new URL(
       `/partner${nextUrl.pathname === "/" ? "" : nextUrl.pathname}`,
-      nextUrl,
+      origin,
     );
     rewriteUrl.search = nextUrl.search;
     return NextResponse.rewrite(rewriteUrl);
@@ -62,7 +64,8 @@ export default auth((req: NextAuthRequest) => {
   // ── Subdominio dinámico {slug} → /partner-view/{slug} ─────────────────
   const viewSlug = getViewSlug(hostname);
   if (viewSlug) {
-    const rewriteUrl = new URL(`/partner-view/${viewSlug}`, nextUrl);
+    const origin = `${req.nextUrl.protocol}//${hostname}`;
+    const rewriteUrl = new URL(`/partner-view/${viewSlug}`, origin);
     rewriteUrl.search = nextUrl.search;
     return NextResponse.rewrite(rewriteUrl);
   }

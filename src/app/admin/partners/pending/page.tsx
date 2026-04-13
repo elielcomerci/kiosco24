@@ -45,7 +45,7 @@ export default async function AdminPendingPartners() {
       createdAt: true,
       invitedBy: { select: { referralCode: true } },
       user: {
-        select: { name: true, email: true },
+        select: { name: true, firstName: true, lastName: true, email: true },
       },
     },
     orderBy: { createdAt: "desc" },
@@ -87,7 +87,9 @@ export default async function AdminPendingPartners() {
             >
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", flexWrap: "wrap", gap: "8px" }}>
                 <div>
-                  <div style={{ fontWeight: 700, fontSize: "15px" }}>{p.user.name ?? "Sin nombre"}</div>
+                  <div style={{ fontWeight: 700, fontSize: "15px" }}>
+                    {p.user.name ?? [p.user.firstName, p.user.lastName].filter(Boolean).join(" ") ?? p.user.email}
+                  </div>
                   <div style={{ fontSize: "13px", color: "var(--text-3)" }}>{p.user.email}</div>
                 </div>
                 <div style={{

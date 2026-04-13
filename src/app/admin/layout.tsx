@@ -266,23 +266,23 @@ export default async function AdminLayout({
               Dashboard
             </Link>
 
-            <Link href="/admin/kioscos" className="admin-nav__link">
+            <Link href="/admin/negocios" className="admin-nav__link">
               <svg className="admin-nav__icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
                 <path d="M2 6.5L8 2l6 4.5V14a1 1 0 01-1 1H3a1 1 0 01-1-1V6.5z" />
                 <path d="M6 15V9h4v6" />
               </svg>
-              Kioscos
+              Negocios
             </Link>
 
             <span className="admin-nav__section">Partners</span>
 
-            <Link href="/admin/vendedores" className="admin-nav__link">
+            <Link href="/admin/partners" className="admin-nav__link">
               <svg className="admin-nav__icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
                 <circle cx="6" cy="5" r="3" />
                 <path d="M1 14c0-3 2-5 5-5s5 2 5 5" />
                 <path d="M11 7l2 2 3-3" />
               </svg>
-              Vendedores
+              Partners
               {pendingCount > 0 && (
                 <span style={{
                   marginLeft: "auto",

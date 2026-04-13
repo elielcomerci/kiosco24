@@ -39,6 +39,14 @@ export default auth((req: NextAuthRequest) => {
   // ── Subdominio partner → reescribir a /partner internamente ──────────────
   if (isPartnerSubdomain(hostname)) {
     const origin = `${req.nextUrl.protocol}//${hostname}`;
+    const isAuthPath = nextUrl.pathname.startsWith("/login") ||
+                       nextUrl.pathname === "/register" ||
+                       nextUrl.pathname.startsWith("/api/auth");
+
+    // Auth paths: let them render normally (no redirect loop)
+    if (isAuthPath) {
+      return NextResponse.next();
+    }
 
     // Si no está logueado, mandar al login con callbackUrl
     if (!isLoggedIn) {

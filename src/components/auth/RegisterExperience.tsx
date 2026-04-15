@@ -2,14 +2,19 @@
 
 import Link from "next/link";
 import { signIn } from "next-auth/react";
-import { useMemo, useState, type FormEvent } from "react";
+import { useMemo, useState, useEffect, type FormEvent } from "react";
 
 import BrandLogo from "@/components/branding/BrandLogo";
+import BarcodeScanner from "@/components/caja/BarcodeScanner";
 import {
   DEFAULT_BUSINESS_ACTIVITY_CODE,
   getBusinessActivityOptionFromList,
   type BusinessActivityOption,
 } from "@/lib/business-activities";
+import {
+  normalizePlatformCouponCode,
+  parsePlatformCouponCodeFromScan,
+} from "@/lib/platform-coupons";
 
 const AUTH_TIMEOUT_MS = 15000;
 
@@ -43,12 +48,14 @@ function getRegisterErrorMessage(error: unknown) {
 
 export default function RegisterExperience({
   businessActivities,
+  initialCouponCode,
   referralCode,
   referredBy,
 }: {
   businessActivities: BusinessActivityOption[];
   referralCode?: string | null;
   referredBy?: string | null;
+  initialCouponCode?: string | null;
 }) {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -61,6 +68,42 @@ export default function RegisterExperience({
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  const [platformCouponCode, setPlatformCouponCode] = useState(
+    normalizePlatformCouponCode(initialCouponCode),
+  );
+  const [couponBenefit, setCouponBenefit] = useState<{ label: string; valid: boolean } | null>(null);
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [validatingCoupon, setValidatingCoupon] = useState(false);
+
+  // Validar cupón cuando cambia
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (platformCouponCode.trim().length >= 4) {
+        validateCoupon(platformCouponCode);
+      } else {
+        setCouponBenefit(null);
+      }
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [platformCouponCode]);
+
+  const validateCoupon = async (code: string) => {
+    setValidatingCoupon(true);
+    try {
+      const res = await fetch(`/api/register/coupon-preview?code=${encodeURIComponent(code)}`);
+      const data = await res.json();
+      if (data.valid) {
+        setCouponBenefit({ label: data.benefitLabel, valid: true });
+      } else {
+        setCouponBenefit({ label: data.message || "Cupón inválido", valid: false });
+      }
+    } catch {
+      setCouponBenefit(null);
+    } finally {
+      setValidatingCoupon(false);
+    }
+  };
 
   const selectedActivity = useMemo(
     () => getBusinessActivityOptionFromList(businessActivities, mainBusinessActivity),
@@ -84,6 +127,7 @@ export default function RegisterExperience({
           email,
           password,
           referralCode: referralCode || undefined,
+          platformCouponCode: platformCouponCode || undefined,
         }),
       });
 
@@ -296,6 +340,27 @@ export default function RegisterExperience({
             </div>
           ) : null}
 
+          {couponBenefit?.valid ? (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                padding: "10px 14px",
+                borderRadius: "10px",
+                background: "rgba(245,166,35,0.08)",
+                border: "1px solid rgba(245,166,35,0.2)",
+                fontSize: "13px",
+                color: "#f9b840",
+                lineHeight: 1.5,
+                animation: "animate-slide-up 0.3s ease-out",
+              }}
+            >
+              <span style={{ fontSize: "16px", flexShrink: 0 }}>🎁</span>
+              <span>¡Beneficio detectado! <strong style={{ color: "#f5a623" }}>{couponBenefit.label}</strong></span>
+            </div>
+          ) : null}
+
           {error ? (
             <div
               style={{
@@ -395,6 +460,43 @@ export default function RegisterExperience({
 
             <div style={{ display: "grid", gap: "6px" }}>
               <label style={{ fontSize: "12px", color: "var(--text-2)", fontWeight: 700 }}>
+                Cupón de Plataforma (Opcional)
+              </label>
+              <div style={{ display: "flex", gap: "8px" }}>
+                <input
+                  type="text"
+                  className="input"
+                  value={platformCouponCode}
+                  onChange={(event) =>
+                    setPlatformCouponCode(normalizePlatformCouponCode(event.target.value))
+                  }
+                  placeholder="XX-XXXX-XXXX"
+                  style={{ flex: 1 }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setIsScannerOpen(true)}
+                  className="btn btn-ghost"
+                  style={{ padding: "0 12px", minWidth: "48px" }}
+                  title="Escanear QR"
+                >
+                  <span style={{ fontSize: "12px", fontWeight: 800, letterSpacing: ".08em" }}>QR</span>
+                </button>
+              </div>
+              {couponBenefit && !couponBenefit.valid && platformCouponCode && (
+                <div style={{ fontSize: "11px", color: "#fca5a5", marginTop: "2px" }}>
+                  {couponBenefit.label}
+                </div>
+              )}
+              {validatingCoupon && platformCouponCode ? (
+                <div style={{ fontSize: "11px", color: "#6b7e96", marginTop: "2px" }}>
+                  Validando cupon...
+                </div>
+              ) : null}
+            </div>
+
+            <div style={{ display: "grid", gap: "6px" }}>
+              <label style={{ fontSize: "12px", color: "var(--text-2)", fontWeight: 700 }}>
                 Contrasena
               </label>
               <div style={{ position: "relative" }}>
@@ -407,12 +509,12 @@ export default function RegisterExperience({
                   placeholder="Al menos 8 caracteres"
                   minLength={8}
                   required
-                  style={{ paddingRight: "48px" }}
+                  style={{ paddingRight: "64px" }}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword((current) => !current)}
-                  aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                  aria-label={showPassword ? "Ocultar contrasena" : "Mostrar contrasena"}
                   style={{
                     position: "absolute",
                     right: "12px",
@@ -446,6 +548,15 @@ export default function RegisterExperience({
         </section>
       </div>
     </div>
+    {isScannerOpen ? (
+      <BarcodeScanner
+        onClose={() => setIsScannerOpen(false)}
+        onScan={(value) => {
+          setPlatformCouponCode(parsePlatformCouponCodeFromScan(value));
+          setIsScannerOpen(false);
+        }}
+      />
+    ) : null}
     </>
   );
 }

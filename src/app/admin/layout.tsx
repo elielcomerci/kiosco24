@@ -274,6 +274,15 @@ export default async function AdminLayout({
               Negocios
             </Link>
 
+            <Link href="/admin/platform-coupons" className="admin-nav__link">
+              <svg className="admin-nav__icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <rect x="2" y="5" width="12" height="9" rx="2" />
+                <path d="M5 5V3.5A1.5 1.5 0 016.5 2h3A1.5 1.5 0 0111 3.5V5" />
+                <path d="M5 9h6" />
+              </svg>
+              Cupones
+            </Link>
+
             <span className="admin-nav__section">Partners</span>
 
             <Link href="/admin/partners" className="admin-nav__link">

@@ -828,14 +828,15 @@ model Subscription {
 }
 
 model SubscriptionPriceOverride {
-  id             String   @id @default(cuid())
-  email          String   @unique
-  amount         Int
-  note           String?
-  createdById    String?
-  createdByEmail String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id              String   @id @default(cuid())
+  email           String   @unique
+  amount          Int
+  remainingCycles Int?     // null = infinite/recurring
+  note            String?
+  createdById     String?
+  createdByEmail  String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   @@index([updatedAt])
 }
@@ -1283,4 +1284,49 @@ enum SnapshotStatus {
   OPEN
   CLOSED
   PAID
+  CLOSED_AND_PAID
+}
+
+model PlatformCoupon {
+  id             String                 @id @default(cuid())
+  code           String                 @unique
+  type           PlatformCouponType
+  trialDays      Int? // si type = TRIAL_DAYS o mixto
+  discountPct    Int? // si type = SUBSCRIPTION_DISCOUNT o mixto (0-100)
+  duration       PlatformCouponDuration @default(ONCE)
+  durationMonths Int? // si duration = FOR_MONTHS
+  maxUses        Int                    @default(1)
+  usedCount      Int                    @default(0)
+  expiresAt      DateTime
+  note           String?
+  createdById    String?
+  createdByEmail String?
+  isActive       Boolean                @default(true)
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+  redemptions    PlatformCouponRedemption[]
+
+  @@index([code])
+}
+
+model PlatformCouponRedemption {
+  id         String         @id @default(cuid())
+  couponId   String
+  kioscoId   String
+  redeemedAt DateTime       @default(now())
+  coupon     PlatformCoupon @relation(fields: [couponId], references: [id], onDelete: Cascade)
+
+  @@index([couponId])
+  @@index([kioscoId])
+}
+
+enum PlatformCouponType {
+  TRIAL_DAYS
+  SUBSCRIPTION_DISCOUNT
+}
+
+enum PlatformCouponDuration {
+  ONCE
+  FOR_MONTHS
+  RECURRING
 }

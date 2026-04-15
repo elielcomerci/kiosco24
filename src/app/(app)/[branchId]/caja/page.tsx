@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useSession } from "next-auth/react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { formatARS, getCashSuggestions } from "@/lib/utils";
 import useSWR from "swr";
 import { applyPromoEngine, type ActivePromotion } from "@/lib/promo-engine";
@@ -364,6 +364,7 @@ function applyTicketStockChange(products: Product[], items: TicketItem[], direct
 
 export default function CajaPage() {
   const params = useParams();
+  const router = useRouter();
   const branchId = params.branchId as string;
   const isDesktop = useIsDesktop();
   const { data: session, status } = useSession();
@@ -401,6 +402,9 @@ export default function CajaPage() {
   const [showOtro, setShowOtro] = useState(false);
   const [showRetiro, setShowRetiro] = useState(false);
   const [showCredit, setShowCredit] = useState(false);
+  // ─── Payment-mode keyboard state ─────────────────────────────────────────
+  const [paymentModeActive, setPaymentModeActive] = useState(false);
+  const [paymentModeMethod, setPaymentModeMethod] = useState<Sale["paymentMethod"] | null>(null);
   const [showCashNumpad, setShowCashNumpad] = useState(false);
   const [receivedAmount, setReceivedAmount] = useState("");
   const [couponRecord, setCouponRecord] = useState<{ id: string; discountKind: "PERCENTAGE" | "FIXED_PRICE"; discountValue: number; code?: string; promotion?: { type: string; combos?: { productId: string; variantId: string | null; quantity: number }[] } } | null>(null);
@@ -1695,6 +1699,21 @@ export default function CajaPage() {
     handlePay("CASH");
   };
 
+  const closePaymentMode = useCallback(() => {
+    setPaymentModeActive(false);
+    setPaymentModeMethod(null);
+  }, []);
+
+  const activatePaymentMode = useCallback(() => {
+    if (!ensureCanOperateCurrentShift()) return false;
+    if (ticket.length === 0) return false;
+
+    searchInputRef.current?.blur();
+    setPaymentModeMethod("CASH");
+    setPaymentModeActive(true);
+    return true;
+  }, [ensureCanOperateCurrentShift, ticket.length]);
+
 
   const change = receivedAmount
     ? parseFloat(receivedAmount) - total
@@ -1714,6 +1733,32 @@ export default function CajaPage() {
     }
   }, []);
 
+  // ─── Robust keyboard bypass guard ────────────────────────────────────────
+  const shouldBypassKeyboard = useCallback((e: KeyboardEvent): boolean => {
+    if (e.key === "Escape") return false;
+    if (e.ctrlKey || e.metaKey || e.altKey) return true;
+    if (isKeypadModalOpen()) return true;
+
+    const el = document.activeElement as HTMLElement | null;
+    if (!el) return false;
+
+    const tag = el.tagName.toLowerCase();
+    if (tag === "input" || tag === "textarea" || tag === "select") return true;
+    if (el.isContentEditable) return true;
+    if (el.closest("[data-keyboard-ignore]")) return true;
+    return false;
+  }, []);
+
+  // ─── Payment method map for keyboard mode ─────────────────────────────────
+  const PAYMENT_KEY_MAP: Record<string, Sale["paymentMethod"]> = {
+    "1": "CASH",
+    "2": "MERCADOPAGO",
+    "3": "DEBIT",
+    "4": "CREDIT_CARD",
+    "5": "TRANSFER",
+    "6": "CREDIT",
+  };
+
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
       const overlayOpen =
@@ -1721,53 +1766,164 @@ export default function CajaPage() {
         showTransferShift || showScanner || showReminderComposer || pendingReminder ||
         variantSelector || showCashNumpad || confirmedSale || showInvoiceDraftModal || invoiceSaleId;
 
-      if (isKeypadModalOpen() || overlayOpen) {
+      if (overlayOpen) {
+        // Escape still works to cancel payment mode even with overlay
+        if (e.key === "Escape" && paymentModeActive) {
+          e.preventDefault();
+          closePaymentMode();
+        }
         clearPendingManualSearch();
         resetKeyboardScannerState();
         return;
       }
 
-      const activeEl = document.activeElement;
-      const isInputFocused = activeEl?.tagName === "INPUT" || activeEl?.tagName === "TEXTAREA" || activeEl?.tagName === "SELECT";
+      const bypassKeyboard = shouldBypassKeyboard(e);
 
-      if (!isInputFocused && !e.ctrlKey && !e.metaKey && !e.altKey) {
-        // Quick Add / Remove / Enter
-        const isAdd = e.key === "Enter" || e.key === "+" || e.key === "Add" || e.code === "NumpadAdd";
-        if (isAdd && filteredProducts.length > 0) {
-          e.preventDefault();
-          e.stopPropagation();
-          handleProductTap(filteredProducts[selectedIndex]);
+      // ── Payment mode intercept: runs BEFORE the bypass check ────────────
+      if (paymentModeActive && !bypassKeyboard) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        if (e.key === "Escape") {
+          closePaymentMode();
           return;
         }
 
-        const isSubtract = e.key === "-" || e.key === "Subtract" || e.code === "NumpadSubtract";
-        if (isSubtract && filteredProducts.length > 0) {
-          e.preventDefault();
-          e.stopPropagation();
-          handleProductRemove(filteredProducts[selectedIndex]);
+        const mappedMethod = PAYMENT_KEY_MAP[e.key];
+        if (mappedMethod) {
+          setPaymentModeMethod(mappedMethod);
           return;
         }
 
-        // Arrow Navigation list mode
-        if (e.key === "ArrowUp" || e.key === "ArrowDown") {
-          e.preventDefault();
-          shouldAutoScrollSelectionRef.current = true;
-          setSelectedIndex((idx) => {
-            const total = filteredProducts.length;
-            if (total === 0) return 0;
-            if (e.key === "ArrowUp") return Math.max(0, idx - 1);
-            if (e.key === "ArrowDown") return Math.min(total - 1, idx + 1);
-            return idx;
-          });
+        if (e.key === "Enter") {
+          const methodToConfirm = paymentModeMethod ?? "CASH";
+          closePaymentMode();
+          if (methodToConfirm === "CASH") {
+            // Open the cash numpad for exact amount entry
+            handleCashButton();
+          } else if (methodToConfirm === "CREDIT") {
+            setShowCredit(true);
+          } else {
+            void handlePay(methodToConfirm);
+          }
           return;
         }
+
+        return; // swallow everything else while in payment mode
       }
 
-      if (e.ctrlKey || e.metaKey || e.altKey) {
+      // ── Standard bypass guard ────────────────────────────────────────────
+      if (bypassKeyboard) {
+        clearPendingManualSearch();
+        resetKeyboardScannerState();
         return;
       }
 
       const now = performance.now();
+
+      // ── F-key shortcuts (browser-safe keys only) ─────────────────────────
+      // We intentionally skip F1, F3, F5, F6, F7, F11, F12 (reserved by browsers/OS).
+      if (e.key === "F2" && !e.shiftKey) {
+        e.preventDefault();
+        router.push(`/${branchId}/tickets`);
+        return;
+      }
+
+      if (e.key === "F8" && !e.shiftKey) {
+        // Gasto de caja
+        if (canOperateCurrentShift) {
+          e.preventDefault();
+          setShowGasto(true);
+        }
+        return;
+      }
+
+      if (e.key === "F4" && !e.shiftKey) {
+        // Asignar cliente / cobro en cuenta (fiado)
+        if (ticket.length > 0 && canOperateCurrentShift) {
+          e.preventDefault();
+          setShowCredit(true);
+        }
+        return;
+      }
+
+      if (e.key === "F10" && !e.shiftKey) {
+        // Panel de turno / totales
+        if (activeShift) {
+          e.preventDefault();
+          setShowTotalsBreakdown(true);
+        }
+        return;
+      }
+
+      // ── Non-printable product-grid navigation ────────────────────────────
+      if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+        e.preventDefault();
+        shouldAutoScrollSelectionRef.current = true;
+        setSelectedIndex((idx) => {
+          const len = filteredProducts.length;
+          if (len === 0) return 0;
+          if (e.key === "ArrowUp") return Math.max(0, idx - 1);
+          return Math.min(len - 1, idx + 1);
+        });
+        return;
+      }
+
+      // ── Backspace: undo last unit of last cart item ──────────────────────
+      if (e.key === "Backspace" && !cajaSearch) {
+        if (ticket.length > 0) {
+          e.preventDefault();
+          setTicket((prev) => {
+            if (prev.length === 0) return prev;
+            const next = [...prev];
+            const last = next[next.length - 1];
+            const step = last.soldByWeight ? 50 : 1;
+            if (last.quantity <= step) {
+              next.pop();
+            } else {
+              next[next.length - 1] = { ...last, quantity: last.quantity - step };
+            }
+            return next;
+          });
+        }
+        return;
+      }
+
+      // ── Delete: remove last item / Shift+Delete clears cart ─────────────
+      if (e.key === "Delete") {
+        if (ticket.length === 0) return;
+        e.preventDefault();
+        if (window.confirm(`Limpiar todo el carrito (${ticket.length} item${ticket.length !== 1 ? "s" : ""})?`)) {
+          setTicket([]);
+          setCouponRecord(null);
+          setCajaSearch("");
+          closePaymentMode();
+        }
+        return;
+      }
+
+      // ── Quick add/remove with + and - ────────────────────────────────────
+      // Guard: skip if the buffer was recently populated fast (scanner burst)
+      const lastKeyGap = now - keyboardScanLastKeyAtRef.current;
+      const inScannerBurst = lastKeyGap < 30 && keyboardScanBufferRef.current.length > 0;
+
+      const isAdd = e.key === "+" || e.code === "NumpadAdd";
+      if (isAdd && !inScannerBurst) {
+        e.preventDefault();
+        e.stopPropagation();
+        activatePaymentMode();
+        return;
+      }
+
+      const isSubtract = e.key === "-" || e.code === "NumpadSubtract";
+      if (isSubtract && !inScannerBurst && filteredProducts.length > 0) {
+        e.preventDefault();
+        e.stopPropagation();
+        handleProductRemove(filteredProducts[selectedIndex]);
+        return;
+      }
+
+      // ── Printable key → scanner buffer + manual search debounce ──────────
       const printableKey = e.key.length === 1 && /[0-9A-Za-z.\/\-+]/.test(e.key);
 
       if (printableKey) {
@@ -1780,34 +1936,29 @@ export default function CajaPage() {
         } else {
           keyboardScanBufferRef.current += e.key;
         }
-
         keyboardScanLastKeyAtRef.current = now;
 
-        if (!isInputFocused) {
-          pendingManualSearchRef.current += e.key;
-          if (manualSearchTimerRef.current) window.clearTimeout(manualSearchTimerRef.current);
+        pendingManualSearchRef.current += e.key;
+        if (manualSearchTimerRef.current) window.clearTimeout(manualSearchTimerRef.current);
 
-          manualSearchTimerRef.current = window.setTimeout(() => {
-            const pending = pendingManualSearchRef.current;
-            if (!pending) return;
+        manualSearchTimerRef.current = window.setTimeout(() => {
+          const pending = pendingManualSearchRef.current;
+          if (!pending) return;
+          // Strip lone +/- that were already handled as actions
+          const cleanPending = pending.replace(/^[+-]+$/, "");
+          if (cleanPending) {
+            searchInputRef.current?.focus();
+            setCajaSearch((prev) => prev + cleanPending);
+          }
+          clearPendingManualSearch();
+          resetKeyboardScannerState();
+        }, 85);
 
-            // Stop + and - from polluting the search text if they were handled alone
-            const cleanPending = pending.replace(/^[+-]+$/, '');
-            
-            if (cleanPending) {
-              searchInputRef.current?.focus();
-              setCajaSearch((prev) => prev + cleanPending);
-            }
-            clearPendingManualSearch();
-            resetKeyboardScannerState();
-          }, 85);
-
-          e.preventDefault();
-        }
-
+        e.preventDefault();
         return;
       }
 
+      // ── Enter/Tab: scanner terminal or add selected ──────────────────────
       if (e.key === "Enter" || e.key === "Tab") {
         const buffer = keyboardScanBufferRef.current;
         const duration = keyboardScanStartedAtRef.current ? now - keyboardScanStartedAtRef.current : Infinity;
@@ -1824,23 +1975,30 @@ export default function CajaPage() {
           return;
         }
 
-        if (!isInputFocused) {
-          clearPendingManualSearch();
-          resetKeyboardScannerState();
+        // Non-scanner Enter: add selected product (same as +)
+        if (e.key === "Enter" && filteredProducts.length > 0) {
+          e.preventDefault();
+          handleProductTap(filteredProducts[selectedIndex]);
         }
+
+        clearPendingManualSearch();
+        resetKeyboardScannerState();
         return;
       }
 
+      // ── Escape: clear search or exit payment mode ─────────────────────────
       if (e.key === "Escape") {
         clearPendingManualSearch();
         resetKeyboardScannerState();
-        if (cajaSearch) {
+        if (paymentModeActive) {
+          closePaymentMode();
+        } else if (cajaSearch) {
           setCajaSearch("");
         }
         return;
       }
     };
-    
+
     window.addEventListener("keydown", handleGlobalKeyDown);
     return () => {
       clearPendingManualSearch();
@@ -1849,10 +2007,13 @@ export default function CajaPage() {
     };
   }, [
     clearPendingManualSearch, resetKeyboardScannerState, filteredProducts,
-    selectedIndex, handleProductTap, handleProductRemove, showGasto, cajaSearch,
-    showOtro, showRetiro, showCredit, showOpenShift, showCloseShift,
+    selectedIndex, handleProductTap, handleProductRemove, shouldBypassKeyboard,
+    showGasto, showOtro, showRetiro, showCredit, showOpenShift, showCloseShift,
     showTransferShift, showScanner, showReminderComposer, pendingReminder,
-    variantSelector, showCashNumpad, confirmedSale, showInvoiceDraftModal, invoiceSaleId
+    variantSelector, showCashNumpad, confirmedSale, showInvoiceDraftModal, invoiceSaleId,
+    cajaSearch, ticket, canOperateCurrentShift, activeShift,
+    paymentModeActive, paymentModeMethod, handleCashButton, handlePay,
+    PAYMENT_KEY_MAP, closePaymentMode, activatePaymentMode, branchId, router,
   ]);
 
   // ─── Confirmed sale overlay ────────────────────────────────────────────────
@@ -2012,20 +2173,31 @@ export default function CajaPage() {
       e.preventDefault();
       shouldAutoScrollSelectionRef.current = true;
       setSelectedIndex((prev) => Math.max(prev - 1, 0));
-    } else if (e.key === "Enter" || e.key === "+" || e.key === "Add" || e.code === "NumpadAdd") {
+    } else if (e.key === "Enter") {
       e.preventDefault();
       e.stopPropagation();
       if (filteredProducts.length > 0) {
         handleProductTap(filteredProducts[selectedIndex]);
       }
-      if (e.key === "Enter") {
-        if (cajaSearch && filteredProducts.length > 0) {
-          setCajaSearch("");
-          setSelectedIndex(0);
-        } else if (!cajaSearch && ticket.length > 0) {
-          handleCashButton(); // Quick checkout shortcut!
-        }
+      if (cajaSearch && filteredProducts.length > 0) {
+        setCajaSearch("");
+        setSelectedIndex(0);
       }
+    } else if (e.key === "Backspace" && !cajaSearch) {
+      e.preventDefault();
+      e.stopPropagation();
+      setTicket((prev) => {
+        if (prev.length === 0) return prev;
+        const next = [...prev];
+        const last = next[next.length - 1];
+        const step = last.soldByWeight ? 50 : 1;
+        if (last.quantity <= step) {
+          next.pop();
+        } else {
+          next[next.length - 1] = { ...last, quantity: last.quantity - step };
+        }
+        return next;
+      });
     } else if (e.key === "-" || e.key === "Subtract" || e.code === "NumpadSubtract") {
       e.preventDefault();
       e.stopPropagation();
@@ -2676,6 +2848,41 @@ export default function CajaPage() {
               </button>
             </div>
 
+            {/* Payment Mode Overlay Banner */}
+            {paymentModeActive && (
+              <div
+                style={{
+                  margin: "0 12px 10px",
+                  padding: "10px 14px",
+                  borderRadius: "var(--radius)",
+                  background: "rgba(34,197,94,0.12)",
+                  border: "1.5px solid rgba(34,197,94,0.4)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: "8px",
+                  animation: "fadeIn 0.15s ease",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span style={{ fontSize: "14px" }}>⌨️</span>
+                  <span style={{ fontSize: "12px", fontWeight: 700, color: "var(--primary)" }}>
+                    MODO PAGO ACTIVO
+                  </span>
+                  <span style={{ fontSize: "11px", color: "var(--text-3)" }}>
+                    Numérica para elegir · Enter para cobrar
+                  </span>
+                </div>
+                <button
+                  onClick={closePaymentMode}
+                  style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-3)", fontSize: "14px", lineHeight: 1, padding: "2px 4px" }}
+                  title="Salir (Esc)"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+
             {/* Payment Methods Grid */}
             <div id="checkout-pay" style={{
               padding: "0 12px 16px",
@@ -2683,63 +2890,188 @@ export default function CajaPage() {
               gridTemplateColumns: "repeat(3, 1fr)",
               gap: "8px",
             }}>
+
+          {/* [1] Efectivo */}
           <button
             className="btn btn-ghost"
-            style={{ flexDirection: "column", gap: "2px", borderStyle: "solid", height: "54px" }}
+            style={{
+              flexDirection: "column", gap: "2px", borderStyle: "solid", height: "54px",
+              position: "relative",
+              ...(paymentModeActive && paymentModeMethod === "CASH" ? {
+                borderColor: "var(--primary)",
+                background: "rgba(34,197,94,0.14)",
+                boxShadow: "0 0 0 2px rgba(34,197,94,0.3)",
+              } : {}),
+            }}
             onClick={handleCashButton}
             disabled={total === 0 || operationsDisabled}
           >
+            {paymentModeActive && (
+              <span style={{
+                position: "absolute", top: "3px", right: "4px",
+                fontSize: "9px", fontWeight: 800, color: "var(--primary)",
+                background: "rgba(34,197,94,0.15)", borderRadius: "4px",
+                padding: "1px 4px", lineHeight: 1.4,
+              }}>1</span>
+            )}
             <span style={{ fontSize: "18px" }}>💵</span>
             <span style={{ fontSize: "10px", fontWeight: 700 }}>EFECTIVO</span>
           </button>
+
+          {/* [2] Mercado Pago */}
           <button
             className="btn btn-ghost"
-            style={{ flexDirection: "column", gap: "2px", height: "54px" }}
+            style={{
+              flexDirection: "column", gap: "2px", height: "54px",
+              position: "relative",
+              ...(paymentModeActive && paymentModeMethod === "MERCADOPAGO" ? {
+                borderColor: "var(--primary)",
+                background: "rgba(34,197,94,0.14)",
+                boxShadow: "0 0 0 2px rgba(34,197,94,0.3)",
+              } : {}),
+            }}
             onClick={() => handlePay("MERCADOPAGO")}
             disabled={total === 0 || operationsDisabled}
           >
+            {paymentModeActive && (
+              <span style={{
+                position: "absolute", top: "3px", right: "4px",
+                fontSize: "9px", fontWeight: 800, color: "var(--primary)",
+                background: "rgba(34,197,94,0.15)", borderRadius: "4px",
+                padding: "1px 4px", lineHeight: 1.4,
+              }}>2</span>
+            )}
             <span style={{ fontSize: "18px" }}>📱</span>
             <span style={{ fontSize: "10px", fontWeight: 700 }}>MP</span>
           </button>
+
+          {/* [5] Transferencia */}
           <button
             className="btn btn-ghost"
-            style={{ flexDirection: "column", gap: "2px", height: "54px" }}
+            style={{
+              flexDirection: "column", gap: "2px", height: "54px",
+              position: "relative",
+              ...(paymentModeActive && paymentModeMethod === "TRANSFER" ? {
+                borderColor: "var(--primary)",
+                background: "rgba(34,197,94,0.14)",
+                boxShadow: "0 0 0 2px rgba(34,197,94,0.3)",
+              } : {}),
+            }}
             onClick={() => handlePay("TRANSFER")}
             disabled={total === 0 || operationsDisabled}
           >
+            {paymentModeActive && (
+              <span style={{
+                position: "absolute", top: "3px", right: "4px",
+                fontSize: "9px", fontWeight: 800, color: "var(--primary)",
+                background: "rgba(34,197,94,0.15)", borderRadius: "4px",
+                padding: "1px 4px", lineHeight: 1.4,
+              }}>5</span>
+            )}
             <span style={{ fontSize: "18px" }}>🏦</span>
             <span style={{ fontSize: "10px", fontWeight: 700 }}>TRANSF.</span>
           </button>
+
+          {/* [3] Débito */}
           <button
             className="btn btn-ghost"
-            style={{ flexDirection: "column", gap: "2px", height: "54px" }}
+            style={{
+              flexDirection: "column", gap: "2px", height: "54px",
+              position: "relative",
+              ...(paymentModeActive && paymentModeMethod === "DEBIT" ? {
+                borderColor: "var(--primary)",
+                background: "rgba(34,197,94,0.14)",
+                boxShadow: "0 0 0 2px rgba(34,197,94,0.3)",
+              } : {}),
+            }}
             onClick={() => handlePay("DEBIT")}
             disabled={total === 0 || operationsDisabled}
           >
+            {paymentModeActive && (
+              <span style={{
+                position: "absolute", top: "3px", right: "4px",
+                fontSize: "9px", fontWeight: 800, color: "var(--primary)",
+                background: "rgba(34,197,94,0.15)", borderRadius: "4px",
+                padding: "1px 4px", lineHeight: 1.4,
+              }}>3</span>
+            )}
             <span style={{ fontSize: "18px" }}>💳</span>
             <span style={{ fontSize: "10px", fontWeight: 700 }}>DÉBITO</span>
           </button>
+
+          {/* [4] Tarjeta crédito */}
           <button
             className="btn btn-ghost"
-            style={{ flexDirection: "column", gap: "2px", height: "54px" }}
+            style={{
+              flexDirection: "column", gap: "2px", height: "54px",
+              position: "relative",
+              ...(paymentModeActive && paymentModeMethod === "CREDIT_CARD" ? {
+                borderColor: "var(--primary)",
+                background: "rgba(34,197,94,0.14)",
+                boxShadow: "0 0 0 2px rgba(34,197,94,0.3)",
+              } : {}),
+            }}
             onClick={() => handlePay("CREDIT_CARD")}
             disabled={total === 0 || operationsDisabled}
           >
+            {paymentModeActive && (
+              <span style={{
+                position: "absolute", top: "3px", right: "4px",
+                fontSize: "9px", fontWeight: 800, color: "var(--primary)",
+                background: "rgba(34,197,94,0.15)", borderRadius: "4px",
+                padding: "1px 4px", lineHeight: 1.4,
+              }}>4</span>
+            )}
             <span style={{ fontSize: "18px" }}>🏧</span>
             <span style={{ fontSize: "10px", fontWeight: 700 }}>TARJETA</span>
           </button>
+
+          {/* [6] Fiado */}
           <button
             className="btn btn-ghost"
-            style={{ flexDirection: "column", gap: "2px", borderColor: "var(--amber)", color: "var(--amber)", height: "54px" }}
+            style={{
+              flexDirection: "column", gap: "2px", borderColor: "var(--amber)", color: "var(--amber)", height: "54px",
+              position: "relative",
+              ...(paymentModeActive && paymentModeMethod === "CREDIT" ? {
+                borderColor: "var(--primary)",
+                color: "var(--primary)",
+                background: "rgba(34,197,94,0.14)",
+                boxShadow: "0 0 0 2px rgba(34,197,94,0.3)",
+              } : {}),
+            }}
             onClick={() => {
               if (!ensureCanOperateCurrentShift()) return;
               setShowCredit(true);
             }}
             disabled={total === 0 || operationsDisabled}
           >
+            {paymentModeActive && (
+              <span style={{
+                position: "absolute", top: "3px", right: "4px",
+                fontSize: "9px", fontWeight: 800, color: "var(--primary)",
+                background: "rgba(34,197,94,0.15)", borderRadius: "4px",
+                padding: "1px 4px", lineHeight: 1.4,
+              }}>6</span>
+            )}
             <span style={{ fontSize: "18px" }}>📋</span>
             <span style={{ fontSize: "10px", fontWeight: 700 }}>FIADO</span>
           </button>
+
+          {/* Payment keyboard hint when cart has items and mode is not active */}
+          {ticket.length > 0 && !paymentModeActive && (
+            <div
+              style={{
+                gridColumn: "1 / -1",
+                textAlign: "center",
+                paddingTop: "4px",
+                fontSize: "10px",
+                color: "var(--text-3)",
+                letterSpacing: "0.04em",
+              }}
+            >
+              Activa <kbd style={{ background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: "4px", padding: "0 5px", fontSize: "9px", fontWeight: 700 }}>+</kbd> para elegir medio por teclado
+            </div>
+          )}
         </div>
           </div>
         )}

@@ -35,6 +35,7 @@ export async function getSubscriptionPriceOverrideForEmail(email: string | null 
       id: true,
       email: true,
       amount: true,
+      remainingCycles: true,
       note: true,
       updatedAt: true,
       createdByEmail: true,

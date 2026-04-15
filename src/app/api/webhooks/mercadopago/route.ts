@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getMpAccessTokenForBranch } from "@/lib/mp-token";
 import { MpIncomingPaymentChannel, prisma } from "@/lib/prisma";
+import { normalizeSubscriptionPriceOverrideEmail } from "@/lib/subscription-price-overrides";
 import { SubscriptionStatus } from "@prisma/client";
 
 type MpWebhookPayload = {
@@ -116,9 +117,7 @@ export async function POST(req: NextRequest) {
     } else if ([...webhookTopics].some((topic) => topic === "payment" || topic.startsWith("payment"))) {
       await handleIncomingPayment(body);
     } else if (webhookTopics.has("subscription_authorized_payment")) {
-      console.log(
-        `[MP Webhook] subscription_authorized_payment recibido (${optionalString(body.data?.id) ?? "sin id"}).`,
-      );
+      await handleSubscriptionAuthorizedPayment(body);
     } else {
       console.log(`[MP Webhook] Evento ignorado: ${[...webhookTopics].join(", ") || "sin tipo"}`);
     }
@@ -159,6 +158,81 @@ async function handleSubscriptionPreapproval(body: MpWebhookPayload) {
   });
 
   console.log(`[Webhook] Suscripcion ${preapprovalId} actualizada a ${dbStatus}`);
+}
+
+async function handleSubscriptionAuthorizedPayment(body: MpWebhookPayload) {
+  const authorizedPaymentId = body.data?.id;
+  if (!authorizedPaymentId) return;
+
+  // En suscripciones, MP envía el ID del pago autorizado.
+  // Pero necesitamos saber a qué suscripción pertenece para llegar al usuario.
+  const res = await fetch(`https://api.mercadopago.com/v1/authorized_payments/${authorizedPaymentId}`, {
+    headers: { Authorization: `Bearer ${process.env.MP_ACCESS_TOKEN}` },
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    console.error(`[Webhook] No se pudo obtener authorized_payment ${authorizedPaymentId} de MP`);
+    return;
+  }
+
+  const authPayment = await res.json();
+  const preapprovalId = authPayment.preapproval_id;
+  if (!preapprovalId) return;
+
+  // Solo nos interesa si el pago fue aprobado/debitado correctamente
+  if (authPayment.payment?.status !== "approved") {
+    console.log(`[Webhook] Authorized payment ${authorizedPaymentId} no está approved: ${authPayment.payment?.status}`);
+    return;
+  }
+
+  // Buscamos al dueño por la suscripción
+  const subscription = await prisma.subscription.findFirst({
+    where: { mpPreapprovalId: String(preapprovalId) },
+    select: {
+      kiosco: {
+        select: {
+          owner: {
+            select: { email: true },
+          },
+        },
+      },
+    },
+  });
+
+  const email = subscription?.kiosco?.owner?.email;
+  if (!email) {
+    console.log(`[Webhook] No se encontró email para la suscripción ${preapprovalId}`);
+    return;
+  }
+
+  // Decrementamos ciclos si hay un override vigente
+  const override = await prisma.subscriptionPriceOverride.findUnique({
+    where: { email: normalizeSubscriptionPriceOverrideEmail(email) },
+    select: { id: true, remainingCycles: true },
+  });
+
+  if (!override) return;
+
+  if (override.remainingCycles === null) {
+    // Es recurrente infinito, no hacemos nada.
+    return;
+  }
+
+  if (override.remainingCycles <= 1) {
+    // Era el último ciclo, borramos el override
+    await prisma.subscriptionPriceOverride.delete({
+      where: { id: override.id },
+    });
+    console.log(`[Webhook] Descuento finalizado para ${email}. Removido override.`);
+  } else {
+    // Decrementamos
+    await prisma.subscriptionPriceOverride.update({
+      where: { id: override.id },
+      data: { remainingCycles: { decrement: 1 } },
+    });
+    console.log(`[Webhook] Descuento debitado para ${email}. Quedan ${override.remainingCycles - 1} ciclos.`);
+  }
 }
 
 async function handleIncomingPayment(body: MpWebhookPayload) {

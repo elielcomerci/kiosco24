@@ -245,6 +245,7 @@ export default async function AdminPage() {
       id: true,
       email: true,
       amount: true,
+      remainingCycles: true,
       note: true,
       createdByEmail: true,
       updatedAt: true,
@@ -307,6 +308,9 @@ export default async function AdminPage() {
             <h1 style={{ margin: "6px 0 0", fontSize: "34px" }}>Administrador de acceso</h1>
           </div>
           <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+            <Link href="/admin/platform-coupons" className="btn btn-secondary">
+              Cupones plataforma
+            </Link>
             <Link href="/admin/productos" className="btn btn-secondary">
               Catalogo global
             </Link>
@@ -435,6 +439,11 @@ export default async function AdminPage() {
                           <strong style={{ color: "#86efac" }}>{formatSubscriptionPrice(override.amount)}</strong>
                           <span style={{ color: "#94a3b8", fontSize: "13px" }}>
                             Actualizado {formatDate(override.updatedAt)}
+                          </span>
+                          <span style={{ color: "#94a3b8", fontSize: "13px" }}>
+                            {override.remainingCycles === null
+                              ? "Duracion recurrente"
+                              : `${override.remainingCycles} ciclo${override.remainingCycles === 1 ? "" : "s"} restante${override.remainingCycles === 1 ? "" : "s"}`}
                           </span>
                         </div>
                       </div>

@@ -1,15 +1,23 @@
 import bcrypt from "bcryptjs";
-import { UserRole } from "@prisma/client";
-import { NextResponse } from "next/server";
+import { PlatformCouponDuration, UserRole } from "@prisma/client";
 import { cookies } from "next/headers";
+import { NextResponse } from "next/server";
 
 import {
   isValidBusinessActivity,
   shouldSeedDefaultCatalogForBusinessActivity,
 } from "@/lib/business-activities-store";
+import {
+  getPlatformCouponAvailabilityError,
+  getPlatformCouponBenefitLabel,
+  getPlatformCouponRemainingCycles,
+  normalizePlatformCouponCode,
+} from "@/lib/platform-coupons";
 import { prisma } from "@/lib/prisma";
 import { provisionOwnerKiosco } from "@/lib/provision-owner-kiosco";
+import { normalizeSubscriptionPriceOverrideEmail } from "@/lib/subscription-price-overrides";
 import { buildNewAccountSubscriptionOffer } from "@/lib/subscription-offers";
+import { SUBSCRIPTION_PRICE_ARS } from "@/lib/subscription-plan";
 
 type RegisterPayload = {
   firstName?: string;
@@ -19,11 +27,22 @@ type RegisterPayload = {
   email?: string;
   password?: string;
   referralCode?: string;
+  platformCouponCode?: string;
+};
+
+type CouponBenefit = {
+  id: string;
+  trialDays: number | null;
+  discountPct: number | null;
+  duration: PlatformCouponDuration;
+  durationMonths: number | null;
 };
 
 function normalizeText(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
+
+class PlatformCouponError extends Error {}
 
 export async function POST(req: Request) {
   try {
@@ -36,25 +55,25 @@ export async function POST(req: Request) {
     const password = typeof body.password === "string" ? body.password : "";
     const mainBusinessActivity = normalizeText(body.mainBusinessActivity);
     const referralCode = normalizeText(body.referralCode);
+    const platformCouponCode = normalizePlatformCouponCode(body.platformCouponCode);
 
-    // Fallback: if no referralCode in body, try the attribution cookie
     const cookieStore = await cookies();
     const effectiveReferralCode = referralCode || cookieStore.get("clikit_ref")?.value || null;
 
     if (!firstName || !lastName || !businessName || !email || !password || !mainBusinessActivity) {
       return NextResponse.json(
-        { error: "Completá nombre, apellido, negocio, rubro, email y contraseña." },
+        { error: "Completa nombre, apellido, negocio, rubro, email y contrasena." },
         { status: 400 },
       );
     }
 
     if (!(await isValidBusinessActivity(mainBusinessActivity))) {
-      return NextResponse.json({ error: "Elegí un rubro principal válido." }, { status: 400 });
+      return NextResponse.json({ error: "Elige un rubro principal valido." }, { status: 400 });
     }
 
     if (password.length < 8) {
       return NextResponse.json(
-        { error: "La contraseña tiene que tener al menos 8 caracteres." },
+        { error: "La contrasena tiene que tener al menos 8 caracteres." },
         { status: 400 },
       );
     }
@@ -87,6 +106,51 @@ export async function POST(req: Request) {
         },
       });
 
+      let couponBenefit: CouponBenefit | null = null;
+
+      if (platformCouponCode) {
+        const coupon = await tx.platformCoupon.findUnique({
+          where: { code: platformCouponCode },
+          select: {
+            id: true,
+            trialDays: true,
+            discountPct: true,
+            duration: true,
+            durationMonths: true,
+            isActive: true,
+            expiresAt: true,
+            maxUses: true,
+            usedCount: true,
+          },
+        });
+
+        if (!coupon) {
+          throw new PlatformCouponError("El cupon de plataforma no existe.");
+        }
+
+        const couponError = getPlatformCouponAvailabilityError(coupon);
+        if (couponError) {
+          throw new PlatformCouponError(couponError);
+        }
+
+        couponBenefit = {
+          id: coupon.id,
+          trialDays: coupon.trialDays ?? null,
+          discountPct: coupon.discountPct ?? null,
+          duration: coupon.duration,
+          durationMonths: coupon.durationMonths ?? null,
+        };
+
+        await tx.platformCoupon.update({
+          where: { id: coupon.id },
+          data: { usedCount: { increment: 1 } },
+        });
+      }
+
+      const finalTrialDays = 30 + (couponBenefit?.trialDays ?? 0);
+      const now = new Date();
+      const trialEndsAt = new Date(now.getTime() + finalTrialDays * 24 * 60 * 60 * 1000);
+
       const provisioned = await provisionOwnerKiosco(
         {
           ownerId: user.id,
@@ -98,13 +162,45 @@ export async function POST(req: Request) {
         tx,
       );
 
-      // Link to partner referral if a valid referral code was provided (body or cookie)
+      await tx.subscription.update({
+        where: { kioscoId: provisioned.kiosco.id },
+        data: { trialEndsAt },
+      });
+
+      if (typeof couponBenefit?.discountPct === "number" && couponBenefit.discountPct > 0) {
+        const discountedAmount = Math.round(
+          SUBSCRIPTION_PRICE_ARS * (1 - couponBenefit.discountPct / 100),
+        );
+
+        await tx.subscriptionPriceOverride.create({
+          data: {
+            email: normalizeSubscriptionPriceOverrideEmail(email),
+            amount: discountedAmount,
+            remainingCycles: getPlatformCouponRemainingCycles(
+              couponBenefit.duration,
+              couponBenefit.durationMonths,
+            ),
+            note: `Cupon plataforma: ${platformCouponCode} (${getPlatformCouponBenefitLabel(couponBenefit)})`,
+          },
+        });
+      }
+
+      if (couponBenefit) {
+        await tx.platformCouponRedemption.create({
+          data: {
+            couponId: couponBenefit.id,
+            kioscoId: provisioned.kiosco.id,
+          },
+        });
+      }
+
       let linkedReferralId: string | undefined;
       if (effectiveReferralCode) {
         const partner = await tx.partnerProfile.findUnique({
           where: { referralCode: effectiveReferralCode },
           select: { id: true },
         });
+
         if (partner) {
           const referral = await tx.referral.create({
             data: {
@@ -146,11 +242,13 @@ export async function POST(req: Request) {
       },
     });
   } catch (error) {
+    if (error instanceof PlatformCouponError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+
     const details = error instanceof Error ? error.message : "Unknown error";
     const stack =
-      process.env.NODE_ENV === "development" && error instanceof Error
-        ? error.stack
-        : undefined;
+      process.env.NODE_ENV === "development" && error instanceof Error ? error.stack : undefined;
 
     console.error("[Register] CRITICAL ERROR:", error);
     return NextResponse.json(
